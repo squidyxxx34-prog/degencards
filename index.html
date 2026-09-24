@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DEGENCARDS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#07070A; --surf:#0D0D12; --surf2:#111116; --border:rgba(255,255,255,.08);
+  --tx:#F2F1EC; --tx2:#8A8A93;
+  --green:#39FF9A; --red:#FF4B5C;
+  --purple:#B084FF; --gold:#F5C542; --blue:#5AB4FF;
+  --font: 'Outfit', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
+  padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{background:var(--bg); color:var(--tx); font-family:var(--font); height:100%;}
+body{background-image: radial-gradient(circle at 20% 0%, rgba(176,132,255,.06), transparent 40%), radial-gradient(circle at 80% 10%, rgba(90,180,255,.05), transparent 40%); min-height:100%;}
+::selection{background:var(--purple); color:#000;}
+a,button{font-family:inherit; color:inherit;}
+button{background:none; border:none; cursor:pointer;}
+.wrap{max-width:1180px; margin:0 auto; padding:0 20px;}
+[hidden]{display:none !important;}
+
+/* HEADER */
+header{position:sticky; top:0; z-index:20; backdrop-filter:blur(14px); background:rgba(7,7,10,.75); border-bottom:1px solid var(--border); padding-top:env(safe-area-inset-top,0px);}
+.headerrow{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; max-width:1180px; margin:0 auto; gap:16px;}
+.logo{font-weight:900; font-size:18px; letter-spacing:.02em; display:flex; align-items:center; gap:8px; white-space:nowrap;}
+.logo span{color:var(--purple);}
+nav{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none;}
+nav::-webkit-scrollbar{display:none;}
+nav button{padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; color:var(--tx2); white-space:nowrap; transition:.15s;}
+nav button.active{color:var(--tx); background:var(--surf2);}
+.headerright{display:flex; align-items:center; gap:12px;}
+.btn-new{background:var(--tx); color:#000; font-weight:700; font-size:13px; padding:9px 16px; border-radius:8px; white-space:nowrap;}
+.btn-new:active{transform:scale(.96);}
+.profile-chip{display:flex; align-items:center; gap:8px; padding:5px 10px 5px 5px; background:var(--surf2); border:1px solid var(--border); border-radius:20px; font-size:12px; cursor:pointer;}
+.profile-chip .av{width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--purple),var(--gold)); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#000;}
+.profile-chip b{color:var(--gold); font-family:var(--mono);}
+
+/* LANDING */
+.landing{min-height:calc(100vh - 65px); display:flex; align-items:center; padding:40px 20px;}
+.landing-inner{max-width:1180px; margin:0 auto; display:grid; grid-template-columns:1.1fr .9fr; gap:60px; align-items:center; width:100%;}
+@media(max-width:860px){.landing-inner{grid-template-columns:1fr;}}
+.landing h1{font-size:clamp(34px,6vw,58px); font-weight:900; line-height:1.02; letter-spacing:-.02em;}
+.landing p{color:var(--tx2); font-size:15px; margin-top:16px; max-width:420px;}
+.authbox{background:var(--surf); border:1px solid var(--border); border-radius:16px; padding:22px;}
+.authbox h3{font-size:14px; font-weight:700; margin-bottom:14px;}
+.authbox input{width:100%; background:var(--surf2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; color:var(--tx); font-size:14px; margin-bottom:10px;}
+.authbox button{width:100%; background:linear-gradient(90deg,var(--purple),var(--gold)); color:#000; font-weight:800; padding:12px; border-radius:9px; font-size:13px;}
+.authnote{font-size:11px; color:var(--tx2); margin-top:10px; text-align:center;}
+.demo-cardstack{position:relative; height:280px;}
+.demo-cardstack .card{position:absolute; width:200px; left:50%; transform-origin:bottom center;}
+.demo-cardstack .card:nth-child(1){transform:translateX(-50%) rotate(-8deg); top:0; z-index:1;}
+.demo-cardstack .card:nth-child(2){transform:translateX(-50%) rotate(4deg); top:10px; z-index:2;}
+.demo-cardstack .card:nth-child(3){transform:translateX(-50%) rotate(-2deg); top:20px; z-index:3;}
+
+/* HERO */
+.hero{padding:48px 0 32px;}
+.hero h1{font-size:clamp(32px,6vw,52px); font-weight:900; line-height:1.02; letter-spacing:-.02em;}
+.hero h1 .g{background:linear-gradient(90deg,var(--tx),var(--tx2)); -webkit-background-clip:text; background-clip:text;}
+.hero p{color:var(--tx2); font-size:15px; margin-top:12px; max-width:420px;}
+.stats{display:grid; grid-template-columns:repeat(5,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-top:32px;}
+.stat{background:var(--surf); padding:16px 14px;}
+.stat .l{font-size:10px; color:var(--tx2); font-weight:600; letter-spacing:.04em; text-transform:uppercase; margin-bottom:6px;}
+.stat .v{font-family:var(--mono); font-weight:700; font-size:19px;}
+.stat .v.pos{color:var(--green);} .stat .v.neg{color:var(--red);}
+@media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr);} .stat:nth-child(5){grid-column:1/3;}}
+
+/* LEVEL BAR */
+.levelbar{display:flex; align-items:center; gap:14px; margin-top:20px; padding:14px 16px; background:var(--surf); border:1px solid var(--border); border-radius:12px;}
+.levelbar .lvl{font-family:var(--mono); font-weight:700; font-size:13px; color:var(--gold); white-space:nowrap;}
+.levelbar .track{flex:1; height:6px; background:var(--surf2); border-radius:3px; overflow:hidden;}
+.levelbar .fill{height:100%; background:linear-gradient(90deg,var(--purple),var(--gold)); border-radius:3px; transition:width .5s ease;}
+.levelbar .xp{font-family:var(--mono); font-size:11px; color:var(--tx2); white-space:nowrap;}
+
+/* SECTION HEAD */
+.sectionhead{display:flex; align-items:center; justify-content:space-between; margin:40px 0 16px; flex-wrap:wrap; gap:12px;}
+.sectionhead h2{font-size:15px; font-weight:700;}
+.filters{display:flex; gap:6px; flex-wrap:wrap;}
+.chip{padding:6px 12px; border-radius:7px; font-size:12px; font-weight:600; background:var(--surf2); color:var(--tx2); border:1px solid transparent;}
+.chip.active{color:var(--tx); border-color:var(--border); background:#17171E;}
+select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(--border); border-radius:7px; padding:6px 10px; font-size:12px; font-family:inherit;}
+
+/* GRID */
+.grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+@media(max-width:960px){.grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:640px){.grid{grid-template-columns:repeat(2,1fr); gap:10px;}}
+
+/* CARD */
+.card{position:relative; border-radius:16px; padding:14px; background:linear-gradient(160deg,var(--surf2),var(--surf) 60%); border:1px solid var(--border); cursor:pointer; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; isolation:isolate;}
+.card::before{content:""; position:absolute; inset:0; background:radial-gradient(circle at 30% 0%, var(--glow,transparent), transparent 65%); opacity:.6; pointer-events:none; z-index:-1;}
+.card::after{content:""; position:absolute; inset:0; opacity:.03; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); pointer-events:none;}
+.card[data-r="legendary"]{animation:pulse 3s infinite ease-in-out;}
+.card[data-r="mythic"]{animation:pulse 2.4s infinite ease-in-out;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0px 0 var(--glow);} 50%{box-shadow:0 0 22px 2px var(--glow);}}
+@media(hover:hover){.card:hover{transform:translateY(-4px) rotate3d(1,-1,0,2deg); box-shadow:0 14px 30px -12px rgba(0,0,0,.6);}}
+.card .top{display:flex; justify-content:space-between; align-items:flex-start; font-family:var(--mono); font-size:10px; color:var(--tx2);}
+.card .grade{width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; background:var(--surf2); border:1px solid var(--border);}
+.card .ticker{text-align:center; font-weight:700; font-size:14px; margin-top:10px; color:var(--tx2);}
+.card .pnl{text-align:center; font-size:22px; font-weight:900; margin-top:2px; font-family:var(--mono);}
+.card .roi{text-align:center; font-size:12px; font-weight:700; font-family:var(--mono); margin-top:1px;}
+.card .pnl.pos,.card .roi.pos{color:var(--green);} .card .pnl.neg,.card .roi.neg{color:var(--red);}
+.card .mini{margin:10px 0 6px;}
+.card .rarity-tag{position:absolute; top:14px; right:14px; font-size:8px; font-weight:800; letter-spacing:.05em; padding:2px 6px; border-radius:4px; text-transform:uppercase;}
+.card[data-r="legendary"] .rarity-tag{background:rgba(245,197,66,.15); color:var(--gold);}
+.card[data-r="mythic"] .rarity-tag{background:rgba(255,90,220,.15); color:#ff5adc;}
+.card[data-r="epic"] .rarity-tag{background:rgba(176,132,255,.15); color:var(--purple);}
+.card[data-r="rare"] .rarity-tag{background:rgba(90,180,255,.15); color:var(--blue);}
+.card[data-r="uncommon"] .rarity-tag,.card[data-r="common"] .rarity-tag{background:rgba(255,255,255,.06); color:var(--tx2);}
+.card .src{position:absolute; top:14px; left:14px; font-size:8px; font-weight:700; color:var(--tx2); font-family:var(--mono); text-transform:uppercase; opacity:.7;}
+.card .bottom{display:flex; justify-content:space-between; font-family:var(--mono); font-size:9px; color:var(--tx2); margin-top:8px; border-top:1px solid var(--border); padding-top:8px;}
+.card .badge{font-size:10px; margin-top:6px; color:var(--tx2); display:flex; gap:4px; flex-wrap:wrap;}
+
+/* EMPTY */
+.empty{grid-column:1/-1; text-align:center; padding:60px 20px; color:var(--tx2); border:1px dashed var(--border); border-radius:16px;}
+.empty b{display:block; color:var(--tx); font-size:16px; margin-bottom:6px;}
+.empty button{margin-top:16px; background:var(--tx); color:#000; font-weight:700; padding:10px 18px; border-radius:8px; font-size:13px;}
+
+/* MODAL */
+.overlay{position:fixed; inset:0; background:rgba(4,4,6,.75); backdrop-filter:blur(6px); z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; opacity:0; pointer-events:none; transition:opacity .18s;}
+.overlay.show{opacity:1; pointer-events:all;}
+.modal{position:relative; background:var(--surf); border:1px solid var(--border); border-radius:18px; width:100%; max-width:460px; max-height:90vh; overflow-y:auto; padding:22px; transform:scale(.96); transition:transform .18s;}
+.overlay.show .modal{transform:scale(1);}
+.modal h3{font-size:16px; font-weight:800; margin-bottom:16px;}
+.field{margin-bottom:12px;}
+.field label{font-size:11px; color:var(--tx2); font-weight:600; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.03em;}
+.field input{width:100%; background:var(--surf2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--tx); font-family:var(--mono); font-size:13px;}
+.field input:focus{outline:none; border-color:var(--purple);}
+.field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.preview-label{font-size:11px; color:var(--tx2); font-weight:600; margin:18px 0 8px; text-transform:uppercase;}
+.modalbtns{display:flex; gap:10px; margin-top:18px;}
+.modalbtns button{flex:1; padding:12px; border-radius:9px; font-weight:700; font-size:13px;}
+.btn-cancel{background:var(--surf2); color:var(--tx2);}
+.btn-create{background:var(--tx); color:#000;}
+.closebtn{position:absolute; top:16px; right:16px; font-size:20px; color:var(--tx2); width:32px; height:32px;}
+.detail-stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0;}
+.detail-stats div{background:var(--surf2); border-radius:9px; padding:10px 12px;}
+.detail-stats .l{font-size:10px; color:var(--tx2); text-transform:uppercase; margin-bottom:3px;}
+.detail-stats .v{font-family:var(--mono); font-weight:700; font-size:14px;}
+.achlist{display:flex; flex-direction:column; gap:6px; margin:10px 0;}
+.achitem{display:flex; gap:8px; align-items:center; background:var(--surf2); border-radius:9px; padding:9px 12px; font-size:12px;}
+.achitem b{font-size:12px;} .achitem span{color:var(--tx2); font-size:11px;}
+.share-btn{width:100%; margin-top:16px; padding:13px; border-radius:10px; background:linear-gradient(90deg,var(--purple),var(--gold)); color:#000; font-weight:800; font-size:13px;}
+
+/* ACCOUNT VIEW */
+.acc-block{background:var(--surf); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:14px;}
+.acc-block h4{font-size:13px; font-weight:700; margin-bottom:12px;}
+.provider-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-top:1px solid var(--border);}
+.provider-row:first-of-type{border-top:none;}
+.provider-name{font-weight:700; font-size:13px;}
+.provider-sub{font-size:11px; color:var(--tx2); font-family:var(--mono);}
+.btn-connect{background:var(--surf2); border:1px solid var(--border); padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700;}
+.btn-connect.connected{color:var(--green); border-color:rgba(57,255,154,.3);}
+.btn-logout{color:var(--red); font-size:12px; font-weight:700; padding:10px 14px; background:var(--surf2); border-radius:8px; border:1px solid var(--border);}
+
+/* TOAST */
+.toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(100px); background:var(--surf2); border:1px solid var(--border); padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:100; transition:transform .25s ease; padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;}
+</style>
+</head>
+<body>
+
+<!-- LANDING (logged out) -->
+<div id="landing" hidden>
+  <header><div class="headerrow"><div class="logo">✦ DEGEN<span>CARDS</span></div></div></header>
+  <div class="landing">
+    <div class="landing-inner">
+      <div>
+        <h1>YOUR TRADES.<br>TURNED INTO CARDS.</h1>
+        <p>Every trade becomes a piece of your trading history. Connect your wallet or trading account, or log every trade by hand — either way, it becomes a collectible card with rarity, achievements and a grade.</p>
+      </div>
+      <div class="authbox">
+        <h3>SIGN IN</h3>
+        <input id="authEmail" type="email" placeholder="you@email.com">
+        <button id="btnMagicLink">SEND MAGIC LINK</button>
+        <div class="authnote" id="authNote">No password. We email you a one-time link.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0;"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:10px;color:var(--tx2)">OR</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <button id="btnGoogle" style="background:#fff;color:#000;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.2-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3c-7.4 0-13.8 4.1-17.1 10.1z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.5 36 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.9 40.6 16.4 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.5C40.8 36.4 45 30.7 45 24c0-1.4-.2-2.7-.4-3.5z"/></svg>
+          CONTINUE WITH GOOGLE
+        </button>
+        <button id="btnWallet" style="background:#141420; color:#fff; border:1px solid rgba(220,31,255,.35); display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; font-weight:800;">
+          <svg width="16" height="16" viewBox="0 0 397 311" fill="none"><defs><linearGradient id="sg1" x1="360" y1="7" x2="141" y2="316" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><linearGradient id="sg2" x1="264" y1="-32" x2="45" y2="277" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><linearGradient id="sg3" x1="312" y1="-11" x2="93" y2="298" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs><path d="M64.6 237.9a12.3 12.3 0 018.7-3.6h317.4a6.1 6.1 0 014.3 10.5l-62.7 62.7a12.3 12.3 0 01-8.7 3.6H6.2a6.1 6.1 0 01-4.3-10.5z" fill="url(#sg1)"/><path d="M64.6 3.6A12.6 12.6 0 0173.3 0h317.4a6.1 6.1 0 014.3 10.5l-62.7 62.7a12.3 12.3 0 01-8.7 3.6H6.2a6.1 6.1 0 01-4.3-10.5z" fill="url(#sg2)"/><path d="M332.3 120.1a12.3 12.3 0 00-8.7-3.6H6.2a6.1 6.1 0 00-4.3 10.5l62.7 62.7a12.3 12.3 0 008.7 3.6h317.4a6.1 6.1 0 004.3-10.5z" fill="url(#sg3)"/></svg>
+          SIGN IN WITH SOLANA
+        </button>
+        <button id="btnWalletEth" style="background:#627EEA; color:#fff; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; font-weight:800;">
+          <svg width="14" height="14" viewBox="0 0 256 417" fill="#fff"><path d="M127.9 0L125 10.5v275l2.9 2.9 127.9-75.6z"/><path d="M127.9 0L0 212.8l127.9 75.6V154.5z" fill-opacity=".8"/><path d="M127.9 312.2l-1.6 2v98l1.6 4.5L256 236.6z"/><path d="M127.9 416.7v-104.5L0 236.6z" fill-opacity=".8"/></svg>
+          SIGN IN WITH ETHEREUM
+        </button>
+        <div class="authnote">Native Supabase Web3 sign-in — real signature, no password.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 8px;"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:10px;color:var(--tx2)">OR WATCH-ONLY</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <input id="authPubkey" type="text" placeholder="Paste a public key (Solana address)">
+        <button id="btnPubkey" style="background:var(--surf2); color:var(--tx); border:1px solid var(--border);">CONTINUE WITH PUBLIC KEY</button>
+        <div class="authnote">No wallet app needed, no signature — read-only, can't sign transactions.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP (logged in) -->
+<div id="app" hidden>
+<header>
+  <div class="headerrow">
+    <div class="logo">✦ DEGEN<span>CARDS</span></div>
+    <nav id="nav">
+      <button class="active" data-v="collection">COLLECTION</button>
+      <button data-v="achievements">ACHIEVEMENTS</button>
+      <button data-v="stats">STATS</button>
+      <button data-v="account">ACCOUNT</button>
+    </nav>
+    <div class="headerright">
+      <div class="profile-chip" id="profileChip"><div class="av" id="avInitial">·</div>Lvl <b id="chipLvl">1</b></div>
+      <button class="btn-new" id="btnNew">+ NEW TRADE</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>YOUR TRADES.<br><span class="g">TURNED INTO CARDS.</span></h1>
+    <p>Every trade becomes a piece of your trading history.</p>
+    <div class="stats" id="statsRow"></div>
+    <div class="levelbar">
+      <div class="lvl" id="lvlLabel">LVL 1</div>
+      <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
+      <div class="xp" id="xpLabel">0 / 100 XP</div>
+    </div>
+  </section>
+
+  <div id="collectionView">
+    <div class="sectionhead">
+      <h2>COLLECTION · <span id="countLabel">0</span> cards</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="filters" id="filterRow">
+          <button class="chip active" data-f="all">ALL</button>
+          <button class="chip" data-f="win">WINS</button>
+          <button class="chip" data-f="loss">LOSSES</button>
+          <button class="chip" data-f="rare">RARE</button>
+          <button class="chip" data-f="epic">EPIC</button>
+          <button class="chip" data-f="legendary">LEGENDARY</button>
+        </div>
+        <select class="sortsel" id="sortSel">
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="roi">Best ROI</option>
+          <option value="pnl">Best P&L</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div id="achievementsView" style="display:none;">
+    <div class="sectionhead"><h2>ACHIEVEMENTS UNLOCKED · <span id="achCount">0</span> / <span id="achTotal">0</span></h2></div>
+    <div class="achlist" id="achAll"></div>
+  </div>
+
+  <div id="statsView" style="display:none;">
+    <div class="sectionhead"><h2>STATISTICS</h2></div>
+    <div class="detail-stats" id="statsGrid" style="grid-template-columns:repeat(3,1fr);"></div>
+  </div>
+
+  <div id="accountView" style="display:none;">
+    <div class="sectionhead"><h2>MANAGE ACCOUNT</h2></div>
+    <div class="acc-block">
+      <h4>SIGNED IN AS</h4>
+      <div class="provider-row" style="border-top:none;">
+        <div><div class="provider-name" id="accEmail">—</div><div class="provider-sub">Free plan</div></div>
+        <button class="btn-logout" id="btnLogout">LOG OUT</button>
+      </div>
+    </div>
+    <div class="acc-block">
+      <h4>AUTO-IMPORT TRADES</h4>
+      <div id="providerList"></div>
+      <div class="authnote" style="margin-top:10px; text-align:left;">Connecting pulls in your recent activity as trade cards automatically. Manual entry still works for anything a connector misses.</div>
+    </div>
+  </div>
+</div>
+
+<footer>DEGENCARDS · Trade tracking & collection experience — not financial advice</footer>
+</div>
+
+<!-- NEW TRADE MODAL -->
+<div class="overlay" id="newOverlay">
+  <div class="modal">
+    <button class="closebtn" data-close>×</button>
+    <h3>NEW TRADE</h3>
+    <div class="field"><label>Ticker</label><input id="fTicker" placeholder="$WIF"></div>
+    <div class="field-row">
+      <div class="field"><label>P&L ($)</label><input id="fPnl" type="number" step="0.01" placeholder="18.42"></div>
+      <div class="field"><label>ROI (%)</label><input id="fRoi" type="number" step="0.1" placeholder="72.4"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Entry MC</label><input id="fEntry" type="number" placeholder="18400"></div>
+      <div class="field"><label>Exit MC</label><input id="fExit" type="number" placeholder="31720"></div>
+    </div>
+    <div class="field"><label>Hold time (seconds)</label><input id="fHold" type="number" placeholder="222"></div>
+    <div class="preview-label">LIVE PREVIEW</div>
+    <div class="grid" style="grid-template-columns:1fr; max-width:220px; margin:0 auto;"><div id="previewSlot"></div></div>
+    <div class="modalbtns">
+      <button class="btn-cancel" data-close>Cancel</button>
+      <button class="btn-create" id="btnCreate">Create Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="overlay" id="detailOverlay">
+  <div class="modal">
+    <button class="closebtn" data-close>×</button>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- supabase ---------- */
+const SUPABASE_URL = "https://wlxyepkewatmwlziybfb.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndseHllcGtld2F0bXdseml5YmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNDA0NjMsImV4cCI6MjEwNTgxNjQ2M30.4PK7xHPyLhcCBbBv5GcoMJN-X1AltAI4o50ZvqSH1II";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let session = null;
+let trades = [];
+let connectedAccounts = [];
+let view = "collection";
+let activeFilter = "all";
+let sortMode = "newest";
+
+const RARITY_ORDER=["common","uncommon","rare","epic","legendary","mythic"];
+const ACH_CATALOG = [
+  {key:"first_blood",icon:"🔥",name:"FIRST BLOOD",desc:"First profitable trade."},
+  {key:"moonshot",icon:"🚀",name:"MOONSHOT",desc:"Trade with +100% ROI."},
+  {key:"speedrun",icon:"⚡",name:"SPEEDRUN",desc:"Profitable trade under 30 seconds."},
+  {key:"new_record",icon:"🏆",name:"NEW RECORD",desc:"Best trade ever."},
+  {key:"run_it_back",icon:"📈",name:"RUN IT BACK",desc:"3 winning trades in a row."},
+  {key:"on_fire",icon:"🔥",name:"ON FIRE",desc:"5 consecutive profitable trades."},
+  {key:"king_of_day",icon:"👑",name:"KING OF THE DAY",desc:"Best trade of the day."},
+];
+const PROVIDERS = [
+  {key:"pumpfun", name:"Pump.fun", sub:"Wallet activity on Pump.fun"},
+  {key:"fomo", name:"Fomo", sub:"Fomo.so trade feed"},
+  {key:"wallet", name:"Wallet tracking", sub:"Any Solana address"},
+];
+
+/* ---------- data layer (Supabase) ---------- */
+const store = {
+  async getTrades(){
+    const {data,error} = await sb.from('trades').select('*').order('timestamp_ms',{ascending:false});
+    if(error){ console.error(error); return []; }
+    return data.map(r=>({ id:r.id, tradeId:r.trade_id, ticker:r.ticker, pnl:+r.pnl, roi:+r.roi, entryMc:+r.entry_mc, exitMc:+r.exit_mc, holdTime:r.hold_time, timestamp:+r.timestamp_ms, source:r.source }));
+  },
+  async saveTrade(t){
+    const nextId = trades.length ? Math.max(...trades.map(x=>x.tradeId))+1 : 1;
+    const row = { user_id: session.user.id, trade_id: nextId, ticker:t.ticker, pnl:t.pnl, roi:t.roi, entry_mc:t.entryMc, exit_mc:t.exitMc, hold_time:t.holdTime, timestamp_ms: Date.now(), source: t.source||'manual' };
+    const {error} = await sb.from('trades').insert(row);
+    if(error) console.error(error);
+  },
+  async getAccounts(){
+    const {data,error} = await sb.from('connected_accounts').select('*');
+    if(error){ console.error(error); return []; }
+    return data;
+  },
+  async connectAccount(provider, handle){
+    const {error} = await sb.from('connected_accounts').insert({user_id:session.user.id, provider, handle});
+    if(error) console.error(error);
+  }
+};
+
+/* ---------- rarity / achievements / grade ---------- */
+function computeRarity(t, ctx){
+  let score = 0;
+  score += Math.max(0, t.roi);
+  if(t.holdTime>0 && t.holdTime<30 && t.pnl>0) score += 40;
+  if(ctx.isPersonalBest) score += 80;
+  if(ctx.streak>=5) score += 30;
+  if(t.roi>=250) return "mythic";
+  if(t.roi>=100 || score>=180) return "legendary";
+  if(t.roi>=50 || score>=100) return "epic";
+  if(t.roi>=20 || score>=50) return "rare";
+  if(t.roi>0) return "uncommon";
+  return "common";
+}
+function computeGrade(t, rarity){
+  const order=["common","uncommon","rare","epic","legendary","mythic"];
+  const i = order.indexOf(rarity);
+  if(i>=4) return "S"; if(i===3) return "A"; if(i===2) return "B"; if(t.pnl>0) return "C"; return "D";
+}
+function computeAchievements(t, ctx){
+  const list=[];
+  if(ctx.isFirstWin) list.push(ACH_CATALOG[0]);
+  if(t.roi>=100) list.push(ACH_CATALOG[1]);
+  if(t.holdTime<=30 && t.pnl>0) list.push(ACH_CATALOG[2]);
+  if(ctx.isPersonalBest) list.push(ACH_CATALOG[3]);
+  if(ctx.streak===3) list.push(ACH_CATALOG[4]);
+  if(ctx.streak>=5) list.push(ACH_CATALOG[5]);
+  if(ctx.isBestOfDay) list.push(ACH_CATALOG[6]);
+  return list.slice(0,3);
+}
+function vibeFor(t){
+  if(t.holdTime<=30 && t.pnl>0) return "⚡ SNIPER";
+  if(t.roi>=100) return "🚀 MOONSHOT";
+  if(t.roi<0 && t.holdTime>3600) return "💎 DIAMOND HANDS";
+  if(t.pnl<0) return "💀 RUG SURVIVOR";
+  return "🔥 DEGEN";
+}
+/* card color driven by PnL magnitude, independent of rarity */
+function pnlColor(t){
+  const win = t.pnl>=0;
+  const mag = Math.min(Math.abs(t.roi)/150, 1);
+  return win
+    ? { border:`rgba(57,255,154,${(0.22+mag*0.55).toFixed(2)})`, glow:`rgba(57,255,154,${(0.08+mag*0.2).toFixed(2)})` }
+    : { border:`rgba(255,75,92,${(0.22+mag*0.55).toFixed(2)})`,  glow:`rgba(255,75,92,${(0.08+mag*0.2).toFixed(2)})` };
+}
+
+const fmt = {
+  usd(n){ const s=n<0?"-":"+"; return s+"$"+Math.abs(n).toFixed(2); },
+  pct(n){ const s=n<0?"":"+"; return s+n.toFixed(1)+"%"; },
+  mc(n){ if(n>=1000) return "$"+(n/1000).toFixed(1)+"K"; return "$"+n; },
+  hold(s){ if(s<60) return s+"s"; const m=Math.floor(s/60), r=s%60; if(m<60) return m+"m "+r+"s"; return Math.floor(m/60)+"h "+(m%60)+"m"; },
+  date(ts){ return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + " · " + new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+};
+
+function generateTradeCard(trade, allTrades){
+  const wins = allTrades.filter(x=>x.pnl>0);
+  const isFirstWin = trade.pnl>0 && wins.filter(x=>x.timestamp<=trade.timestamp).length===1;
+  const bestPnlBefore = Math.max(0,...allTrades.filter(x=>x.timestamp<trade.timestamp).map(x=>x.pnl));
+  const isPersonalBest = trade.pnl>bestPnlBefore;
+  const sorted=[...allTrades].sort((a,b)=>a.timestamp-b.timestamp);
+  let streak=0;
+  for(const t of sorted){ if(t.timestamp>trade.timestamp) break; if(t.pnl>0) streak++; else streak=0; }
+  const sameDay = allTrades.filter(x=>new Date(x.timestamp).toDateString()===new Date(trade.timestamp).toDateString());
+  const isBestOfDay = trade.pnl===Math.max(...sameDay.map(x=>x.pnl));
+  const ctx={isFirstWin,isPersonalBest,streak,isBestOfDay};
+  const rarity = computeRarity(trade, ctx);
+  return { rarity, grade:computeGrade(trade,rarity), achievements:computeAchievements(trade,ctx), vibe:vibeFor(trade), color:pnlColor(trade) };
+}
+function miniChart(pnl){
+  const up = pnl>=0;
+  const pts = up ? [40,32,34,20,24,8] : [10,16,12,26,22,34];
+  const path = pts.map((y,i)=>`${i===0?'M':'L'}${i*40},${y}`).join(' ');
+  const c = up ? 'var(--green)' : 'var(--red)';
+  return `<svg width="100%" height="42" viewBox="0 0 200 42" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>`;
+}
+
+function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(t, trades)})); }
+
+function renderCardHTML(t, meta){
+  const win = t.pnl>=0;
+  const badges = meta.achievements.map(a=>`<span>${a.icon} ${a.name}</span>`).join(' ');
+  return `
+    <div class="top"><span>#${String(t.tradeId).padStart(4,'0')}</span><div class="grade">${meta.grade}</div></div>
+    <div class="rarity-tag">${meta.rarity}</div>
+    ${t.source && t.source!=='manual' ? `<div class="src">${t.source}</div>` : ''}
+    <div class="ticker">${t.ticker}</div>
+    <div class="pnl ${win?'pos':'neg'}">${fmt.usd(t.pnl)}</div>
+    <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
+    <div class="mini">${miniChart(t.pnl)}</div>
+    ${meta.achievements.length? `<div class="badge">${badges}</div>`:''}
+    <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${meta.vibe}</span></div>
+  `;
+}
+function cardStyle(meta){ return `--glow:${meta.color.glow}; border-color:${meta.color.border};`; }
+
+function renderGrid(){
+  const all = computedTrades();
+  let filtered = all;
+  if(activeFilter==="win") filtered=all.filter(t=>t.pnl>=0);
+  else if(activeFilter==="loss") filtered=all.filter(t=>t.pnl<0);
+  else if(["rare","epic","legendary"].includes(activeFilter)) filtered=all.filter(t=>t.meta.rarity===activeFilter);
+
+  filtered = [...filtered].sort((a,b)=>{
+    if(sortMode==="newest") return b.timestamp-a.timestamp;
+    if(sortMode==="oldest") return a.timestamp-b.timestamp;
+    if(sortMode==="roi") return b.roi-a.roi;
+    if(sortMode==="pnl") return b.pnl-a.pnl;
+  });
+
+  const grid = document.getElementById('grid');
+  document.getElementById('countLabel').textContent = all.length;
+  if(filtered.length===0){
+    const msgs = {all:"YOUR COLLECTION IS EMPTY.", win:"No wins yet.", loss:"No losses. Clean sheet.", rare:"No rare cards yet.", epic:"No epic trades yet.", legendary:"No legendary cards yet."};
+    grid.innerHTML = `<div class="empty"><b>${msgs[activeFilter]||"Nothing here."}</b>Make your first trade card.<br><button id="emptyCreate">CREATE YOUR FIRST CARD</button></div>`;
+    document.getElementById('emptyCreate')?.addEventListener('click', openNewModal);
+    return;
+  }
+  grid.innerHTML = filtered.map(t=>`<div class="card" data-r="${t.meta.rarity}" data-id="${t.id}" style="${cardStyle(t.meta)}">${renderCardHTML(t,t.meta)}</div>`).join('');
+  grid.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+}
+
+function renderStatsRow(){
+  const wins = trades.filter(t=>t.pnl>=0);
+  const totalPnl = trades.reduce((s,t)=>s+t.pnl,0);
+  const winRate = trades.length? Math.round(wins.length/trades.length*100):0;
+  const best = trades.length? Math.max(...trades.map(t=>t.roi)) : 0;
+  const rows = [
+    {l:"TOTAL P&L", v:trades.length?fmt.usd(totalPnl):"—", cls:totalPnl>=0?'pos':'neg'},
+    {l:"TRADES", v:trades.length, cls:''},
+    {l:"WIN RATE", v:trades.length? winRate+"%":"—", cls:''},
+    {l:"BEST TRADE", v:trades.length? fmt.pct(best):"—", cls:'pos'},
+    {l:"CARDS", v:trades.length, cls:''},
+  ];
+  document.getElementById('statsRow').innerHTML = rows.map(r=>`<div class="stat"><div class="l">${r.l}</div><div class="v ${r.cls}">${r.v}</div></div>`).join('');
+}
+function renderLevel(){
+  const xp = trades.length*20 + computedTrades().reduce((s,t)=>s+t.meta.achievements.length*50 + (t.meta.rarity==='legendary'||t.meta.rarity==='mythic'?250:0),0);
+  const lvl = Math.floor(xp/100)+1, cur = xp%100;
+  document.getElementById('lvlLabel').textContent = "LVL "+lvl;
+  document.getElementById('chipLvl').textContent = lvl;
+  document.getElementById('xpFill').style.width = cur+"%";
+  document.getElementById('xpLabel').textContent = cur+" / 100 XP";
+}
+function renderAchievements(){
+  const all = computedTrades();
+  const unlocked = new Set();
+  all.forEach(t=>t.meta.achievements.forEach(a=>unlocked.add(a.key)));
+  document.getElementById('achCount').textContent = unlocked.size;
+  document.getElementById('achTotal').textContent = ACH_CATALOG.length;
+  document.getElementById('achAll').innerHTML = ACH_CATALOG.map(a=>{
+    const has = unlocked.has(a.key);
+    return `<div class="achitem" style="opacity:${has?1:.4}"><span style="font-size:16px">${a.icon}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`;
+  }).join('');
+}
+function renderStatsView(){
+  const wins = trades.filter(t=>t.pnl>=0), losses=trades.filter(t=>t.pnl<0);
+  const totalPnl = trades.reduce((s,t)=>s+t.pnl,0);
+  const best = trades.length? Math.max(...trades.map(t=>t.roi)):0;
+  const worst = trades.length? Math.min(...trades.map(t=>t.pnl)):0;
+  const legendary = computedTrades().filter(t=>['legendary','mythic'].includes(t.meta.rarity)).length;
+  const achUnlocked = new Set(); computedTrades().forEach(t=>t.meta.achievements.forEach(a=>achUnlocked.add(a.key)));
+  const rows=[
+    {l:"Cards collected", v:trades.length},{l:"Wins", v:wins.length},{l:"Losses", v:losses.length},
+    {l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
+    {l:"Total P&L", v: fmt.usd(totalPnl)},{l:"Best ROI", v: fmt.pct(best)},
+    {l:"Biggest loss", v: fmt.usd(worst)},{l:"Legendary+ cards", v: legendary},
+    {l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
+  ];
+  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
+}
+function renderAccount(){
+  const walletAcc = connectedAccounts.find(a=>a.provider==='wallet');
+  const idLabel = session?.user?.email || (walletAcc ? walletAcc.handle.slice(0,4)+'...'+walletAcc.handle.slice(-4) : 'Anonymous wallet');
+  document.getElementById('accEmail').textContent = idLabel;
+  document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
+  document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
+    const acc = connectedAccounts.find(a=>a.provider===p.key);
+    return `<div class="provider-row">
+      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? acc.handle : p.sub}</div></div>
+      <button class="btn-connect ${acc?'connected':''}" data-p="${p.key}">${acc?'CONNECTED':'CONNECT'}</button>
+    </div>`;
+  }).join('');
+  document.getElementById('providerList').querySelectorAll('.btn-connect').forEach(b=>{
+    if(b.classList.contains('connected')) return;
+    b.addEventListener('click', ()=>connectProvider(b.dataset.p));
+  });
+}
+function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderAchievements(); renderStatsView(); renderAccount(); }
+
+/* ---------- mock auto-import ----------
+   No live pump.fun / fomo / wallet API is wired up yet — connecting a provider
+   simulates the import so the pipeline (source tag, storage, cards) is real
+   and ready to swap in a live feed later. */
+async function connectProvider(key){
+  const p = PROVIDERS.find(x=>x.key===key);
+  const handle = prompt(`${p.name} — enter your handle or wallet address:`);
+  if(!handle) return;
+  await store.connectAccount(key, handle);
+  const mockCount = 2 + Math.floor(Math.random()*2);
+  for(let i=0;i<mockCount;i++){
+    const roi = Math.round((Math.random()*180-40)*10)/10;
+    const entry = Math.round(3000+Math.random()*40000);
+    const pnl = Math.round(entry*(roi/100))/100;
+    await store.saveTrade({
+      ticker: "$"+["BONK","WIF","POPCAT","MEW","PNUT","GOAT"][Math.floor(Math.random()*6)],
+      pnl, roi, entryMc: entry, exitMc: Math.round(entry*(1+roi/100)),
+      holdTime: Math.round(20+Math.random()*1800), source: key
+    });
+  }
+  await reload();
+  showToast(`${mockCount} trades imported from ${p.name}`);
+}
+
+/* ---------- nav ---------- */
+document.getElementById('nav').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  view = b.dataset.v;
+  ['collection','achievements','stats','account'].forEach(v=>{
+    document.getElementById(v+'View').style.display = (view===v)?'block':'none';
+  });
+});
+document.getElementById('filterRow').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#filterRow .chip').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); activeFilter=b.dataset.f; renderGrid();
+});
+document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(); });
+document.getElementById('profileChip').addEventListener('click', ()=>{
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelector('#nav button[data-v="account"]').classList.add('active');
+  view='account';
+  ['collection','achievements','stats','account'].forEach(v=>document.getElementById(v+'View').style.display=(v==='account')?'block':'none');
+});
+document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+
+/* ---------- new trade modal ---------- */
+const newOverlay = document.getElementById('newOverlay');
+function openNewModal(){
+  ['fTicker','fPnl','fRoi','fEntry','fExit','fHold'].forEach(id=>document.getElementById(id).value='');
+  updatePreview(); newOverlay.classList.add('show');
+}
+document.getElementById('btnNew').addEventListener('click', openNewModal);
+newOverlay.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>newOverlay.classList.remove('show')));
+function readForm(){
+  return {
+    ticker: document.getElementById('fTicker').value.trim() || '$TICKER',
+    pnl: parseFloat(document.getElementById('fPnl').value)||0,
+    roi: parseFloat(document.getElementById('fRoi').value)||0,
+    entryMc: parseFloat(document.getElementById('fEntry').value)||0,
+    exitMc: parseFloat(document.getElementById('fExit').value)||0,
+    holdTime: parseFloat(document.getElementById('fHold').value)||0,
+  };
+}
+function updatePreview(){
+  const f = readForm();
+  const fake = {...f, id:'preview', tradeId: trades.length+1, timestamp: Date.now()};
+  const meta = generateTradeCard(fake, trades);
+  document.getElementById('previewSlot').outerHTML = `<div class="card" id="previewSlot" data-r="${meta.rarity}" style="${cardStyle(meta)}">${renderCardHTML(fake, meta)}</div>`;
+}
+['fTicker','fPnl','fRoi','fEntry','fExit','fHold'].forEach(id=>document.getElementById(id).addEventListener('input', updatePreview));
+document.getElementById('btnCreate').addEventListener('click', async ()=>{
+  const f = readForm();
+  await store.saveTrade({...f, source:'manual'});
+  newOverlay.classList.remove('show');
+  await reload();
+  showToast("Card added");
+});
+
+/* ---------- detail modal ---------- */
+const detailOverlay = document.getElementById('detailOverlay');
+function openDetail(id){
+  const t = trades.find(x=>x.id===id); if(!t) return;
+  const meta = generateTradeCard(t, trades);
+  const win = t.pnl>=0;
+  document.getElementById('detailBody').innerHTML = `
+    <div style="font-family:var(--mono);font-size:11px;color:var(--tx2)">TRADE #${String(t.tradeId).padStart(4,'0')} · ${meta.rarity.toUpperCase()}</div>
+    <div style="font-weight:800;font-size:22px;margin-top:6px">${t.ticker}</div>
+    <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
+    <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
+    ${miniChart(t.pnl)}
+    <div class="detail-stats">
+      <div><div class="l">Entry MC</div><div class="v">${fmt.mc(t.entryMc)}</div></div>
+      <div><div class="l">Exit MC</div><div class="v">${fmt.mc(t.exitMc)}</div></div>
+      <div><div class="l">Hold time</div><div class="v">${fmt.hold(t.holdTime)}</div></div>
+      <div><div class="l">Date</div><div class="v" style="font-size:11px">${fmt.date(t.timestamp)}</div></div>
+    </div>
+    ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="font-size:16px">${a.icon}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
+    <button class="share-btn" id="btnShare">SHARE CARD</button>
+  `;
+  document.getElementById('btnShare').addEventListener('click', ()=>showToast("Copied · ready to share"));
+  detailOverlay.classList.add('show');
+}
+detailOverlay.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>detailOverlay.classList.remove('show')));
+[newOverlay,detailOverlay].forEach(ov=>ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('show'); }));
+
+function showToast(msg){
+  const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2400);
+}
+
+/* ---------- auth ---------- */
+document.getElementById('btnMagicLink').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  const note = document.getElementById('authNote');
+  if(!email){ note.textContent = "Enter an email first."; return; }
+  note.textContent = "Sending...";
+  const {error} = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href } });
+  note.textContent = error ? "Error — try again." : "Check your inbox for the link.";
+});
+document.getElementById('btnGoogle').addEventListener('click', async ()=>{
+  await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.href } });
+});
+function detectWallet(){
+  if(window.phantom?.solana?.isPhantom) return window.phantom.solana;
+  if(window.solflare?.isSolflare) return window.solflare;
+  if(window.backpack?.isBackpack) return window.backpack;
+  if(window.solana) return window.solana;
+  return null;
+}
+async function loginWithPubkey(pubkey, note){
+  const { data, error } = await sb.auth.signInAnonymously();
+  if(error){ note.textContent = "Auth error — try again."; return; }
+  await sb.auth.updateUser({ data: { wallet_address: pubkey } });
+  await sb.from('connected_accounts').upsert({ user_id: data.user.id, provider:'wallet', handle: pubkey }, { onConflict:'user_id,provider' });
+  note.textContent = "Wallet connected.";
+  await reload();
+}
+document.getElementById('btnWallet').addEventListener('click', async ()=>{
+  const note = document.getElementById('authNote');
+  if(!detectWallet()){ note.textContent = "No Solana wallet found — install Phantom, Solflare or Backpack."; return; }
+  note.textContent = "Confirm in your wallet...";
+  const { error } = await sb.auth.signInWithWeb3({ chain:'solana', statement:'Sign in to DEGENCARDS' });
+  note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
+});
+document.getElementById('btnWalletEth').addEventListener('click', async ()=>{
+  const note = document.getElementById('authNote');
+  if(!window.ethereum){ note.textContent = "No Ethereum wallet found — install MetaMask or similar."; return; }
+  note.textContent = "Confirm in your wallet...";
+  const { error } = await sb.auth.signInWithWeb3({ chain:'ethereum', statement:'Sign in to DEGENCARDS' });
+  note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
+});
+document.getElementById('btnPubkey').addEventListener('click', async ()=>{
+  const note = document.getElementById('authNote');
+  const pk = document.getElementById('authPubkey').value.trim();
+  if(pk.length < 32){ note.textContent = "That doesn't look like a valid address."; return; }
+  note.textContent = "Connecting...";
+  await loginWithPubkey(pk, note);
+});
+
+async function reload(){
+  trades = await store.getTrades();
+  connectedAccounts = await store.getAccounts();
+  renderAll();
+}
+
+async function showApp(){
+  document.getElementById('landing').hidden = true;
+  document.getElementById('app').hidden = false;
+  await reload();
+}
+function showLanding(){
+  document.getElementById('landing').hidden = false;
+  document.getElementById('app').hidden = true;
+}
+
+sb.auth.onAuthStateChange((event, sess)=>{
+  session = sess;
+  if(session) showApp(); else showLanding();
+});
+sb.auth.getSession().then(({data})=>{
+  session = data.session;
+  if(session) showApp(); else showLanding();
+});
+</script>
+</body>
+</html>
