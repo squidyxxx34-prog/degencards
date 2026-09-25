@@ -35,14 +35,22 @@ nav{display:flex; gap:4px; overflow-x:auto; scrollbar-width:none;}
 nav::-webkit-scrollbar{display:none;}
 nav button{padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; color:var(--tx2); white-space:nowrap; transition:.15s;}
 nav button.active{color:var(--tx); background:var(--surf2);}
-.hamburger{display:none; flex-direction:column; gap:4px; width:22px; height:22px; justify-content:center; flex-shrink:0;}
-.hamburger span{display:block; height:2px; width:100%; background:var(--tx); border-radius:2px;}
+.hamburger{display:none; flex-direction:column; gap:4px; width:22px; height:22px; justify-content:center; flex-shrink:0; padding:0;}
+.hamburger span{display:block; height:2px; width:100%; background:var(--tx); border-radius:2px; pointer-events:none;}
+.navmenu{display:flex; flex-direction:column; gap:4px; padding:8px 0;}
+.navmenu button{width:100%; text-align:left; padding:14px 16px; font-size:15px; border-radius:10px; font-weight:600; color:var(--tx2);}
+.navmenu button.active{color:var(--tx); background:var(--surf2);}
 @media(max-width:760px){
+  .headerrow{padding:14px 16px; gap:10px;}
+  .logo{font-size:15px;}
   .hamburger{display:flex;}
-  nav{display:none; position:fixed; top:calc(57px + env(safe-area-inset-top,0px)); left:0; right:0; bottom:0; background:rgba(7,7,10,.97); backdrop-filter:blur(10px); flex-direction:column; padding:10px; z-index:40; overflow-y:auto; gap:2px;}
-  nav.open{display:flex;}
-  nav button{width:100%; text-align:left; padding:14px 16px; font-size:15px; border-bottom:1px solid var(--border);}
-  .profile-chip{display:none;}
+  nav{display:none;}
+  .btn-new{padding:9px 12px; font-size:12px;}
+  .profile-chip{padding:4px 8px 4px 4px; font-size:11px;}
+}
+@media(max-width:400px){
+  .btn-new{font-size:0; padding:9px 10px;}
+  .btn-new::before{content:"+"; font-size:20px; line-height:1;}
 }
 .headerright{display:flex; align-items:center; gap:12px;}
 .btn-new{background:var(--tx); color:#000; font-weight:700; font-size:13px; padding:9px 16px; border-radius:8px; white-space:nowrap;}
@@ -161,11 +169,12 @@ select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(-
 /* ACCOUNT VIEW */
 .acc-block{background:var(--surf); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:14px;}
 .acc-block h4{font-size:13px; font-weight:700; margin-bottom:12px;}
-.provider-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-top:1px solid var(--border);}
+.provider-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; border-top:1px solid var(--border);}
 .provider-row:first-of-type{border-top:none;}
+.provider-row > div:first-child{min-width:0; flex:1;}
 .provider-name{font-weight:700; font-size:13px;}
-.provider-sub{font-size:11px; color:var(--tx2); font-family:var(--mono);}
-.btn-connect{background:var(--surf2); border:1px solid var(--border); padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700;}
+.provider-sub{font-size:11px; color:var(--tx2); font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.btn-connect{background:var(--surf2); border:1px solid var(--border); padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; flex-shrink:0;}
 .btn-connect.connected{color:var(--green); border-color:rgba(57,255,154,.3);}
 .btn-logout{color:var(--red); font-size:12px; font-weight:700; padding:10px 14px; background:var(--surf2); border-radius:8px; border:1px solid var(--border);}
 
@@ -366,6 +375,22 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- MOBILE NAV MENU -->
+<div class="overlay" id="navOverlay">
+  <div class="modal" style="max-width:320px;">
+    <button class="closebtn" data-close>×</button>
+    <h3>MENU</h3>
+    <div class="navmenu" id="navMenu">
+      <button data-v="home">HOME</button>
+      <button data-v="collection">COLLECTION</button>
+      <button data-v="history">HISTORY</button>
+      <button data-v="achievements">ACHIEVEMENTS</button>
+      <button data-v="stats">STATS</button>
+      <button data-v="account">ACCOUNT</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ---------- supabase ---------- */
@@ -610,7 +635,7 @@ function renderAccount(){
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
     return `<div class="provider-row">
-      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? esc(acc.handle) : p.sub}</div></div>
+      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? esc(acc.handle.length>20 ? acc.handle.slice(0,6)+'…'+acc.handle.slice(-4) : acc.handle) : p.sub}</div></div>
       <button class="btn-connect ${acc?'connected':''}" data-p="${p.key}">${acc?'CONNECTED':'CONNECT'}</button>
     </div>`;
   }).join('');
@@ -809,13 +834,16 @@ async function connectProvider(key){
 
 /* ---------- nav ---------- */
 document.getElementById('hamburger').addEventListener('click', ()=>{
-  document.getElementById('nav').classList.toggle('open');
+  document.querySelectorAll('#navMenu button').forEach(x=>x.classList.toggle('active', x.dataset.v===view));
+  document.getElementById('navOverlay').classList.add('show');
 });
-document.getElementById('nav').addEventListener('click', e=>{
+document.getElementById('navMenu').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   goToView(b.dataset.v);
-  document.getElementById('nav').classList.remove('open');
+  document.getElementById('navOverlay').classList.remove('show');
 });
+document.getElementById('navOverlay').querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>document.getElementById('navOverlay').classList.remove('show')));
+document.getElementById('navOverlay').addEventListener('click', e=>{ if(e.target.id==='navOverlay') e.currentTarget.classList.remove('show'); });
 document.getElementById('homeSeeAll').addEventListener('click', ()=>goToView('collection'));
 document.getElementById('filterRow').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
