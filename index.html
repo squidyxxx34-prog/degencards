@@ -221,7 +221,9 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
   <div class="headerrow">
     <div class="logo">✦ DEGEN<span>CARDS</span></div>
     <nav id="nav">
-      <button class="active" data-v="collection">COLLECTION</button>
+      <button class="active" data-v="home">HOME</button>
+      <button data-v="collection">COLLECTION</button>
+      <button data-v="history">HISTORY</button>
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
       <button data-v="account">ACCOUNT</button>
@@ -234,18 +236,22 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
 </header>
 
 <div class="wrap">
-  <section class="hero">
-    <h1>YOUR TRADES.<br><span class="g">TURNED INTO CARDS.</span></h1>
-    <p>Every trade becomes a piece of your trading history.</p>
-    <div class="stats" id="statsRow"></div>
-    <div class="levelbar">
-      <div class="lvl" id="lvlLabel">LVL 1</div>
-      <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
-      <div class="xp" id="xpLabel">0 / 100 XP</div>
-    </div>
-  </section>
+  <div id="homeView">
+    <section class="hero">
+      <h1>YOUR TRADES.<br><span class="g">TURNED INTO CARDS.</span></h1>
+      <p>Every trade becomes a piece of your trading history.</p>
+      <div class="stats" id="statsRow"></div>
+      <div class="levelbar">
+        <div class="lvl" id="lvlLabel">LVL 1</div>
+        <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
+        <div class="xp" id="xpLabel">0 / 100 XP</div>
+      </div>
+    </section>
+    <div class="sectionhead"><h2>RECENT CARDS</h2><button class="chip active" id="homeSeeAll">SEE FULL COLLECTION →</button></div>
+    <div class="grid" id="homeGrid"></div>
+  </div>
 
-  <div id="collectionView">
+  <div id="collectionView" style="display:none;">
     <div class="sectionhead">
       <h2>COLLECTION · <span id="countLabel">0</span> cards</h2>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -266,6 +272,18 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
       </div>
     </div>
     <div class="grid" id="grid"></div>
+  </div>
+
+  <div id="historyView" style="display:none;">
+    <div class="sectionhead"><h2>HISTORY · <span id="histCount">0</span> trades</h2></div>
+    <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;">
+      <table style="width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; min-width:640px;">
+        <thead><tr style="background:var(--surf2); text-align:left;">
+          <th style="padding:10px 12px;">DATE</th><th style="padding:10px 12px;">TICKER</th><th style="padding:10px 12px;">ENTRY</th><th style="padding:10px 12px;">EXIT</th><th style="padding:10px 12px;">HOLD</th><th style="padding:10px 12px;">P&L</th><th style="padding:10px 12px;">ROI</th><th style="padding:10px 12px;">RARITY</th><th style="padding:10px 12px;">SRC</th><th style="padding:10px 12px;"></th>
+        </tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="achievementsView" style="display:none;">
@@ -358,7 +376,7 @@ function esc(s){
 let session = null;
 let trades = [];
 let connectedAccounts = [];
-let view = "collection";
+let view = "home";
 let activeFilter = "all";
 let sortMode = "newest";
 
@@ -589,7 +607,51 @@ function renderAccount(){
     b.addEventListener('click', ()=>connectProvider(b.dataset.p));
   });
 }
-function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderAchievements(); renderStatsView(); renderAccount(); }
+function renderHome(){
+  const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
+  const grid = document.getElementById('homeGrid');
+  if(all.length===0){
+    grid.innerHTML = `<div class="empty"><b>NO CARDS YET.</b>Log your first trade.<br><button id="homeEmptyCreate">CREATE YOUR FIRST CARD</button></div>`;
+    document.getElementById('homeEmptyCreate')?.addEventListener('click', openNewModal);
+    return;
+  }
+  grid.innerHTML = all.map(t=>`<div class="card" data-r="${t.meta.rarity}" data-id="${t.id}" style="${cardStyle(t.meta)}">${renderCardHTML(t,t.meta)}</div>`).join('');
+  grid.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+}
+function goToView(v){
+  view = v;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
+  ['home','collection','history','achievements','stats','account'].forEach(k=>{
+    document.getElementById(k+'View').style.display = (k===v)?'block':'none';
+  });
+}
+function renderHistory(){
+  const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
+  document.getElementById('histCount').textContent = all.length;
+  document.getElementById('historyBody').innerHTML = all.map(t=>{
+    const win = t.pnl>=0;
+    return `<tr style="border-top:1px solid var(--border);" data-id="${t.id}">
+      <td style="padding:9px 12px; color:var(--tx2);">${fmt.date(t.timestamp)}</td>
+      <td style="padding:9px 12px; font-weight:700;">${esc(t.ticker)}</td>
+      <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.entryMc)}</td>
+      <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.exitMc)}</td>
+      <td style="padding:9px 12px; color:var(--tx2);">${fmt.hold(t.holdTime)}</td>
+      <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.usd(t.pnl)}</td>
+      <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
+      <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.meta.rarity}</td>
+      <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.source||'manual'}</td>
+      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red); font-size:14px;">✕</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
+  document.getElementById('historyBody').querySelectorAll('.hist-del').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if(!confirm('Delete this trade?')) return;
+      await sb.from('trades').delete().eq('id', b.dataset.id);
+      await reload();
+    });
+  });
+}
+function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); }
 
 /* ---------- mock auto-import ----------
    No live pump.fun / fomo / wallet API is wired up yet — connecting a provider
@@ -618,25 +680,16 @@ async function connectProvider(key){
 /* ---------- nav ---------- */
 document.getElementById('nav').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  view = b.dataset.v;
-  ['collection','achievements','stats','account'].forEach(v=>{
-    document.getElementById(v+'View').style.display = (view===v)?'block':'none';
-  });
+  goToView(b.dataset.v);
 });
+document.getElementById('homeSeeAll').addEventListener('click', ()=>goToView('collection'));
 document.getElementById('filterRow').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#filterRow .chip').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); activeFilter=b.dataset.f; renderGrid();
 });
 document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(); });
-document.getElementById('profileChip').addEventListener('click', ()=>{
-  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
-  document.querySelector('#nav button[data-v="account"]').classList.add('active');
-  view='account';
-  ['collection','achievements','stats','account'].forEach(v=>document.getElementById(v+'View').style.display=(v==='account')?'block':'none');
-});
+document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 
 /* ---------- new trade modal ---------- */
