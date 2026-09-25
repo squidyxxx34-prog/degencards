@@ -653,15 +653,102 @@ function renderHistory(){
 }
 function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); }
 
-/* ---------- mock auto-import ----------
-   No live pump.fun / fomo / wallet API is wired up yet — connecting a provider
-   simulates the import so the pipeline (source tag, storage, cards) is real
-   and ready to swap in a live feed later. */
+/* ---------- real on-chain import (Solana wallet) ----------
+   pump.fun / fomo have no public API, so those two stay mocked below.
+   'wallet' is real: reads the connected wallet's SPL token accounts,
+   finds ones now at zero balance (= fully exited position), walks that
+   token account's own tx history to sum actual SOL in/out, and turns
+   any position where SOL actually went out then came back into a
+   closed trade. Accounts closed/reclaimed by the wallet (no leftover
+   0-balance account) can't be detected this way — Solana gives no
+   other free signal for that. */
+const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+let solPriceCache = null;
+async function rpc(method, params){
+  const r = await fetch(SOLANA_RPC, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ jsonrpc:'2.0', id:1, method, params }) });
+  const j = await r.json();
+  if(j.error) throw new Error(j.error.message);
+  return j.result;
+}
+async function getSolPriceUsd(){
+  if(solPriceCache) return solPriceCache;
+  try{
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    const j = await r.json();
+    solPriceCache = j.solana.usd;
+  }catch(e){ solPriceCache = 150; } // fallback if price API is unreachable
+  return solPriceCache;
+}
+async function detectClosedTradesFromWallet(walletAddr, note){
+  note.textContent = "Scanning wallet token accounts...";
+  const accounts = await rpc('getTokenAccountsByOwner', [walletAddr, {programId: TOKEN_PROGRAM_ID}, {encoding:'jsonParsed'}]);
+  const closed = (accounts?.value||[]).filter(a=>{
+    const amt = a.account?.data?.parsed?.info?.tokenAmount;
+    return amt && amt.uiAmount === 0 && amt.decimals > 0;
+  }).slice(0,3); // cap to stay within public RPC rate limits
+  if(closed.length===0) return [];
+  const solPrice = await getSolPriceUsd();
+  const trades = [];
+  for(const acc of closed){
+    const tokenAccAddr = acc.pubkey;
+    const mint = acc.account.data.parsed.info.mint;
+    note.textContent = `Reading history for ${mint.slice(0,4)}...${mint.slice(-4)}`;
+    let sigs;
+    try{ sigs = await rpc('getSignaturesForAddress', [tokenAccAddr, {limit:25}]); }catch(e){ continue; }
+    if(!sigs || sigs.length===0) continue;
+    let invested=0, returned=0, firstTs=null, lastTs=null;
+    for(const s of sigs.slice(0,15)){
+      let tx;
+      try{ tx = await rpc('getParsedTransaction', [s.signature, {maxSupportedTransactionVersion:0, encoding:'jsonParsed'}]); }catch(e){ continue; }
+      if(!tx || !tx.meta) continue;
+      const keys = tx.transaction.message.accountKeys.map(k=> typeof k==='string' ? k : k.pubkey);
+      const idx = keys.indexOf(walletAddr);
+      if(idx===-1) continue;
+      const solDelta = (tx.meta.postBalances[idx]-tx.meta.preBalances[idx]) / 1e9;
+      const pre = (tx.meta.preTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
+      const post = (tx.meta.postTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
+      const tokenDelta = (post?.uiTokenAmount?.uiAmount||0) - (pre?.uiTokenAmount?.uiAmount||0);
+      if(tokenDelta > 0) invested += Math.max(0,-solDelta);
+      else if(tokenDelta < 0) returned += Math.max(0, solDelta);
+      const ts = s.blockTime ? s.blockTime*1000 : null;
+      if(ts){ firstTs = firstTs===null ? ts : Math.min(firstTs, ts); lastTs = lastTs===null ? ts : Math.max(lastTs, ts); }
+    }
+    if(invested <= 0) continue; // no real buy detected in the scanned window — skip, don't fabricate
+    const pnlSol = returned - invested;
+    const roi = (pnlSol/invested)*100;
+    trades.push({
+      ticker: mint.slice(0,4).toUpperCase()+'…'+mint.slice(-4),
+      pnl: Math.round(pnlSol*solPrice*100)/100,
+      roi: Math.round(roi*10)/10,
+      entryMc: Math.round(invested*solPrice),
+      exitMc: Math.round(returned*solPrice),
+      holdTime: Math.max(1, Math.round(((lastTs||Date.now())-(firstTs||Date.now()))/1000)),
+      source: 'wallet'
+    });
+  }
+  return trades;
+}
+
 async function connectProvider(key){
   const p = PROVIDERS.find(x=>x.key===key);
-  const handle = prompt(`${p.name} — enter your handle or wallet address:`);
+  const handle = prompt(`${p.name} — enter your ${key==='wallet'?'Solana wallet address':'handle'}:`);
   if(!handle) return;
   await store.connectAccount(key, handle);
+  const note = { set textContent(v){ showToast(v); } }; // route scan progress through the toast
+  if(key === 'wallet'){
+    try{
+      const found = await detectClosedTradesFromWallet(handle.trim(), note);
+      for(const t of found) await store.saveTrade(t);
+      await reload();
+      showToast(found.length ? `${found.length} closed position(s) imported` : "No closed positions found in recent history");
+    }catch(e){
+      showToast("On-chain scan failed — RPC may be rate-limited, try again shortly");
+    }
+    return;
+  }
+  // pump.fun / fomo: no public API — simulated import so the pipeline stays real end-to-end
   const mockCount = 2 + Math.floor(Math.random()*2);
   for(let i=0;i<mockCount;i++){
     const roi = Math.round((Math.random()*180-40)*10)/10;
