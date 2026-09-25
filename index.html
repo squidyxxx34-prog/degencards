@@ -202,6 +202,17 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
       </div>
     </div>
   </div>
+
+  <div class="wrap" style="padding-bottom:60px;">
+    <div class="sectionhead" style="margin-top:0;"><h2>HOW IT WORKS</h2></div>
+    <div class="stats" style="grid-template-columns:repeat(3,1fr);">
+      <div class="stat"><div class="l">01 · LOG A TRADE</div><div class="v" style="font-size:13px;font-weight:600;">Enter it manually in 5s, or auto-import from Pump.fun / Fomo / a wallet.</div></div>
+      <div class="stat"><div class="l">02 · GET A CARD</div><div class="v" style="font-size:13px;font-weight:600;">Rarity, grade and achievements are computed instantly from your numbers.</div></div>
+      <div class="stat"><div class="l">03 · SHARE IT</div><div class="v" style="font-size:13px;font-weight:600;">One tap sends the card image straight to your feed or group chat.</div></div>
+    </div>
+    <div class="sectionhead"><h2>RARITY, NOT LUCK</h2></div>
+    <p style="color:var(--tx2);font-size:13px;max-width:520px;">Common to Mythic — driven by ROI, speed and personal records. A 30-second scalp hits different than a slow bleed, and the card knows it.</p>
+  </div>
 </div>
 
 <!-- APP (logged in) -->
@@ -292,17 +303,22 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
   <div class="modal">
     <button class="closebtn" data-close>×</button>
     <h3>NEW TRADE</h3>
-    <div class="field"><label>Ticker</label><input id="fTicker" placeholder="$WIF"></div>
-    <div class="field-row">
-      <div class="field"><label>P&L ($)</label><input id="fPnl" type="number" step="0.01" placeholder="18.42"></div>
-      <div class="field"><label>ROI (%)</label><input id="fRoi" type="number" step="0.1" placeholder="72.4"></div>
-    </div>
+    <div class="field"><label>Ticker</label><input id="fTicker" placeholder="$WIF" autocomplete="off"></div>
     <div class="field-row">
       <div class="field"><label>Entry MC</label><input id="fEntry" type="number" placeholder="18400"></div>
       <div class="field"><label>Exit MC</label><input id="fExit" type="number" placeholder="31720"></div>
     </div>
-    <div class="field"><label>Hold time (seconds)</label><input id="fHold" type="number" placeholder="222"></div>
-    <div class="preview-label">LIVE PREVIEW</div>
+    <div class="field"><label>Invested ($) — optional, for $ P&L</label><input id="fInvested" type="number" step="0.01" placeholder="25"></div>
+    <div class="field"><label>Hold time</label>
+      <div class="filters" id="holdChips">
+        <button class="chip" data-s="15">15s</button>
+        <button class="chip" data-s="60">1m</button>
+        <button class="chip" data-s="300">5m</button>
+        <button class="chip active" data-s="3600">1h</button>
+        <button class="chip" data-s="86400">1d</button>
+      </div>
+    </div>
+    <div class="preview-label">LIVE PREVIEW · AUTO-CALCULATED</div>
     <div class="grid" style="grid-template-columns:1fr; max-width:220px; margin:0 auto;"><div id="previewSlot"></div></div>
     <div class="modalbtns">
       <button class="btn-cancel" data-close>Cancel</button>
@@ -614,19 +630,31 @@ document.getElementById('btnLogout').addEventListener('click', async ()=>{ await
 /* ---------- new trade modal ---------- */
 const newOverlay = document.getElementById('newOverlay');
 function openNewModal(){
-  ['fTicker','fPnl','fRoi','fEntry','fExit','fHold'].forEach(id=>document.getElementById(id).value='');
+  ['fTicker','fEntry','fExit','fInvested'].forEach(id=>document.getElementById(id).value='');
+  holdSeconds = 3600;
+  document.querySelectorAll('#holdChips .chip').forEach(x=>x.classList.toggle('active', x.dataset.s==='3600'));
   updatePreview(); newOverlay.classList.add('show');
 }
 document.getElementById('btnNew').addEventListener('click', openNewModal);
 newOverlay.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>newOverlay.classList.remove('show')));
+let holdSeconds = 3600;
+document.getElementById('holdChips').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#holdChips .chip').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); holdSeconds = +b.dataset.s; updatePreview();
+});
 function readForm(){
+  const entry = parseFloat(document.getElementById('fEntry').value)||0;
+  const exit = parseFloat(document.getElementById('fExit').value)||0;
+  const invested = parseFloat(document.getElementById('fInvested').value)||0;
+  const roi = entry>0 ? ((exit-entry)/entry)*100 : 0;
+  const pnl = invested>0 ? invested*(roi/100) : (exit-entry)/1000; // fallback rough $ if no invested amount given
   return {
     ticker: document.getElementById('fTicker').value.trim() || '$TICKER',
-    pnl: parseFloat(document.getElementById('fPnl').value)||0,
-    roi: parseFloat(document.getElementById('fRoi').value)||0,
-    entryMc: parseFloat(document.getElementById('fEntry').value)||0,
-    exitMc: parseFloat(document.getElementById('fExit').value)||0,
-    holdTime: parseFloat(document.getElementById('fHold').value)||0,
+    pnl: Math.round(pnl*100)/100,
+    roi: Math.round(roi*10)/10,
+    entryMc: entry, exitMc: exit,
+    holdTime: holdSeconds,
   };
 }
 function updatePreview(){
@@ -635,7 +663,7 @@ function updatePreview(){
   const meta = generateTradeCard(fake, trades);
   document.getElementById('previewSlot').outerHTML = `<div class="card" id="previewSlot" data-r="${meta.rarity}" style="${cardStyle(meta)}">${renderCardHTML(fake, meta)}</div>`;
 }
-['fTicker','fPnl','fRoi','fEntry','fExit','fHold'].forEach(id=>document.getElementById(id).addEventListener('input', updatePreview));
+['fTicker','fEntry','fExit','fInvested'].forEach(id=>document.getElementById(id).addEventListener('input', updatePreview));
 document.getElementById('btnCreate').addEventListener('click', async ()=>{
   const f = readForm();
   await store.saveTrade({...f, source:'manual'});
@@ -665,8 +693,57 @@ function openDetail(id){
     ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="font-size:16px">${a.icon}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
     <button class="share-btn" id="btnShare">SHARE CARD</button>
   `;
-  document.getElementById('btnShare').addEventListener('click', ()=>showToast("Copied · ready to share"));
+  document.getElementById('btnShare').addEventListener('click', ()=>shareCard(t, meta));
   detailOverlay.classList.add('show');
+}
+
+/* ---------- share ---------- */
+function drawCardCanvas(t, meta){
+  const c = document.createElement('canvas'); c.width=600; c.height=840;
+  const ctx = c.getContext('2d');
+  const win = t.pnl>=0;
+  const rarityHex = {common:'#8A8A93',uncommon:'#39FF9A',rare:'#5AB4FF',epic:'#B084FF',legendary:'#F5C542',mythic:'#ff5adc'}[meta.rarity];
+  ctx.fillStyle = '#07070A'; ctx.fillRect(0,0,600,840);
+  const grad = ctx.createRadialGradient(180,80,20,180,80,500);
+  grad.addColorStop(0, meta.color.glow); grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(0,0,600,840);
+  ctx.strokeStyle = meta.color.border; ctx.lineWidth=4; ctx.strokeRect(10,10,580,820);
+  ctx.fillStyle = rarityHex; ctx.font='700 20px sans-serif'; ctx.textAlign='right';
+  ctx.fillText(meta.rarity.toUpperCase(), 560, 60);
+  ctx.textAlign='left'; ctx.fillStyle='#8A8A93'; ctx.font='600 20px monospace';
+  ctx.fillText('#'+String(t.tradeId).padStart(4,'0'), 40, 60);
+  ctx.textAlign='center'; ctx.fillStyle='#8A8A93'; ctx.font='700 32px sans-serif';
+  ctx.fillText(t.ticker, 300, 160);
+  ctx.fillStyle = win?'#39FF9A':'#FF4B5C'; ctx.font='900 84px monospace';
+  ctx.fillText(fmt.usd(t.pnl), 300, 280);
+  ctx.font='700 40px monospace';
+  ctx.fillText(fmt.pct(t.roi), 300, 335);
+  ctx.fillStyle='#8A8A93'; ctx.font='600 24px monospace';
+  ctx.fillText(fmt.hold(t.holdTime)+'  ·  Grade '+meta.grade, 300, 400);
+  if(meta.achievements.length){
+    ctx.font='600 22px sans-serif'; ctx.fillStyle='#F2F1EC';
+    ctx.fillText(meta.achievements.map(a=>a.icon+' '+a.name).join('   '), 300, 460);
+  }
+  ctx.fillStyle='#B084FF'; ctx.font='900 34px sans-serif';
+  ctx.fillText('✦ DEGENCARDS', 300, 780);
+  return c;
+}
+async function shareCard(t, meta){
+  const caption = `Look at my trade! ${t.ticker} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) 🃏 Collect yours on DEGENCARDS`;
+  const canvas = drawCardCanvas(t, meta);
+  canvas.toBlob(async (blob)=>{
+    const file = new File([blob], `degencards-${t.ticker.replace('$','')}.png`, {type:'image/png'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], text:caption}); return; }catch(e){}
+    }
+    try{ await navigator.clipboard.writeText(caption); }catch(e){}
+    const downloads = window.claude ? await window.claude.use('downloads').catch(()=>null) : null;
+    if(downloads){
+      try{ await downloads.save({filename:file.name, data:blob}); showToast('Caption copied · image saved'); return; }
+      catch(e){ showToast('Caption copied to clipboard'); return; }
+    }
+    showToast('Caption copied to clipboard');
+  }, 'image/png');
 }
 detailOverlay.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>detailOverlay.classList.remove('show')));
 [newOverlay,detailOverlay].forEach(ov=>ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('show'); }));
