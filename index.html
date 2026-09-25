@@ -341,7 +341,19 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
 /* ---------- supabase ---------- */
 const SUPABASE_URL = "https://wlxyepkewatmwlziybfb.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndseHllcGtld2F0bXdseml5YmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNDA0NjMsImV4cCI6MjEwNTgxNjQ2M30.4PK7xHPyLhcCBbBv5GcoMJN-X1AltAI4o50ZvqSH1II";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+});
+/* strip any auth code/token leftovers from the visible URL once handled */
+function scrubUrl(){
+  if(location.search || location.hash){
+    history.replaceState(null, '', location.pathname);
+  }
+}
+/* escape all user-supplied free text before it ever hits innerHTML */
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 let session = null;
 let trades = [];
@@ -475,7 +487,7 @@ function renderCardHTML(t, meta){
     <div class="top"><span>#${String(t.tradeId).padStart(4,'0')}</span><div class="grade">${meta.grade}</div></div>
     <div class="rarity-tag">${meta.rarity}</div>
     ${t.source && t.source!=='manual' ? `<div class="src">${t.source}</div>` : ''}
-    <div class="ticker">${t.ticker}</div>
+    <div class="ticker">${esc(t.ticker)}</div>
     <div class="pnl ${win?'pos':'neg'}">${fmt.usd(t.pnl)}</div>
     <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
     <div class="mini">${miniChart(t.pnl)}</div>
@@ -568,7 +580,7 @@ function renderAccount(){
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
     return `<div class="provider-row">
-      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? acc.handle : p.sub}</div></div>
+      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? esc(acc.handle) : p.sub}</div></div>
       <button class="btn-connect ${acc?'connected':''}" data-p="${p.key}">${acc?'CONNECTED':'CONNECT'}</button>
     </div>`;
   }).join('');
@@ -680,7 +692,7 @@ function openDetail(id){
   const win = t.pnl>=0;
   document.getElementById('detailBody').innerHTML = `
     <div style="font-family:var(--mono);font-size:11px;color:var(--tx2)">TRADE #${String(t.tradeId).padStart(4,'0')} · ${meta.rarity.toUpperCase()}</div>
-    <div style="font-weight:800;font-size:22px;margin-top:6px">${t.ticker}</div>
+    <div style="font-weight:800;font-size:22px;margin-top:6px">${esc(t.ticker)}</div>
     <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
     <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
     ${miniChart(t.pnl)}
@@ -809,6 +821,7 @@ async function reload(){
 }
 
 async function showApp(){
+  scrubUrl();
   document.getElementById('landing').hidden = true;
   document.getElementById('app').hidden = false;
   await reload();
