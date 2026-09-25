@@ -672,6 +672,13 @@ async function rpc(method, params){
   if(j.error) throw new Error(j.error.message);
   return j.result;
 }
+async function rpcBatch(reqs){
+  const body = reqs.map((r,i)=>({ jsonrpc:'2.0', id:i, method:r.method, params:r.params }));
+  const res = await fetch(SOLANA_RPC, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const arr = await res.json();
+  arr.sort((a,b)=>a.id-b.id);
+  return arr.map(x=> x.error ? null : x.result);
+}
 async function getSolPriceUsd(){
   if(solPriceCache) return solPriceCache;
   try{
@@ -681,54 +688,78 @@ async function getSolPriceUsd(){
   }catch(e){ solPriceCache = 150; } // fallback if price API is unreachable
   return solPriceCache;
 }
-async function detectClosedTradesFromWallet(walletAddr, note){
-  note.textContent = "Scanning wallet token accounts...";
-  const accounts = await rpc('getTokenAccountsByOwner', [walletAddr, {programId: TOKEN_PROGRAM_ID}, {encoding:'jsonParsed'}]);
-  const closed = (accounts?.value||[]).filter(a=>{
-    const amt = a.account?.data?.parsed?.info?.tokenAmount;
-    return amt && amt.uiAmount === 0 && amt.decimals > 0;
-  }).slice(0,3); // cap to stay within public RPC rate limits
-  if(closed.length===0) return [];
-  const solPrice = await getSolPriceUsd();
-  const trades = [];
-  for(const acc of closed){
-    const tokenAccAddr = acc.pubkey;
-    const mint = acc.account.data.parsed.info.mint;
-    note.textContent = `Reading history for ${mint.slice(0,4)}...${mint.slice(-4)}`;
-    let sigs;
-    try{ sigs = await rpc('getSignaturesForAddress', [tokenAccAddr, {limit:25}]); }catch(e){ continue; }
-    if(!sigs || sigs.length===0) continue;
-    let invested=0, returned=0, firstTs=null, lastTs=null;
-    for(const s of sigs.slice(0,15)){
-      let tx;
-      try{ tx = await rpc('getParsedTransaction', [s.signature, {maxSupportedTransactionVersion:0, encoding:'jsonParsed'}]); }catch(e){ continue; }
-      if(!tx || !tx.meta) continue;
+/* Pulls the wallet's last 30 days of activity in one shot, groups every
+   SOL <-> SPL-token balance change by mint, then only turns a mint into a
+   card if the wallet is now sitting at zero of it (= closed). Still-open
+   positions are left out rather than given a fake exit price. */
+async function detectClosedTradesFromWallet(walletAddr, toast, existingTickers){
+  toast("Fetching last 30 days of activity...");
+  const cutoff = Date.now() - 30*24*3600*1000;
+  let sigs = await rpc('getSignaturesForAddress', [walletAddr, {limit:1000}]);
+  sigs = (sigs||[]).filter(s => !s.blockTime || s.blockTime*1000 >= cutoff);
+  const CAP = 80; // stay well under public-RPC rate limits
+  const truncated = sigs.length > CAP;
+  sigs = sigs.slice(0, CAP);
+  if(sigs.length===0) return { trades:[], truncated:false };
+
+  toast(`Parsing ${sigs.length} transactions from the last 30 days...`);
+  const mintData = {}; // mint -> {invested, returned, firstTs, lastTs}
+  const BATCH = 15;
+  for(let i=0;i<sigs.length;i+=BATCH){
+    const chunk = sigs.slice(i,i+BATCH);
+    const results = await rpcBatch(chunk.map(s=>({ method:'getParsedTransaction', params:[s.signature, {maxSupportedTransactionVersion:0, encoding:'jsonParsed'}] })));
+    results.forEach((tx,j)=>{
+      if(!tx || !tx.meta) return;
       const keys = tx.transaction.message.accountKeys.map(k=> typeof k==='string' ? k : k.pubkey);
       const idx = keys.indexOf(walletAddr);
-      if(idx===-1) continue;
+      if(idx===-1) return;
       const solDelta = (tx.meta.postBalances[idx]-tx.meta.preBalances[idx]) / 1e9;
-      const pre = (tx.meta.preTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
-      const post = (tx.meta.postTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
-      const tokenDelta = (post?.uiTokenAmount?.uiAmount||0) - (pre?.uiTokenAmount?.uiAmount||0);
-      if(tokenDelta > 0) invested += Math.max(0,-solDelta);
-      else if(tokenDelta < 0) returned += Math.max(0, solDelta);
-      const ts = s.blockTime ? s.blockTime*1000 : null;
-      if(ts){ firstTs = firstTs===null ? ts : Math.min(firstTs, ts); lastTs = lastTs===null ? ts : Math.max(lastTs, ts); }
-    }
-    if(invested <= 0) continue; // no real buy detected in the scanned window — skip, don't fabricate
-    const pnlSol = returned - invested;
-    const roi = (pnlSol/invested)*100;
+      const ts = chunk[j].blockTime ? chunk[j].blockTime*1000 : Date.now();
+      const mints = new Set([...(tx.meta.preTokenBalances||[]), ...(tx.meta.postTokenBalances||[])].filter(b=>b.owner===walletAddr).map(b=>b.mint));
+      mints.forEach(mint=>{
+        const pre = (tx.meta.preTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
+        const post = (tx.meta.postTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
+        const tokenDelta = (post?.uiTokenAmount?.uiAmount||0) - (pre?.uiTokenAmount?.uiAmount||0);
+        if(tokenDelta===0) return;
+        if(!mintData[mint]) mintData[mint] = { invested:0, returned:0, firstTs:ts, lastTs:ts };
+        const d = mintData[mint];
+        d.firstTs = Math.min(d.firstTs, ts); d.lastTs = Math.max(d.lastTs, ts);
+        if(tokenDelta>0) d.invested += Math.max(0,-solDelta);
+        else d.returned += Math.max(0, solDelta);
+      });
+    });
+  }
+  const mints = Object.keys(mintData);
+  if(mints.length===0) return { trades:[], truncated };
+
+  toast("Checking current balances...");
+  const accounts = await rpc('getTokenAccountsByOwner', [walletAddr, {programId: TOKEN_PROGRAM_ID}, {encoding:'jsonParsed'}]);
+  const currentBalance = {};
+  (accounts?.value||[]).forEach(a=>{
+    const info = a.account.data.parsed.info;
+    currentBalance[info.mint] = (currentBalance[info.mint]||0) + (info.tokenAmount.uiAmount||0);
+  });
+  const solPrice = await getSolPriceUsd();
+  const trades = [];
+  for(const mint of mints){
+    const d = mintData[mint];
+    if(d.invested <= 0) continue;
+    const bal = currentBalance[mint] ?? 0; // no account left = also closed
+    if(bal > 0) continue; // still open — no fabricated exit price
+    const label = mint.slice(0,4).toUpperCase()+'…'+mint.slice(-4);
+    if(existingTickers.has(label)) continue; // don't re-import the same closed position twice
+    const pnlSol = d.returned - d.invested;
     trades.push({
-      ticker: mint.slice(0,4).toUpperCase()+'…'+mint.slice(-4),
+      ticker: label,
       pnl: Math.round(pnlSol*solPrice*100)/100,
-      roi: Math.round(roi*10)/10,
-      entryMc: Math.round(invested*solPrice),
-      exitMc: Math.round(returned*solPrice),
-      holdTime: Math.max(1, Math.round(((lastTs||Date.now())-(firstTs||Date.now()))/1000)),
+      roi: Math.round((pnlSol/d.invested)*1000)/10,
+      entryMc: Math.round(d.invested*solPrice),
+      exitMc: Math.round(d.returned*solPrice),
+      holdTime: Math.max(1, Math.round((d.lastTs-d.firstTs)/1000)),
       source: 'wallet'
     });
   }
-  return trades;
+  return { trades, truncated };
 }
 
 async function connectProvider(key){
@@ -736,13 +767,13 @@ async function connectProvider(key){
   const handle = prompt(`${p.name} — enter your ${key==='wallet'?'Solana wallet address':'handle'}:`);
   if(!handle) return;
   await store.connectAccount(key, handle);
-  const note = { set textContent(v){ showToast(v); } }; // route scan progress through the toast
   if(key === 'wallet'){
     try{
-      const found = await detectClosedTradesFromWallet(handle.trim(), note);
+      const existingTickers = new Set(trades.filter(t=>t.source==='wallet').map(t=>t.ticker));
+      const { trades: found, truncated } = await detectClosedTradesFromWallet(handle.trim(), showToast, existingTickers);
       for(const t of found) await store.saveTrade(t);
       await reload();
-      showToast(found.length ? `${found.length} closed position(s) imported` : "No closed positions found in recent history");
+      showToast(found.length ? `${found.length} closed position(s) imported from the last 30 days${truncated?' (older activity not scanned)':''}` : "No new closed positions in the last 30 days");
     }catch(e){
       showToast("On-chain scan failed — RPC may be rate-limited, try again shortly");
     }
