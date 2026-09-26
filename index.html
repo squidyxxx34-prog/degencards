@@ -154,6 +154,23 @@ select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(-
 .detail-stats div{background:var(--surf2); border-radius:9px; padding:10px 12px;}
 .detail-stats .l{font-size:10px; color:var(--tx2); text-transform:uppercase; margin-bottom:3px;}
 .detail-stats .v{font-family:var(--mono); font-weight:700; font-size:14px;}
+.stats-3 .stat, .stats-3 > div{background:linear-gradient(160deg,var(--surf2),var(--surf) 70%); border:1px solid var(--border); border-radius:14px; transition:transform .15s ease, border-color .15s ease;}
+.stats-3 > div:hover{transform:translateY(-2px); border-color:rgba(176,132,255,.35);}
+
+.goal-card{background:linear-gradient(160deg,rgba(176,132,255,.08),var(--surf) 60%); border:1px solid rgba(176,132,255,.25); border-radius:18px; padding:20px; margin:16px 0 24px; position:relative; overflow:hidden;}
+.goal-card::before{content:""; position:absolute; top:-40%; right:-10%; width:220px; height:220px; background:radial-gradient(circle, rgba(245,197,66,.15), transparent 70%); pointer-events:none;}
+.goal-top{display:flex; align-items:center; justify-content:space-between; gap:16px;}
+.goal-label{font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--purple); text-transform:uppercase;}
+.goal-amounts{font-family:var(--mono); font-weight:900; font-size:26px; margin-top:4px;}
+.goal-sep{color:var(--tx2); font-weight:400; margin:0 4px;}
+#goalTarget{color:var(--tx2); font-size:18px; font-weight:700;}
+.goal-ring-wrap{position:relative; width:72px; height:72px; flex-shrink:0;}
+#goalRing{transition:stroke-dashoffset .6s ease;}
+.goal-pct{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; font-size:13px;}
+.goal-editrow{display:flex; gap:8px; margin-top:18px;}
+.goal-editrow input{flex:1; background:var(--surf2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; color:var(--tx); font-family:var(--mono); font-size:13px;}
+.goal-editrow input:focus{outline:none; border-color:var(--purple);}
+.goal-editrow button{background:linear-gradient(90deg,var(--purple),var(--gold)); color:#000; font-weight:800; font-size:12px; padding:0 16px; border-radius:9px; white-space:nowrap;}
 .achlist{display:flex; flex-direction:column; gap:6px; margin:10px 0;}
 .achitem{display:flex; gap:8px; align-items:center; background:var(--surf2); border-radius:9px; padding:9px 12px; font-size:12px;}
 .achitem b{font-size:12px;} .achitem span{color:var(--tx2); font-size:11px;}
@@ -310,6 +327,28 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
 
   <div id="statsView" style="display:none;">
     <div class="sectionhead"><h2>STATISTICS</h2></div>
+
+    <div class="goal-card">
+      <div class="goal-top">
+        <div>
+          <div class="goal-label">MONTHLY GOAL</div>
+          <div class="goal-amounts"><span id="goalCurrent">$0</span><span class="goal-sep">/</span><span id="goalTarget">—</span></div>
+        </div>
+        <div class="goal-ring-wrap">
+          <svg viewBox="0 0 80 80" width="72" height="72">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
+            <circle id="goalRing" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
+            <defs><linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B084FF"/><stop offset="1" stop-color="#F5C542"/></linearGradient></defs>
+          </svg>
+          <div class="goal-pct" id="goalPct">0%</div>
+        </div>
+      </div>
+      <div class="goal-editrow">
+        <input id="goalInput" type="number" placeholder="Set a $ profit target, e.g. 500">
+        <button id="btnSaveGoal">SAVE GOAL</button>
+      </div>
+    </div>
+
     <div class="detail-stats stats-3" id="statsGrid"></div>
   </div>
 
@@ -409,6 +448,7 @@ function esc(s){
 let session = null;
 let trades = [];
 let connectedAccounts = [];
+let goalTarget = 0;
 let view = "home";
 let activeFilter = "all";
 let sortMode = "newest";
@@ -449,6 +489,14 @@ const store = {
   },
   async connectAccount(provider, handle){
     const {error} = await sb.from('connected_accounts').insert({user_id:session.user.id, provider, handle});
+    if(error) console.error(error);
+  },
+  async getGoal(){
+    const {data} = await sb.from('goals').select('target_pnl').eq('user_id', session.user.id).maybeSingle();
+    return data ? +data.target_pnl : 0;
+  },
+  async setGoal(amount){
+    const {error} = await sb.from('goals').upsert({user_id:session.user.id, target_pnl:amount, updated_at:new Date().toISOString()});
     if(error) console.error(error);
   }
 };
@@ -615,14 +663,31 @@ function renderStatsView(){
   const legendary = computedTrades().filter(t=>['legendary','mythic'].includes(t.meta.rarity)).length;
   const achUnlocked = new Set(); computedTrades().forEach(t=>t.meta.achievements.forEach(a=>achUnlocked.add(a.key)));
   const rows=[
-    {l:"Cards collected", v:trades.length},{l:"Wins", v:wins.length},{l:"Losses", v:losses.length},
-    {l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
-    {l:"Total P&L", v: fmt.usd(totalPnl)},{l:"Best ROI", v: fmt.pct(best)},
-    {l:"Biggest loss", v: fmt.usd(worst)},{l:"Legendary+ cards", v: legendary},
-    {l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
+    {i:"🃏", l:"Cards collected", v:trades.length},{i:"✅", l:"Wins", v:wins.length},{i:"❌", l:"Losses", v:losses.length},
+    {i:"🎯", l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
+    {i:"💰", l:"Total P&L", v: fmt.usd(totalPnl)},{i:"🚀", l:"Best ROI", v: fmt.pct(best)},
+    {i:"💀", l:"Biggest loss", v: fmt.usd(worst)},{i:"👑", l:"Legendary+ cards", v: legendary},
+    {i:"🏆", l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
   ];
-  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
+  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div style="padding:14px 12px;"><div style="font-size:18px;margin-bottom:6px;">${r.i}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
+  renderGoal(totalPnl);
 }
+function renderGoal(totalPnl){
+  const circumference = 213.6;
+  const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
+  document.getElementById('goalCurrent').textContent = fmt.usd(totalPnl);
+  document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
+  document.getElementById('goalPct').textContent = Math.round(pct*100)+'%';
+  document.getElementById('goalRing').style.strokeDashoffset = circumference*(1-pct);
+  document.getElementById('goalInput').value = goalTarget>0 ? goalTarget : '';
+}
+document.getElementById('btnSaveGoal').addEventListener('click', async ()=>{
+  const v = parseFloat(document.getElementById('goalInput').value)||0;
+  goalTarget = v;
+  await store.setGoal(v);
+  renderGoal(trades.reduce((s,t)=>s+t.pnl,0));
+  showToast(v>0 ? 'Goal set to $'+v : 'Goal cleared');
+});
 function renderAccount(){
   const walletAcc = connectedAccounts.find(a=>a.provider==='wallet');
   const idLabel = session?.user?.email || (walletAcc ? walletAcc.handle.slice(0,4)+'...'+walletAcc.handle.slice(-4) : 'Anonymous wallet');
@@ -1028,6 +1093,7 @@ document.getElementById('btnPubkey').addEventListener('click', async ()=>{
 async function reload(){
   trades = await store.getTrades();
   connectedAccounts = await store.getAccounts();
+  goalTarget = await store.getGoal();
   renderAll();
 }
 
