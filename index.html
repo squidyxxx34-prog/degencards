@@ -45,16 +45,9 @@ nav button.active{color:var(--tx); background:var(--surf2);}
   .logo{font-size:15px;}
   .hamburger{display:flex;}
   nav{display:none;}
-  .btn-new{padding:9px 12px; font-size:12px;}
   .profile-chip{padding:4px 8px 4px 4px; font-size:11px;}
 }
-@media(max-width:400px){
-  .btn-new{font-size:0; padding:9px 10px;}
-  .btn-new::before{content:"+"; font-size:20px; line-height:1;}
-}
 .headerright{display:flex; align-items:center; gap:12px;}
-.btn-new{background:var(--tx); color:#000; font-weight:700; font-size:13px; padding:9px 16px; border-radius:8px; white-space:nowrap;}
-.btn-new:active{transform:scale(.96);}
 .profile-chip{display:flex; align-items:center; gap:8px; padding:5px 10px 5px 5px; background:var(--surf2); border:1px solid var(--border); border-radius:20px; font-size:12px; cursor:pointer;}
 .profile-chip .av{width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--purple),var(--gold)); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#000;}
 .profile-chip b{color:var(--gold); font-family:var(--mono);}
@@ -182,7 +175,9 @@ select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(-
 .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(100px); background:var(--surf2); border:1px solid var(--border); padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:100; transition:transform .25s ease; padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));}
 .toast.show{transform:translateX(-50%) translateY(0);}
 
-footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;}
+footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom,0px)); color:var(--tx2); font-size:11px;}
+.fab-new{position:fixed; left:50%; bottom:calc(22px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:15; background:var(--tx); color:#000; font-weight:800; font-size:13px; padding:14px 26px; border-radius:999px; white-space:nowrap; box-shadow:0 10px 30px -8px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06); display:flex; align-items:center; gap:6px;}
+.fab-new:active{transform:translateX(-50%) scale(.95);}
 </style>
 </head>
 <body>
@@ -251,10 +246,11 @@ footer{text-align:center; padding:50px 0 40px; color:var(--tx2); font-size:11px;
     </nav>
     <div class="headerright">
       <div class="profile-chip" id="profileChip"><div class="av" id="avInitial">·</div>Lvl <b id="chipLvl">1</b></div>
-      <button class="btn-new" id="btnNew">+ NEW TRADE</button>
     </div>
   </div>
 </header>
+
+<button class="fab-new" id="btnNew">+ NEW TRADE</button>
 
 <div class="wrap">
   <div id="homeView">
