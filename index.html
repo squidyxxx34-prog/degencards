@@ -282,6 +282,22 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
         <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
         <div class="xp" id="xpLabel">0 / 100 XP</div>
       </div>
+      <div class="goal-card" style="margin-top:16px;">
+        <div class="goal-top">
+          <div>
+            <div class="goal-label">MONTHLY GOAL</div>
+            <div class="goal-amounts"><span id="goalCurrentHome">$0</span><span class="goal-sep">/</span><span id="goalTargetHome">—</span></div>
+          </div>
+          <div class="goal-ring-wrap">
+            <svg viewBox="0 0 80 80" width="72" height="72">
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
+              <circle id="goalRingHome" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
+            </svg>
+            <div class="goal-pct" id="goalPctHome">0%</div>
+          </div>
+        </div>
+        <div class="authnote" style="text-align:left; margin-top:12px;">Set or change your goal from the Stats page.</div>
+      </div>
     </section>
     <div class="sectionhead"><h2>RECENT CARDS</h2><button class="chip active" id="homeSeeAll">SEE FULL COLLECTION →</button></div>
     <div class="grid" id="homeGrid"></div>
@@ -678,11 +694,16 @@ function renderStatsView(){
 function renderGoal(totalPnl){
   const circumference = 213.6;
   const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
+  const offset = circumference*(1-pct);
   document.getElementById('goalCurrent').textContent = fmt.usd(totalPnl);
   document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
   document.getElementById('goalPct').textContent = Math.round(pct*100)+'%';
-  document.getElementById('goalRing').style.strokeDashoffset = circumference*(1-pct);
+  document.getElementById('goalRing').style.strokeDashoffset = offset;
   document.getElementById('goalInput').value = goalTarget>0 ? goalTarget : '';
+  document.getElementById('goalCurrentHome').textContent = fmt.usd(totalPnl);
+  document.getElementById('goalTargetHome').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
+  document.getElementById('goalPctHome').textContent = Math.round(pct*100)+'%';
+  document.getElementById('goalRingHome').style.strokeDashoffset = offset;
 }
 document.getElementById('btnSaveGoal').addEventListener('click', async ()=>{
   const v = parseFloat(document.getElementById('goalInput').value)||0;
