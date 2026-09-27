@@ -203,7 +203,7 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
 
 <!-- LANDING (logged out) -->
 <div id="landing" hidden>
-  <header><div class="headerrow"><div class="logo">✦ DEGEN<span>CARDS</span></div></div></header>
+  <header><div class="headerrow"><div class="logo"><span style="color:var(--purple);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg></span> DEGEN<span>CARDS</span></div></div></header>
   <div class="landing">
     <div class="landing-inner">
       <div>
@@ -253,7 +253,7 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
 <div id="app" hidden>
 <header>
   <div class="headerrow">
-    <div class="logo">✦ DEGEN<span>CARDS</span></div>
+    <div class="logo"><span style="color:var(--purple);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg></span> DEGEN<span>CARDS</span></div>
     <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
     <nav id="nav">
       <button class="active" data-v="home">HOME</button>
@@ -473,33 +473,66 @@ let sortMode = "newest";
 
 const RARITY_ORDER=["common","uncommon","rare","epic","legendary","mythic"];
 const ACH_CATALOG = [
-  {key:"first_blood",icon:"🔥",name:"FIRST BLOOD",desc:"First profitable trade."},
-  {key:"moonshot",icon:"🚀",name:"MOONSHOT",desc:"Trade with +100% ROI."},
-  {key:"to_the_moon",icon:"🌕",name:"TO THE MOON",desc:"Trade with +500% ROI."},
-  {key:"speedrun",icon:"⚡",name:"SPEEDRUN",desc:"Profitable trade closed under 30 seconds."},
-  {key:"paper_hands",icon:"📄",name:"PAPER HANDS",desc:"Exited a position in under 10 seconds."},
-  {key:"diamond_hands",icon:"💎",name:"DIAMOND HANDS",desc:"Held 24h+ and still closed in profit."},
-  {key:"new_record",icon:"🏆",name:"NEW RECORD",desc:"Best trade ever."},
-  {key:"run_it_back",icon:"📈",name:"RUN IT BACK",desc:"3 winning trades in a row."},
-  {key:"on_fire",icon:"🔥",name:"ON FIRE",desc:"5 consecutive profitable trades."},
-  {key:"unstoppable",icon:"☄️",name:"UNSTOPPABLE",desc:"10 consecutive profitable trades."},
-  {key:"king_of_day",icon:"👑",name:"KING OF THE DAY",desc:"Best trade of the day."},
-  {key:"worst_of_day",icon:"🗑️",name:"ROUGH DAY",desc:"Worst trade of the day."},
-  {key:"comeback_kid",icon:"🐦‍🔥",name:"COMEBACK KID",desc:"Won right after 2+ losses in a row."},
-  {key:"iron_stomach",icon:"🛡️",name:"IRON STOMACH",desc:"3 losses in a row and still here."},
-  {key:"rugged",icon:"🚨",name:"RUGGED",desc:"Lost 50%+ on a position."},
-  {key:"rekt",icon:"💀",name:"REKT",desc:"Lost 80%+ on a position."},
-  {key:"whale",icon:"🐋",name:"WHALE",desc:"Trade with $500+ profit."},
-  {key:"micro_win",icon:"🌱",name:"FIRST STEPS",desc:"A small but real profit, under $1."},
-  {key:"night_owl",icon:"🦉",name:"NIGHT OWL",desc:"Traded between midnight and 5am."},
-  {key:"weekend_warrior",icon:"🎮",name:"WEEKEND WARRIOR",desc:"Traded on a weekend."},
-  {key:"first_trade",icon:"🎬",name:"DAY ONE",desc:"Your very first logged trade."},
-  {key:"ten_trades",icon:"🔟",name:"GETTING SERIOUS",desc:"10 trades logged."},
-  {key:"fifty_trades",icon:"🎖️",name:"VETERAN",desc:"50 trades logged."},
-  {key:"century_club",icon:"💯",name:"CENTURY CLUB",desc:"100 trades logged."},
-  {key:"on_chain",icon:"🔗",name:"PROOF OF DEGEN",desc:"First trade imported straight from your wallet."},
+  {key:"first_blood",icon:"flame",name:"FIRST BLOOD",desc:"First profitable trade."},
+  {key:"moonshot",icon:"rocket",name:"MOONSHOT",desc:"Trade with +100% ROI."},
+  {key:"to_the_moon",icon:"rocket",name:"TO THE MOON",desc:"Trade with +500% ROI."},
+  {key:"speedrun",icon:"bolt",name:"SPEEDRUN",desc:"Profitable trade closed under 30 seconds."},
+  {key:"paper_hands",icon:"doc",name:"PAPER HANDS",desc:"Exited a position in under 10 seconds."},
+  {key:"diamond_hands",icon:"gem",name:"DIAMOND HANDS",desc:"Held 24h+ and still closed in profit."},
+  {key:"new_record",icon:"trophy",name:"NEW RECORD",desc:"Best trade ever."},
+  {key:"run_it_back",icon:"chartUp",name:"RUN IT BACK",desc:"3 winning trades in a row."},
+  {key:"on_fire",icon:"flame",name:"ON FIRE",desc:"5 consecutive profitable trades."},
+  {key:"unstoppable",icon:"bolt",name:"UNSTOPPABLE",desc:"10 consecutive profitable trades."},
+  {key:"king_of_day",icon:"crown",name:"KING OF THE DAY",desc:"Best trade of the day."},
+  {key:"worst_of_day",icon:"trash",name:"ROUGH DAY",desc:"Worst trade of the day."},
+  {key:"comeback_kid",icon:"arrowUpCircle",name:"COMEBACK KID",desc:"Won right after 2+ losses in a row."},
+  {key:"iron_stomach",icon:"shield",name:"IRON STOMACH",desc:"3 losses in a row and still here."},
+  {key:"rugged",icon:"alertTriangle",name:"RUGGED",desc:"Lost 50%+ on a position."},
+  {key:"rekt",icon:"skull",name:"REKT",desc:"Lost 80%+ on a position."},
+  {key:"whale",icon:"chartUp",name:"WHALE",desc:"Trade with $500+ profit."},
+  {key:"micro_win",icon:"sprout",name:"FIRST STEPS",desc:"A small but real profit, under $1."},
+  {key:"night_owl",icon:"moon",name:"NIGHT OWL",desc:"Traded between midnight and 5am."},
+  {key:"weekend_warrior",icon:"calendar",name:"WEEKEND WARRIOR",desc:"Traded on a weekend."},
+  {key:"first_trade",icon:"flag",name:"DAY ONE",desc:"Your very first logged trade."},
+  {key:"ten_trades",icon:"hash",name:"GETTING SERIOUS",desc:"10 trades logged."},
+  {key:"fifty_trades",icon:"hash",name:"VETERAN",desc:"50 trades logged."},
+  {key:"century_club",icon:"hash",name:"CENTURY CLUB",desc:"100 trades logged."},
+  {key:"on_chain",icon:"link",name:"PROOF OF DEGEN",desc:"First trade imported straight from your wallet."},
 ];
 const ACH_MAP = Object.fromEntries(ACH_CATALOG.map(a=>[a.key,a]));
+
+/* ---------- icon set (custom minimal line icons — no emoji anywhere) ---------- */
+const ICON_PATHS = {
+  sparkle:"M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z",
+  flame:"M12 3c1 3-3 4-3 8a3 3 0 006 0c0-1.5-1-2-1-3.5 2 1 3 3 3 5.5a5 5 0 01-10 0c0-4 3-5 5-10z",
+  rocket:"M12 2c3 1 5 4 5 8 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-7 5-8z M9 15l-2 5 M15 15l2 5 M10 9a2 2 0 104 0 2 2 0 00-4 0z",
+  bolt:"M13 2L4 14h6l-1 8 9-12h-6l1-8z",
+  doc:"M6 2h8l4 4v16H6V2z M14 2v4h4",
+  gem:"M6 3h12l3 5-9 13L3 8l3-5z M3 8h18 M9 3l3 5 3-5 M9 8l3 13 3-13",
+  trophy:"M7 4h10v3a5 5 0 01-10 0V4z M7 5H4a3 3 0 003 3 M17 5h3a3 3 0 01-3 3 M10 14v3h4v-3 M8 21h8 M9 17h6v4H9z",
+  chartUp:"M3 17l5-5 4 4 8-9 M15 7h5v5",
+  crown:"M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8z",
+  trash:"M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6",
+  arrowUpCircle:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 16V8 M8 12l4-4 4 4",
+  shield:"M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z",
+  alertTriangle:"M12 3l10 18H2L12 3z M12 10v5 M12 18h.01",
+  skull:"M12 3a7 7 0 00-7 7v3l2 2v3h4v-2h2v2h4v-3l2-2v-3a7 7 0 00-7-7z M9 11a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0z M12 11a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0z",
+  sprout:"M12 22v-9 M12 13c-5 0-8-3-8-8 5 0 8 3 8 8z M12 13c5 0 8-4 8-9-5 0-8 3-8 9z",
+  moon:"M20 14.5A8.5 8.5 0 1110.5 4a7 7 0 009.5 10.5z",
+  calendar:"M4 5h16v16H4V5z M4 9h16 M8 3v4 M16 3v4",
+  flag:"M5 3v18 M5 4h13l-3 4 3 4H5",
+  hash:"M6 4l-1 16 M15 4l-1 16 M3 9h17 M2 15h17",
+  link:"M9 12a4 4 0 004 4h3a4 4 0 000-8h-1 M15 12a4 4 0 00-4-4H8a4 4 0 000 8h1",
+  layers:"M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5 M3 9l9 5 9-5",
+  check:"M4 12l5 5 11-11",
+  x:"M5 5l14 14 M19 5L5 19",
+  target:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 16a4 4 0 100-8 4 4 0 000 8z M12 13a1 1 0 100-2 1 1 0 000 2z",
+  coin:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v10 M9 9.5c0-1 1-2 3-2s3 .8 3 1.8-1 1.5-3 1.7-3 .8-3 1.8 1 1.8 3 1.8 3-.8 3-1.8"
+};
+function icon(name, size){
+  const d = ICON_PATHS[name] || ICON_PATHS.sparkle;
+  return `<svg width="${size||15}" height="${size||15}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;flex-shrink:0;"><path d="${d}"/></svg>`;
+}
 const PROVIDERS = [
   {key:"pumpfun", name:"Pump.fun", sub:"Wallet activity on Pump.fun"},
   {key:"fomo", name:"Fomo", sub:"Fomo.so trade feed"},
@@ -587,11 +620,11 @@ function computeAchievements(t, ctx){
   return list;
 }
 function vibeFor(t){
-  if(t.holdTime<=30 && t.pnl>0) return "⚡ SNIPER";
-  if(t.roi>=100) return "🚀 MOONSHOT";
-  if(t.roi<0 && t.holdTime>3600) return "💎 DIAMOND HANDS";
-  if(t.pnl<0) return "💀 RUG SURVIVOR";
-  return "🔥 DEGEN";
+  if(t.holdTime<=30 && t.pnl>0) return {icon:"bolt", label:"SNIPER"};
+  if(t.roi>=100) return {icon:"rocket", label:"MOONSHOT"};
+  if(t.roi<0 && t.holdTime>3600) return {icon:"gem", label:"DIAMOND HANDS"};
+  if(t.pnl<0) return {icon:"skull", label:"RUG SURVIVOR"};
+  return {icon:"flame", label:"DEGEN"};
 }
 /* card color driven by PnL magnitude, independent of rarity */
 function pnlColor(t){
@@ -645,7 +678,7 @@ function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(
 
 function renderCardHTML(t, meta){
   const win = t.pnl>=0;
-  const badges = meta.achievements.slice(0,3).map(a=>`<span>${a.icon} ${a.name}</span>`).join(' ');
+  const badges = meta.achievements.slice(0,3).map(a=>`<span>${icon(a.icon,11)} ${a.name}</span>`).join(' ');
   return `
     <div class="top">
       <div class="top-left"><span>#${String(t.tradeId).padStart(4,'0')}</span>${t.source && t.source!=='manual' ? `<span class="src">${t.source}</span>` : ''}</div>
@@ -656,7 +689,7 @@ function renderCardHTML(t, meta){
     <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
     <div class="mini">${miniChart(t.pnl)}</div>
     ${meta.achievements.length? `<div class="badge">${badges}</div>`:''}
-    <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${meta.vibe}</span></div>
+    <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${icon(meta.vibe.icon,11)} ${meta.vibe.label}</span></div>
   `;
 }
 function cardStyle(meta){ return `--glow:${meta.color.glow}; border-color:${meta.color.border};`; }
@@ -717,7 +750,7 @@ function renderAchievements(){
   document.getElementById('achTotal').textContent = ACH_CATALOG.length;
   document.getElementById('achAll').innerHTML = ACH_CATALOG.map(a=>{
     const has = unlocked.has(a.key);
-    return `<div class="achitem" style="opacity:${has?1:.4}"><span style="font-size:16px">${a.icon}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`;
+    return `<div class="achitem" style="opacity:${has?1:.4}"><span style="color:var(--purple)">${icon(a.icon,18)}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`;
   }).join('');
 }
 function renderStatsView(){
@@ -728,13 +761,13 @@ function renderStatsView(){
   const legendary = computedTrades().filter(t=>['legendary','mythic'].includes(t.meta.rarity)).length;
   const achUnlocked = new Set(); computedTrades().forEach(t=>t.meta.achievements.forEach(a=>achUnlocked.add(a.key)));
   const rows=[
-    {i:"🃏", l:"Cards collected", v:trades.length},{i:"✅", l:"Wins", v:wins.length},{i:"❌", l:"Losses", v:losses.length},
-    {i:"🎯", l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
-    {i:"💰", l:"Total P&L", v: fmt.usd(totalPnl)},{i:"🚀", l:"Best ROI", v: fmt.pct(best)},
-    {i:"💀", l:"Biggest loss", v: fmt.usd(worst)},{i:"👑", l:"Legendary+ cards", v: legendary},
-    {i:"🏆", l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
+    {i:"layers", l:"Cards collected", v:trades.length},{i:"check", l:"Wins", v:wins.length},{i:"x", l:"Losses", v:losses.length},
+    {i:"target", l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
+    {i:"coin", l:"Total P&L", v: fmt.usd(totalPnl)},{i:"rocket", l:"Best ROI", v: fmt.pct(best)},
+    {i:"skull", l:"Biggest loss", v: fmt.usd(worst)},{i:"crown", l:"Legendary+ cards", v: legendary},
+    {i:"trophy", l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
   ];
-  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div style="padding:14px 12px;"><div style="font-size:18px;margin-bottom:6px;">${r.i}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
+  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div style="padding:14px 12px;"><div style="margin-bottom:6px;color:var(--purple);">${icon(r.i,20)}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
   renderGoal(totalPnl);
 }
 function renderGoal(totalPnl){
@@ -808,7 +841,7 @@ function renderHistory(){
       <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.meta.rarity}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.source||'manual'}</td>
-      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red); font-size:14px;">✕</button></td>
+      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red);">${icon('x',13)}</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="10" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
   document.getElementById('historyBody').querySelectorAll('.hist-del').forEach(b=>{
@@ -1048,7 +1081,7 @@ function openDetail(id){
       <div><div class="l">Hold time</div><div class="v">${fmt.hold(t.holdTime)}</div></div>
       <div><div class="l">Date</div><div class="v" style="font-size:11px">${fmt.date(t.timestamp)}</div></div>
     </div>
-    ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="font-size:16px">${a.icon}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
+    ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="color:var(--purple)">${icon(a.icon,18)}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
     <button class="share-btn" id="btnShare">SHARE CARD</button>
   `;
   document.getElementById('btnShare').addEventListener('click', ()=>shareCard(t, meta));
@@ -1080,14 +1113,14 @@ function drawCardCanvas(t, meta){
   ctx.fillText(fmt.hold(t.holdTime)+'  ·  Grade '+meta.grade, 300, 400);
   if(meta.achievements.length){
     ctx.font='600 22px sans-serif'; ctx.fillStyle='#FFFFFF';
-    ctx.fillText(meta.achievements.slice(0,3).map(a=>a.icon+' '+a.name).join('   '), 300, 460);
+    ctx.fillText(meta.achievements.slice(0,3).map(a=>a.name).join('   ·   '), 300, 460);
   }
   ctx.fillStyle='#C09EFF'; ctx.font='900 34px sans-serif';
-  ctx.fillText('✦ DEGENCARDS', 300, 780);
+  ctx.fillText('DEGENCARDS', 300, 780);
   return c;
 }
 async function shareCard(t, meta){
-  const caption = `Look at my trade! ${t.ticker} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) 🃏 Collect yours on DEGENCARDS`;
+  const caption = `Look at my trade! ${t.ticker} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) — Collect yours on DEGENCARDS`;
   const canvas = drawCardCanvas(t, meta);
   canvas.toBlob(async (blob)=>{
     const file = new File([blob], `degencards-${t.ticker.replace('$','')}.png`, {type:'image/png'});
