@@ -529,9 +529,10 @@ const ICON_PATHS = {
   target:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 16a4 4 0 100-8 4 4 0 000 8z M12 13a1 1 0 100-2 1 1 0 000 2z",
   coin:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v10 M9 9.5c0-1 1-2 3-2s3 .8 3 1.8-1 1.5-3 1.7-3 .8-3 1.8 1 1.8 3 1.8 3-.8 3-1.8"
 };
-function icon(name, size){
+function icon(name, size, color){
   const d = ICON_PATHS[name] || ICON_PATHS.sparkle;
-  return `<svg width="${size||15}" height="${size||15}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;flex-shrink:0;"><path d="${d}"/></svg>`;
+  const c = color || 'currentColor';
+  return `<svg width="${size||18}" height="${size||18}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-4px;flex-shrink:0;"><path d="${d}"/></svg>`;
 }
 const PROVIDERS = [
   {key:"pumpfun", name:"Pump.fun", sub:"Wallet activity on Pump.fun"},
@@ -678,7 +679,7 @@ function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(
 
 function renderCardHTML(t, meta){
   const win = t.pnl>=0;
-  const badges = meta.achievements.slice(0,3).map(a=>`<span>${icon(a.icon,11)} ${a.name}</span>`).join(' ');
+  const badges = meta.achievements.slice(0,3).map(a=>`<span>${icon(a.icon,13,'var(--tx)')} ${a.name}</span>`).join(' ');
   return `
     <div class="top">
       <div class="top-left"><span>#${String(t.tradeId).padStart(4,'0')}</span>${t.source && t.source!=='manual' ? `<span class="src">${t.source}</span>` : ''}</div>
@@ -689,7 +690,7 @@ function renderCardHTML(t, meta){
     <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
     <div class="mini">${miniChart(t.pnl)}</div>
     ${meta.achievements.length? `<div class="badge">${badges}</div>`:''}
-    <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${icon(meta.vibe.icon,11)} ${meta.vibe.label}</span></div>
+    <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${icon(meta.vibe.icon,13,'var(--tx)')} ${meta.vibe.label}</span></div>
   `;
 }
 function cardStyle(meta){ return `--glow:${meta.color.glow}; border-color:${meta.color.border};`; }
@@ -783,6 +784,64 @@ function renderGoal(totalPnl){
   document.getElementById('goalTargetHome').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
   document.getElementById('goalPctHome').textContent = Math.round(pct*100)+'%';
   document.getElementById('goalRingHome').style.strokeDashoffset = offset;
+  if(goalTarget>0 && totalPnl>=goalTarget){
+    const key = 'dc_celebrated_'+goalTarget;
+    if(localStorage.getItem(key) !== '1'){
+      localStorage.setItem(key, '1');
+      celebrateGoal(goalTarget, totalPnl);
+    }
+  }
+}
+function goalAchievementTitle(target){
+  if(target<100) return "FIRST MILESTONE";
+  if(target<500) return "GOAL CRUSHER";
+  if(target<2000) return "TARGET SMASHED";
+  return "LEGENDARY TARGET";
+}
+function celebrateGoal(target, totalPnl){
+  spawnConfetti();
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay show';
+  overlay.innerHTML = `<div class="modal" style="text-align:center; max-width:340px;">
+    <div style="color:var(--gold); margin:6px auto 10px;">${icon('trophy',48,'var(--gold)')}</div>
+    <h3 style="font-size:20px;">GOAL REACHED!</h3>
+    <div class="achitem" style="justify-content:center; margin:14px 0;">
+      <span style="color:var(--purple)">${icon('flag',18)}</span>
+      <div><b>${goalAchievementTitle(target)}</b><br><span>$${target} target hit — you're at ${fmt.usd(totalPnl)}</span></div>
+    </div>
+    <button class="btn-create" style="width:100%; margin-top:6px;" id="btnCloseGoalCelebrate">NICE</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  overlay.querySelector('#btnCloseGoalCelebrate').addEventListener('click', close);
+}
+function spawnConfetti(){
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed; inset:0; z-index:200; pointer-events:none;';
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  document.body.appendChild(canvas);
+  const ctx2 = canvas.getContext('2d');
+  const colors = ['#C09EFF','#FFD35C','#3DFFA0','#6EC0FF','#FF5C6C'];
+  const pieces = Array.from({length:140}, ()=>({
+    x: Math.random()*canvas.width, y: -20-Math.random()*canvas.height*0.3,
+    vx: (Math.random()-0.5)*3, vy: 2+Math.random()*3,
+    size: 5+Math.random()*5, color: colors[Math.floor(Math.random()*colors.length)],
+    rot: Math.random()*360, vrot: (Math.random()-0.5)*10
+  }));
+  const start = performance.now();
+  function frame(now){
+    const t = now-start;
+    ctx2.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.x += p.vx; p.y += p.vy; p.vy += 0.03; p.rot += p.vrot;
+      ctx2.save(); ctx2.translate(p.x,p.y); ctx2.rotate(p.rot*Math.PI/180);
+      ctx2.fillStyle = p.color; ctx2.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+      ctx2.restore();
+    });
+    if(t < 3200) requestAnimationFrame(frame); else canvas.remove();
+  }
+  requestAnimationFrame(frame);
 }
 document.getElementById('btnSaveGoal').addEventListener('click', async ()=>{
   const v = parseFloat(document.getElementById('goalInput').value)||0;
@@ -841,7 +900,7 @@ function renderHistory(){
       <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.meta.rarity}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.source||'manual'}</td>
-      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red);">${icon('x',13)}</button></td>
+      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red);">${icon('x',16,'var(--red)')}</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="10" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
   document.getElementById('historyBody').querySelectorAll('.hist-del').forEach(b=>{
