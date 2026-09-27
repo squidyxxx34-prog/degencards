@@ -137,10 +137,12 @@ select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(-
 
 /* MODAL */
 .overlay{position:fixed; inset:0; background:rgba(4,4,6,.75); backdrop-filter:blur(6px); z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; opacity:0; pointer-events:none; transition:opacity .18s;}
-.goal-overlay{align-items:flex-end; z-index:210; padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));}
-.goal-modal{width:100%; max-width:380px; text-align:center; background:linear-gradient(165deg, rgba(245,211,92,.14), var(--surf) 55%); border:1px solid rgba(245,211,92,.4); border-radius:24px 24px 20px 20px; box-shadow:0 -20px 50px -15px rgba(245,211,92,.15), 0 -4px 30px -6px rgba(0,0,0,.7); transform:translateY(60px) scale(1); opacity:0; transition:transform .5s cubic-bezier(.22,1.1,.36,1), opacity .35s ease;}
+.goal-overlay{align-items:flex-end; z-index:210; padding:0;}
+.goal-modal{width:100%; max-width:480px; margin:0 auto; text-align:center; padding-bottom:calc(22px + env(safe-area-inset-bottom,0px)); background:linear-gradient(165deg, rgba(245,211,92,.14), var(--surf) 55%); border:1px solid rgba(245,211,92,.4); border-bottom:none; border-radius:24px 24px 0 0; box-shadow:0 -20px 50px -15px rgba(245,211,92,.15), 0 -4px 30px -6px rgba(0,0,0,.7); transform:translateY(100%); opacity:0; transition:transform .5s cubic-bezier(.22,1.1,.36,1), opacity .35s ease;}
 .goal-overlay.show .goal-modal{transform:translateY(0); opacity:1;}
 .goal-trophy-ring{width:88px; height:88px; border-radius:50%; margin:4px auto 14px; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle, rgba(245,211,92,.25), rgba(245,211,92,.02) 70%); animation:goalPulse 2.2s infinite ease-in-out;}
+.goal-unlock-label{font-size:11px; font-weight:800; letter-spacing:.08em; color:var(--gold); text-transform:uppercase; margin-bottom:10px;}
+.btn-neutral{background:transparent; border:1px solid var(--border); color:var(--tx2); font-weight:700; border-radius:999px;}
 @keyframes goalPulse{0%,100%{box-shadow:0 0 0px 0 rgba(245,211,92,.3);} 50%{box-shadow:0 0 26px 6px rgba(245,211,92,.3);}}
 .overlay.show{opacity:1; pointer-events:all;}
 .modal{position:relative; background:var(--surf); border:1px solid var(--border); border-radius:18px; width:100%; max-width:460px; max-height:90vh; overflow-y:auto; padding:22px; transform:scale(.96); transition:transform .18s;}
@@ -503,6 +505,10 @@ const ACH_CATALOG = [
   {key:"fifty_trades",icon:"hash",name:"VETERAN",desc:"50 trades logged."},
   {key:"century_club",icon:"hash",name:"CENTURY CLUB",desc:"100 trades logged."},
   {key:"on_chain",icon:"link",name:"PROOF OF DEGEN",desc:"First trade imported straight from your wallet."},
+  {key:"goal_first_milestone",icon:"trophy",name:"FIRST MILESTONE",desc:"Reached your first profit goal."},
+  {key:"goal_crusher",icon:"trophy",name:"GOAL CRUSHER",desc:"Reached a $100-$499 profit goal."},
+  {key:"goal_smasher",icon:"trophy",name:"TARGET SMASHED",desc:"Reached a $500-$1999 profit goal."},
+  {key:"goal_legend",icon:"trophy",name:"LEGENDARY TARGET",desc:"Reached a $2000+ profit goal."},
 ];
 const ACH_MAP = Object.fromEntries(ACH_CATALOG.map(a=>[a.key,a]));
 
@@ -752,6 +758,9 @@ function renderAchievements(){
   const all = computedTrades();
   const unlocked = new Set();
   all.forEach(t=>t.meta.achievements.forEach(a=>unlocked.add(a.key)));
+  ["goal_first_milestone","goal_crusher","goal_smasher","goal_legend"].forEach(k=>{
+    if(localStorage.getItem('dc_goal_ach_'+k)==='1') unlocked.add(k);
+  });
   document.getElementById('achCount').textContent = unlocked.size;
   document.getElementById('achTotal').textContent = ACH_CATALOG.length;
   document.getElementById('achAll').innerHTML = ACH_CATALOG.map(a=>{
@@ -790,31 +799,33 @@ function renderGoal(totalPnl){
   document.getElementById('goalPctHome').textContent = Math.round(pct*100)+'%';
   document.getElementById('goalRingHome').style.strokeDashoffset = offset;
   if(goalTarget>0 && totalPnl>=goalTarget){
-    const key = 'dc_celebrated_'+goalTarget;
+    const key = 'dc_goal_ach_'+goalAchievementKey(goalTarget);
     if(localStorage.getItem(key) !== '1'){
       localStorage.setItem(key, '1');
       celebrateGoal(goalTarget, totalPnl);
     }
   }
 }
-function goalAchievementTitle(target){
-  if(target<100) return "FIRST MILESTONE";
-  if(target<500) return "GOAL CRUSHER";
-  if(target<2000) return "TARGET SMASHED";
-  return "LEGENDARY TARGET";
+function goalAchievementKey(target){
+  if(target<100) return "goal_first_milestone";
+  if(target<500) return "goal_crusher";
+  if(target<2000) return "goal_smasher";
+  return "goal_legend";
 }
 function celebrateGoal(target, totalPnl){
   setTimeout(spawnConfetti, 200);
+  const ach = ACH_MAP[goalAchievementKey(target)];
   const overlay = document.createElement('div');
   overlay.className = 'overlay goal-overlay';
   overlay.innerHTML = `<div class="modal goal-modal">
     <div class="goal-trophy-ring">${icon('trophy',40,'var(--gold)')}</div>
     <h3 style="font-size:22px;">GOAL REACHED!</h3>
-    <div class="achitem" style="justify-content:center; margin:16px 0; background:rgba(255,255,255,.04);">
-      <span style="color:var(--purple)">${icon('flag',20)}</span>
-      <div><b>${goalAchievementTitle(target)}</b><br><span>$${target} target hit — you're at ${fmt.usd(totalPnl)}</span></div>
+    <div class="goal-unlock-label">Achievement unlocked</div>
+    <div class="achitem" style="justify-content:center; margin:0 0 18px; background:rgba(255,255,255,.04);">
+      <span style="color:var(--purple)">${icon('trophy',20)}</span>
+      <div><b>${ach.name}</b><br><span>$${target} target hit — you're at ${fmt.usd(totalPnl)}</span></div>
     </div>
-    <button class="btn-create" style="width:100%; margin-top:6px;" id="btnCloseGoalCelebrate">NICE</button>
+    <button class="btn-neutral" style="width:100%; padding:13px;" id="btnCloseGoalCelebrate">KEEP GOING</button>
   </div>`;
   document.body.appendChild(overlay);
   requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
