@@ -997,6 +997,10 @@ async function connectProvider(key){
 }
 
 /* ---------- nav ---------- */
+document.getElementById('nav').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  goToView(b.dataset.v);
+});
 document.getElementById('hamburger').addEventListener('click', ()=>{
   document.querySelectorAll('#navMenu button').forEach(x=>x.classList.toggle('active', x.dataset.v===view));
   document.getElementById('navOverlay').classList.add('show');
