@@ -10,10 +10,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root{
-  --bg:#07070A; --surf:#0D0D12; --surf2:#111116; --border:rgba(255,255,255,.08);
-  --tx:#F2F1EC; --tx2:#8A8A93;
-  --green:#39FF9A; --red:#FF4B5C;
-  --purple:#B084FF; --gold:#F5C542; --blue:#5AB4FF;
+  --bg:#07070A; --surf:#131318; --surf2:#1B1B22; --border:rgba(255,255,255,.14);
+  --tx:#FFFFFF; --tx2:#ADADB8;
+  --green:#3DFFA0; --red:#FF5C6C;
+  --purple:#C09EFF; --gold:#FFD35C; --blue:#6EC0FF;
   --font: 'Outfit', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
   padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px);
 }
@@ -113,7 +113,7 @@ select.sortsel{background:var(--surf2); color:var(--tx2); border:1px solid var(-
 @media(hover:hover){.card:hover{transform:translateY(-4px) rotate3d(1,-1,0,2deg); box-shadow:0 14px 30px -12px rgba(0,0,0,.6);}}
 .card .top{display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:10px; color:var(--tx2); gap:8px;}
 .card .grade{width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; background:var(--surf2); border:1px solid var(--border);}
-.card .ticker{text-align:center; font-weight:700; font-size:14px; margin-top:10px; color:var(--tx2);}
+.card .ticker{text-align:center; font-weight:800; font-size:14px; margin-top:10px; color:var(--tx); letter-spacing:.02em;}
 .card .pnl{text-align:center; font-size:22px; font-weight:900; margin-top:2px; font-family:var(--mono);}
 .card .roi{text-align:center; font-size:12px; font-weight:700; font-family:var(--mono); margin-top:1px;}
 .card .pnl.pos,.card .roi.pos{color:var(--green);} .card .pnl.neg,.card .roi.neg{color:var(--red);}
@@ -330,7 +330,7 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
     <div class="sectionhead"><h2>HISTORY · <span id="histCount">0</span> trades</h2></div>
     <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;">
       <table style="width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; min-width:640px;">
-        <thead><tr style="background:var(--surf2); text-align:left;">
+        <thead><tr style="background:var(--surf2); text-align:left; color:var(--tx); font-weight:700;">
           <th style="padding:10px 12px;">DATE</th><th style="padding:10px 12px;">TICKER</th><th style="padding:10px 12px;">ENTRY</th><th style="padding:10px 12px;">EXIT</th><th style="padding:10px 12px;">HOLD</th><th style="padding:10px 12px;">P&L</th><th style="padding:10px 12px;">ROI</th><th style="padding:10px 12px;">RARITY</th><th style="padding:10px 12px;">SRC</th><th style="padding:10px 12px;"></th>
         </tr></thead>
         <tbody id="historyBody"></tbody>
@@ -1014,7 +1014,7 @@ function drawCardCanvas(t, meta){
   const c = document.createElement('canvas'); c.width=600; c.height=840;
   const ctx = c.getContext('2d');
   const win = t.pnl>=0;
-  const rarityHex = {common:'#8A8A93',uncommon:'#39FF9A',rare:'#5AB4FF',epic:'#B084FF',legendary:'#F5C542',mythic:'#ff5adc'}[meta.rarity];
+  const rarityHex = {common:'#ADADB8',uncommon:'#3DFFA0',rare:'#6EC0FF',epic:'#C09EFF',legendary:'#FFD35C',mythic:'#ff5adc'}[meta.rarity];
   ctx.fillStyle = '#07070A'; ctx.fillRect(0,0,600,840);
   const grad = ctx.createRadialGradient(180,80,20,180,80,500);
   grad.addColorStop(0, meta.color.glow); grad.addColorStop(1,'rgba(0,0,0,0)');
@@ -1022,21 +1022,21 @@ function drawCardCanvas(t, meta){
   ctx.strokeStyle = meta.color.border; ctx.lineWidth=4; ctx.strokeRect(10,10,580,820);
   ctx.fillStyle = rarityHex; ctx.font='700 20px sans-serif'; ctx.textAlign='right';
   ctx.fillText(meta.rarity.toUpperCase(), 560, 60);
-  ctx.textAlign='left'; ctx.fillStyle='#8A8A93'; ctx.font='600 20px monospace';
+  ctx.textAlign='left'; ctx.fillStyle='#ADADB8'; ctx.font='600 20px monospace';
   ctx.fillText('#'+String(t.tradeId).padStart(4,'0'), 40, 60);
-  ctx.textAlign='center'; ctx.fillStyle='#8A8A93'; ctx.font='700 32px sans-serif';
+  ctx.textAlign='center'; ctx.fillStyle='#ADADB8'; ctx.font='700 32px sans-serif';
   ctx.fillText(t.ticker, 300, 160);
-  ctx.fillStyle = win?'#39FF9A':'#FF4B5C'; ctx.font='900 84px monospace';
+  ctx.fillStyle = win?'#3DFFA0':'#FF5C6C'; ctx.font='900 84px monospace';
   ctx.fillText(fmt.usd(t.pnl), 300, 280);
   ctx.font='700 40px monospace';
   ctx.fillText(fmt.pct(t.roi), 300, 335);
-  ctx.fillStyle='#8A8A93'; ctx.font='600 24px monospace';
+  ctx.fillStyle='#ADADB8'; ctx.font='600 24px monospace';
   ctx.fillText(fmt.hold(t.holdTime)+'  ·  Grade '+meta.grade, 300, 400);
   if(meta.achievements.length){
-    ctx.font='600 22px sans-serif'; ctx.fillStyle='#F2F1EC';
+    ctx.font='600 22px sans-serif'; ctx.fillStyle='#FFFFFF';
     ctx.fillText(meta.achievements.map(a=>a.icon+' '+a.name).join('   '), 300, 460);
   }
-  ctx.fillStyle='#B084FF'; ctx.font='900 34px sans-serif';
+  ctx.fillStyle='#C09EFF'; ctx.font='900 34px sans-serif';
   ctx.fillText('✦ DEGENCARDS', 300, 780);
   return c;
 }
