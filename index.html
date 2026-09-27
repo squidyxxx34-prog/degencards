@@ -475,12 +475,31 @@ const RARITY_ORDER=["common","uncommon","rare","epic","legendary","mythic"];
 const ACH_CATALOG = [
   {key:"first_blood",icon:"🔥",name:"FIRST BLOOD",desc:"First profitable trade."},
   {key:"moonshot",icon:"🚀",name:"MOONSHOT",desc:"Trade with +100% ROI."},
-  {key:"speedrun",icon:"⚡",name:"SPEEDRUN",desc:"Profitable trade under 30 seconds."},
+  {key:"to_the_moon",icon:"🌕",name:"TO THE MOON",desc:"Trade with +500% ROI."},
+  {key:"speedrun",icon:"⚡",name:"SPEEDRUN",desc:"Profitable trade closed under 30 seconds."},
+  {key:"paper_hands",icon:"📄",name:"PAPER HANDS",desc:"Exited a position in under 10 seconds."},
+  {key:"diamond_hands",icon:"💎",name:"DIAMOND HANDS",desc:"Held 24h+ and still closed in profit."},
   {key:"new_record",icon:"🏆",name:"NEW RECORD",desc:"Best trade ever."},
   {key:"run_it_back",icon:"📈",name:"RUN IT BACK",desc:"3 winning trades in a row."},
   {key:"on_fire",icon:"🔥",name:"ON FIRE",desc:"5 consecutive profitable trades."},
+  {key:"unstoppable",icon:"☄️",name:"UNSTOPPABLE",desc:"10 consecutive profitable trades."},
   {key:"king_of_day",icon:"👑",name:"KING OF THE DAY",desc:"Best trade of the day."},
+  {key:"worst_of_day",icon:"🗑️",name:"ROUGH DAY",desc:"Worst trade of the day."},
+  {key:"comeback_kid",icon:"🐦‍🔥",name:"COMEBACK KID",desc:"Won right after 2+ losses in a row."},
+  {key:"iron_stomach",icon:"🛡️",name:"IRON STOMACH",desc:"3 losses in a row and still here."},
+  {key:"rugged",icon:"🚨",name:"RUGGED",desc:"Lost 50%+ on a position."},
+  {key:"rekt",icon:"💀",name:"REKT",desc:"Lost 80%+ on a position."},
+  {key:"whale",icon:"🐋",name:"WHALE",desc:"Trade with $500+ profit."},
+  {key:"micro_win",icon:"🌱",name:"FIRST STEPS",desc:"A small but real profit, under $1."},
+  {key:"night_owl",icon:"🦉",name:"NIGHT OWL",desc:"Traded between midnight and 5am."},
+  {key:"weekend_warrior",icon:"🎮",name:"WEEKEND WARRIOR",desc:"Traded on a weekend."},
+  {key:"first_trade",icon:"🎬",name:"DAY ONE",desc:"Your very first logged trade."},
+  {key:"ten_trades",icon:"🔟",name:"GETTING SERIOUS",desc:"10 trades logged."},
+  {key:"fifty_trades",icon:"🎖️",name:"VETERAN",desc:"50 trades logged."},
+  {key:"century_club",icon:"💯",name:"CENTURY CLUB",desc:"100 trades logged."},
+  {key:"on_chain",icon:"🔗",name:"PROOF OF DEGEN",desc:"First trade imported straight from your wallet."},
 ];
+const ACH_MAP = Object.fromEntries(ACH_CATALOG.map(a=>[a.key,a]));
 const PROVIDERS = [
   {key:"pumpfun", name:"Pump.fun", sub:"Wallet activity on Pump.fun"},
   {key:"fomo", name:"Fomo", sub:"Fomo.so trade feed"},
@@ -540,14 +559,32 @@ function computeGrade(t, rarity){
 }
 function computeAchievements(t, ctx){
   const list=[];
-  if(ctx.isFirstWin) list.push(ACH_CATALOG[0]);
-  if(t.roi>=100) list.push(ACH_CATALOG[1]);
-  if(t.holdTime<=30 && t.pnl>0) list.push(ACH_CATALOG[2]);
-  if(ctx.isPersonalBest) list.push(ACH_CATALOG[3]);
-  if(ctx.streak===3) list.push(ACH_CATALOG[4]);
-  if(ctx.streak>=5) list.push(ACH_CATALOG[5]);
-  if(ctx.isBestOfDay) list.push(ACH_CATALOG[6]);
-  return list.slice(0,3);
+  if(ctx.isFirstWin) list.push(ACH_MAP.first_blood);
+  if(t.roi>=500) list.push(ACH_MAP.to_the_moon);
+  else if(t.roi>=100) list.push(ACH_MAP.moonshot);
+  if(t.holdTime<=10) list.push(ACH_MAP.paper_hands);
+  else if(t.holdTime<=30 && t.pnl>0) list.push(ACH_MAP.speedrun);
+  if(t.holdTime>=86400 && t.pnl>0) list.push(ACH_MAP.diamond_hands);
+  if(ctx.isPersonalBest) list.push(ACH_MAP.new_record);
+  if(ctx.streak>=10) list.push(ACH_MAP.unstoppable);
+  else if(ctx.streak>=5) list.push(ACH_MAP.on_fire);
+  else if(ctx.streak===3) list.push(ACH_MAP.run_it_back);
+  if(ctx.isBestOfDay) list.push(ACH_MAP.king_of_day);
+  if(ctx.isWorstOfDay && t.pnl<0) list.push(ACH_MAP.worst_of_day);
+  if(ctx.comeback) list.push(ACH_MAP.comeback_kid);
+  if(ctx.lossStreak>=3) list.push(ACH_MAP.iron_stomach);
+  if(t.roi<=-80) list.push(ACH_MAP.rekt);
+  else if(t.roi<=-50) list.push(ACH_MAP.rugged);
+  if(t.pnl>=500) list.push(ACH_MAP.whale);
+  else if(t.pnl>0 && t.pnl<1) list.push(ACH_MAP.micro_win);
+  if(ctx.hour>=0 && ctx.hour<5) list.push(ACH_MAP.night_owl);
+  if(ctx.day===0 || ctx.day===6) list.push(ACH_MAP.weekend_warrior);
+  if(ctx.tradeNumber===1) list.push(ACH_MAP.first_trade);
+  else if(ctx.tradeNumber===100) list.push(ACH_MAP.century_club);
+  else if(ctx.tradeNumber===50) list.push(ACH_MAP.fifty_trades);
+  else if(ctx.tradeNumber===10) list.push(ACH_MAP.ten_trades);
+  if(ctx.isFirstWalletImport) list.push(ACH_MAP.on_chain);
+  return list;
 }
 function vibeFor(t){
   if(t.holdTime<=30 && t.pnl>0) return "⚡ SNIPER";
@@ -579,11 +616,20 @@ function generateTradeCard(trade, allTrades){
   const bestPnlBefore = Math.max(0,...allTrades.filter(x=>x.timestamp<trade.timestamp).map(x=>x.pnl));
   const isPersonalBest = trade.pnl>bestPnlBefore;
   const sorted=[...allTrades].sort((a,b)=>a.timestamp-b.timestamp);
-  let streak=0;
-  for(const t of sorted){ if(t.timestamp>trade.timestamp) break; if(t.pnl>0) streak++; else streak=0; }
+  let priorWinStreak=0, priorLossStreak=0;
+  for(const t of sorted){ if(t.timestamp>=trade.timestamp) break; if(t.pnl>0){priorWinStreak++; priorLossStreak=0;} else {priorLossStreak++; priorWinStreak=0;} }
+  const streak = trade.pnl>0 ? priorWinStreak+1 : 0;
+  const lossStreak = trade.pnl<=0 ? priorLossStreak+1 : 0;
+  const comeback = trade.pnl>0 && priorLossStreak>=2;
+  const tradeNumber = sorted.filter(x=>x.timestamp<=trade.timestamp).length;
   const sameDay = allTrades.filter(x=>new Date(x.timestamp).toDateString()===new Date(trade.timestamp).toDateString());
   const isBestOfDay = trade.pnl===Math.max(...sameDay.map(x=>x.pnl));
-  const ctx={isFirstWin,isPersonalBest,streak,isBestOfDay};
+  const isWorstOfDay = trade.pnl===Math.min(...sameDay.map(x=>x.pnl));
+  const hour = new Date(trade.timestamp).getHours();
+  const day = new Date(trade.timestamp).getDay();
+  const walletTrades = sorted.filter(x=>x.source==='wallet');
+  const isFirstWalletImport = trade.source==='wallet' && walletTrades.length && walletTrades.filter(x=>x.timestamp<=trade.timestamp).length===1;
+  const ctx={isFirstWin,isPersonalBest,streak,lossStreak,comeback,isBestOfDay,isWorstOfDay,tradeNumber,hour,day,isFirstWalletImport};
   const rarity = computeRarity(trade, ctx);
   return { rarity, grade:computeGrade(trade,rarity), achievements:computeAchievements(trade,ctx), vibe:vibeFor(trade), color:pnlColor(trade) };
 }
@@ -599,7 +645,7 @@ function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(
 
 function renderCardHTML(t, meta){
   const win = t.pnl>=0;
-  const badges = meta.achievements.map(a=>`<span>${a.icon} ${a.name}</span>`).join(' ');
+  const badges = meta.achievements.slice(0,3).map(a=>`<span>${a.icon} ${a.name}</span>`).join(' ');
   return `
     <div class="top">
       <div class="top-left"><span>#${String(t.tradeId).padStart(4,'0')}</span>${t.source && t.source!=='manual' ? `<span class="src">${t.source}</span>` : ''}</div>
@@ -1034,7 +1080,7 @@ function drawCardCanvas(t, meta){
   ctx.fillText(fmt.hold(t.holdTime)+'  ·  Grade '+meta.grade, 300, 400);
   if(meta.achievements.length){
     ctx.font='600 22px sans-serif'; ctx.fillStyle='#FFFFFF';
-    ctx.fillText(meta.achievements.map(a=>a.icon+' '+a.name).join('   '), 300, 460);
+    ctx.fillText(meta.achievements.slice(0,3).map(a=>a.icon+' '+a.name).join('   '), 300, 460);
   }
   ctx.fillStyle='#C09EFF'; ctx.font='900 34px sans-serif';
   ctx.fillText('✦ DEGENCARDS', 300, 780);
