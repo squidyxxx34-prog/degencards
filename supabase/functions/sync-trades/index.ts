@@ -118,6 +118,18 @@ async function symbols(mints: string[]) {
       for (const p of Array.isArray(arr) ? arr : []) if (p?.baseToken?.address && !out.has(p.baseToken.address)) out.set(p.baseToken.address, String(p.baseToken.symbol || ""));
     } catch (_) { /* fallback below */ }
   }
+  // pump.fun coins (mint ends with "pump"): real ticker from pump.fun's API, full mint as key
+  const pumpMissing = mints.filter((m) => !out.get(m) && m.endsWith("pump"));
+  for (let i = 0; i < pumpMissing.length; i += 4) {
+    await Promise.all(pumpMissing.slice(i, i + 4).map(async (m) => {
+      try {
+        const r = await fetch(`https://frontend-api-v3.pump.fun/coins-v2/${m}`, { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j?.mint === m && j?.symbol) out.set(m, String(j.symbol));
+      } catch (_) { /* next fallback */ }
+    }));
+  }
   const missing = mints.filter((m) => !out.get(m));
   if (HELIUS && missing.length) {                                // rugged / unlisted tokens: on-chain metadata via Helius DAS
     try {
@@ -229,6 +241,7 @@ Deno.serve(async (req) => {
   const deadline = Date.now() + TIME_BUDGET_MS;
 
   let accounts: any[] = [];
+  let userId: string | null = null;
   const cronKey = req.headers.get("x-cron-key");
   if (cronKey) {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
@@ -239,11 +252,12 @@ Deno.serve(async (req) => {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u, error } = await db.auth.getUser(jwt);
     if (error || !u?.user) return new Response('{"error":"unauthorized"}', { status: 401, headers: h });
+    userId = u.user.id;
     const { data } = await db.from("connected_accounts").select("*").eq("user_id", u.user.id);
     accounts = (data || []).filter((a) => !a.last_synced_at || Date.now() - Date.parse(a.last_synced_at) > MANUAL_COOLDOWN_MS || !a.last_sig);
   }
 
-  let imported = 0, synced = 0, pending = 0;
+  let imported = 0, synced = 0, pending = 0, repaired = 0;
   for (const acc of accounts) {
     if (Date.now() > deadline) break;
     try {
@@ -255,5 +269,20 @@ Deno.serve(async (req) => {
       await db.from("connected_accounts").update({ sync_error: String((e as Error).message).slice(0, 200) }).eq("id", acc.id);
     }
   }
-  return new Response(JSON.stringify({ synced, imported, pending }), { headers: h });
+  // repair cards still showing a shortened mint (imported before a ticker source was available)
+  if (Date.now() < deadline) {
+    try {
+      let q = db.from("trades").select("id,mint").eq("source", "wallet").not("mint", "is", null).like("ticker", "%…%").limit(100);
+      if (userId) q = q.eq("user_id", userId);
+      const { data: rows } = await q;
+      if (rows?.length) {
+        const syms = await symbols([...new Set(rows.map((r: any) => r.mint))]);
+        for (const r of rows) {
+          const sym = syms.get(r.mint);
+          if (sym) { const t = cleanSym(sym, r.mint); if (!t.includes("…")) { await db.from("trades").update({ ticker: t }).eq("id", r.id); repaired++; } }
+        }
+      }
+    } catch (e) { console.error("repair", (e as Error).message); }
+  }
+  return new Response(JSON.stringify({ synced, imported, pending, repaired }), { headers: h });
 });
