@@ -73,6 +73,7 @@ const ACH_MAP = Object.fromEntries(ACH_CATALOG.map(a=>[a.key,a]));
 
 /* ---------- icon set (custom minimal line icons — no emoji anywhere) ---------- */
 const ICON_PATHS = {
+  lock:"M6 11h12v10H6z M8 11V7a4 4 0 0 1 8 0v4",
   sparkle:"M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z",
   flame:"M12 3c1 3-3 4-3 8a3 3 0 006 0c0-1.5-1-2-1-3.5 2 1 3 3 3 5.5a5 5 0 01-10 0c0-4 3-5 5-10z",
   rocket:"M12 2c3 1 5 4 5 8 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-7 5-8z M9 15l-2 5 M15 15l2 5 M10 9a2 2 0 104 0 2 2 0 00-4 0z",
@@ -496,14 +497,122 @@ function renderLevel(){
     if(lvl !== prev) localStorage.setItem(k, String(lvl));
   }catch(e){}
 }
+/* ---------- achievements screen: summary + categories + medal tiles (responsive: 2 cols phone -> 4-5 cols iPad) ---------- */
+const ACH_GROUPS = [
+  { id:'milestones', name:'Milestones', keys:['first_trade','ten_trades','fifty_trades','century_club','on_chain'] },
+  { id:'profit',     name:'Profit',     keys:['first_blood','micro_win','moonshot','to_the_moon','whale','new_record'] },
+  { id:'streaks',    name:'Streaks',    keys:['run_it_back','on_fire','unstoppable','comeback_kid','iron_stomach'] },
+  { id:'style',      name:'Style',      keys:['speedrun','paper_hands','diamond_hands','night_owl','weekend_warrior'] },
+  { id:'daily',      name:'Daily',      keys:['king_of_day','worst_of_day'] },
+  { id:'pain',       name:'Pain',       keys:['rugged','rekt'] },
+  { id:'goals',      name:'Goals',      keys:['goal_first_milestone','goal_crusher','goal_smasher','goal_legend'] },
+];
+const ACH_TIER = { first_trade:'bronze', ten_trades:'bronze', fifty_trades:'silver', century_club:'gold', on_chain:'silver',
+  first_blood:'bronze', micro_win:'bronze', moonshot:'silver', to_the_moon:'gold', whale:'legend', new_record:'silver',
+  run_it_back:'bronze', on_fire:'silver', unstoppable:'legend', comeback_kid:'silver', iron_stomach:'bronze',
+  speedrun:'silver', paper_hands:'bronze', diamond_hands:'gold', night_owl:'bronze', weekend_warrior:'bronze',
+  king_of_day:'silver', worst_of_day:'bronze', rugged:'bronze', rekt:'silver',
+  goal_first_milestone:'bronze', goal_crusher:'silver', goal_smasher:'gold', goal_legend:'legend' };
+const TIER_LABEL = { bronze:'BRONZE', silver:'SILVER', gold:'GOLD', legend:'LEGEND' };
+let achFilter = 'all';
+function achProgress(key, all){
+  // [current, target, label] for locked achievements when it can be measured
+  const byTime = [...all].sort((a,b)=>a.timestamp-b.timestamp);
+  let ws=0, bw=0, ls=0, bl=0; byTime.forEach(t=>{ if(t.pnl>0){ ws++; bw=Math.max(bw,ws); ls=0; } else { ls++; bl=Math.max(bl,ls); ws=0; } });
+  const bestRoi = all.length ? Math.max(...all.map(t=>t.roi)) : 0, bestPnl = all.length ? Math.max(...all.map(t=>t.pnl)) : 0;
+  const worstRoi = all.length ? Math.min(...all.map(t=>t.roi)) : 0;
+  const longWin = Math.max(0, ...all.filter(t=>t.pnl>0).map(t=>t.holdTime));
+  const n = all.length;
+  switch(key){
+    case 'first_trade': return [n, 1, `${n}/1 trade`];
+    case 'ten_trades': return [n, 10, `${n}/10 trades`];
+    case 'fifty_trades': return [n, 50, `${n}/50 trades`];
+    case 'century_club': return [n, 100, `${n}/100 trades`];
+    case 'run_it_back': return [bw, 3, `Best streak ${bw}/3`];
+    case 'on_fire': return [bw, 5, `Best streak ${bw}/5`];
+    case 'unstoppable': return [bw, 10, `Best streak ${bw}/10`];
+    case 'iron_stomach': return [bl, 3, `Worst streak ${bl}/3`];
+    case 'moonshot': return [Math.max(0,bestRoi), 100, `Best ROI ${fmt.pct(bestRoi)} / +100%`];
+    case 'to_the_moon': return [Math.max(0,bestRoi), 500, `Best ROI ${fmt.pct(bestRoi)} / +500%`];
+    case 'whale': return [Math.max(0,bestPnl), 500, `Best trade ${fmt.usd(bestPnl)} / $500`];
+    case 'diamond_hands': return [longWin, 86400, `Longest win ${fmt.hold(longWin)} / 24h`];
+    case 'rugged': return [Math.max(0,-worstRoi), 50, `Worst ${fmt.pct(worstRoi)} / -50%`];
+    case 'rekt': return [Math.max(0,-worstRoi), 80, `Worst ${fmt.pct(worstRoi)} / -80%`];
+    default: return null;
+  }
+}
 function renderAchievements(){
+  const all = computedTrades();
   const unlocked = unlockedAchievementKeys();
-  document.getElementById('achCount').textContent = unlocked.size;
-  document.getElementById('achTotal').textContent = ACH_CATALOG.length;
-  document.getElementById('achAll').innerHTML = ACH_CATALOG.map(a=>{
-    const has = unlocked.has(a.key);
-    return `<div class="achitem" style="opacity:${has?1:.4}"><span style="color:var(--purple)">${icon(a.icon,18)}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`;
-  }).join('');
+  const earned = {};                                           // key -> trades that earned it (newest first)
+  all.forEach(t=>t.meta.achievements.forEach(a=>{ (earned[a.key] = earned[a.key] || []).push(t); }));
+  Object.values(earned).forEach(l=>l.sort((a,b)=>b.timestamp-a.timestamp));
+  const total = ACH_CATALOG.length, got = unlocked.size, pct = total ? Math.round(got/total*100) : 0;
+  document.getElementById('achCount').textContent = got;
+  document.getElementById('achTotal').textContent = total;
+
+  // summary
+  const tierCount = { bronze:0, silver:0, gold:0, legend:0 };
+  unlocked.forEach(k=>{ const tr = ACH_TIER[k]; if(tr) tierCount[tr]++; });
+  const rarest = [...unlocked].map(k=>ACH_MAP[k]).filter(Boolean).sort((a,b)=>(earned[a.key]?.length||1)-(earned[b.key]?.length||1))[0];
+  const latest = Object.entries(earned).map(([k,l])=>[k,l[0].timestamp]).sort((a,b)=>b[1]-a[1])[0];
+  const C = 2*Math.PI*52;
+  document.getElementById('achSummary').innerHTML = `
+    <div class="ach-ring">
+      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C*(1-got/Math.max(1,total))).toFixed(1)}"/></svg>
+      <div class="ach-ring-txt"><b>${pct}%</b><span>${got} / ${total}</span></div>
+    </div>
+    <div class="ach-sum-body">
+      <div class="ach-tiers">${Object.keys(tierCount).map(tr=>`<div class="ach-tier t-${tr}"><i></i><b>${tierCount[tr]}</b><span>${TIER_LABEL[tr]}</span></div>`).join('')}</div>
+      <div class="ach-facts">
+        ${latest ? `<div><span>Latest</span><b>${esc(ACH_MAP[latest[0]]?.name||'')}</b><em>${fmt.date(latest[1])}</em></div>` : ''}
+        ${rarest ? `<div><span>Rarest</span><b>${esc(rarest.name)}</b><em>earned ${earned[rarest.key]?.length||1}×</em></div>` : ''}
+        <div><span>XP from badges</span><b>+${(got*120).toLocaleString('en-US')}</b><em>120 XP each</em></div>
+      </div>
+    </div>`;
+
+  // filters
+  document.getElementById('achFilters').innerHTML = [['all','All'],['unlocked','Unlocked'],['locked','Locked']]
+    .map(([k,l])=>`<button data-achf="${k}" class="${achFilter===k?'on':''}">${l}</button>`).join('');
+  document.querySelectorAll('[data-achf]').forEach(b=>b.addEventListener('click', ()=>{ achFilter = b.dataset.achf; renderAchievements(); }));
+
+  // groups
+  document.getElementById('achAll').innerHTML = ACH_GROUPS.map(g=>{
+    const items = g.keys.map(k=>ACH_MAP[k]).filter(Boolean).filter(a=> achFilter==='all' || (achFilter==='unlocked') === unlocked.has(a.key));
+    if(!items.length) return '';
+    const gGot = g.keys.filter(k=>unlocked.has(k)).length;
+    return `<section class="ach-group">
+      <div class="ach-group-head"><h3>${g.name}</h3><span>${gGot}/${g.keys.length}</span></div>
+      <div class="ach-grid">${items.map(a=>{
+        const has = unlocked.has(a.key), tier = ACH_TIER[a.key] || 'bronze', list = earned[a.key] || [];
+        const pr = has ? null : achProgress(a.key, all);
+        const prPct = pr ? Math.min(100, pr[0]/pr[1]*100) : 0;
+        return `<button class="ach-tile ${has?'has':'locked'} t-${tier}" data-ach="${a.key}">
+          <div class="ach-medal">${icon(has ? a.icon : 'lock', 26)}</div>
+          <div class="ach-tier-tag">${TIER_LABEL[tier]}</div>
+          <div class="ach-name">${a.name}</div>
+          <div class="ach-desc">${a.desc}</div>
+          ${has ? `<div class="ach-meta">${list.length ? `<b>×${list.length}</b> · last ${fmt.date(list[0].timestamp).split(' · ')[0]}` : '<b>Unlocked</b>'}</div>`
+                : pr ? `<div class="ach-prog"><i style="width:${prPct.toFixed(0)}%"></i></div><div class="ach-meta">${esc(pr[2])}</div>` : `<div class="ach-meta">Locked</div>`}
+        </button>`;
+      }).join('')}</div></section>`;
+  }).join('') || `<div class="authnote">Nothing here yet.</div>`;
+
+  document.querySelectorAll('[data-ach]').forEach(b=>b.addEventListener('click', ()=>openAchievement(b.dataset.ach, earned[b.dataset.ach]||[], unlocked.has(b.dataset.ach))));
+}
+function openAchievement(key, list, has){
+  const a = ACH_MAP[key]; if(!a) return;
+  const tier = ACH_TIER[key] || 'bronze', pr = has ? null : achProgress(key, computedTrades());
+  document.getElementById('detailBody').innerHTML = `
+    <div class="ach-detail t-${tier} ${has?'has':'locked'}">
+      <div class="ach-medal big">${icon(has ? a.icon : 'lock', 40)}</div>
+      <div class="ach-tier-tag">${TIER_LABEL[tier]}</div>
+      <h3>${a.name}</h3><p>${a.desc}</p>
+      ${has ? `<div class="ach-detail-count">Earned <b>${list.length || 1}×</b></div>` : pr ? `<div class="ach-prog big"><i style="width:${Math.min(100,pr[0]/pr[1]*100).toFixed(0)}%"></i></div><div class="ach-meta">${esc(pr[2])}</div>` : '<div class="ach-meta">Not unlocked yet</div>'}
+      ${list.length ? `<div class="ach-cards">${list.slice(0,12).map(t=>`<button class="ach-card-row" data-open="${t.id}"><b>${esc(tk(t.ticker))}</b><span>${fmt.date(t.timestamp)}</span><em class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</em></button>`).join('')}</div>` : ''}
+    </div>`;
+  document.querySelectorAll('#detailBody [data-open]').forEach(b=>b.addEventListener('click', ()=>openDetail(b.dataset.open)));
+  detailOverlay.classList.add('show');
 }
 function renderStatsView(){
   const wins = trades.filter(t=>t.pnl>=0), losses=trades.filter(t=>t.pnl<0);
