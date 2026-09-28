@@ -274,13 +274,22 @@ async function syncAccount(acc: any, deadline: number) {
    [first fill - 2 min, last fill + 2 min] (clipped to the coin's first trade), bucket size picked for ~50 candles,
    and place B / S exactly on this wallet's own fills. Non-pump coins fall back to minute candles built in the browser. */
 const BUCKETS = [1, 2, 3, 5, 10, 15, 30, 60, 120, 300];
+let pumpLast = 0;
 async function pumpTrades(mint: string, t0: number, t1: number) {
   const out: any[] = []; let cursor = `9999999999999999999999-${t1 + 1000}`;
   for (let page = 0; page < 40; page++) {
-    const r = await fetch(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}&minSolAmount=0`,
-      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
-    if (!r.ok) throw new Error(`pump trades ${r.status}`);
-    const j = await r.json(); const tr = j?.trades || [];
+    let r: Response | null = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const wait = pumpLast + 1300 - Date.now(); if (wait > 0) await sleep(wait);          // stay under pump.fun's rate limit
+      pumpLast = Date.now();
+      r = await fetch(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}&minSolAmount=0`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+      if (r.status !== 429) break;
+      pumpLast = Date.now() + 4000 * (attempt + 1);
+    }
+    if (r!.status === 429) throw new Error("RATE");
+    if (!r!.ok) throw new Error(`pump trades ${r!.status}`);
+    const j = await r!.json(); const tr = j?.trades || [];
     for (const t of tr) out.push(t);
     const oldest = tr.length ? Date.parse(tr[tr.length - 1].timestamp) : 0;
     if (!j?.pagination?.hasMore || !tr.length || oldest < t0) break;
@@ -329,7 +338,9 @@ async function buildPumpCharts(deadline: number, userId: string | null) {
       if (e2) throw new Error(e2.message);
       built++;
     } catch (e) {
-      console.error("pump chart", (e as Error).message);
+      const msg = (e as Error).message;
+      if (msg === "RATE") { console.error("pump chart rate limited, retry next run"); break; }   // not the trade's fault
+      console.error("pump chart", msg);
       await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
     }
   }
