@@ -7,6 +7,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 /* ---------- input hardening ---------- */
 const SOURCES = ['manual','pumpfun','fomo','wallet'];
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;                 // Solana address shape
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HANDLE_RE = /^[A-Za-z0-9_.@-]{2,40}$/;                  // pump.fun / fomo handles
 function cleanTicker(s){ return String(s||'').replace(/[\u0000-\u001f\u007f<>&"'`\\]/g,'').trim().slice(0,24); }
 function num(v, min, max, dflt){ v = Number(v); if(!Number.isFinite(v)) return dflt||0; return Math.min(max, Math.max(min, v)); }
@@ -109,7 +110,7 @@ const store = {
   async getTrades(){
     const {data,error} = await sb.from('trades').select('*').order('timestamp_ms',{ascending:false}).limit(2000);
     if(error){ console.error('trades load failed'); return []; }
-    return data.map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual' }));
+    return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual' }));
   },
   nextTradeId(){
     const base = trades.length ? Math.max(...trades.map(x=>x.tradeId)) : 0;
@@ -117,17 +118,22 @@ const store = {
     return idCounter;                            // (the DB trigger, when installed, overrides this anyway)
   },
   async saveTrade(t){
-    const row = {
-      user_id: session.user.id, trade_id: this.nextTradeId(),
+    const row = {                                   // trade_id / created_at are assigned by the DB trigger
+      user_id: session.user.id,
       ticker: cleanTicker(t.ticker) || 'UNKNOWN',
-      pnl: Math.round(num(t.pnl,-1e12,1e12)*100)/100, roi: Math.round(num(t.roi,-100,1e7)*10)/10,
-      entry_mc: Math.round(num(t.entryMc,0,1e15)), exit_mc: Math.round(num(t.exitMc,0,1e15)),
+      pnl: Math.round(num(t.pnl,-1e10,1e10)*100)/100, roi: Math.round(num(t.roi,-100,1e7)*10)/10,
+      entry_mc: Math.round(num(t.entryMc,0,1e13)), exit_mc: Math.round(num(t.exitMc,0,1e13)),
       hold_time: Math.round(num(t.holdTime,0,31536000)),
-      timestamp_ms: Math.round(num(t.timestamp || Date.now(), 946684800000, 4102444800000)),
-      source: SOURCES.includes(t.source) ? t.source : 'manual'
+      timestamp_ms: Math.round(num(t.timestamp || Date.now(), 1230768000000, 4102444800000)),
+      source: t.source === 'wallet' ? 'wallet' : 'manual'
     };
     const {error} = await sb.from('trades').insert(row);
-    if(error){ console.error('trade save failed'); return false; }
+    if(error){
+      const m = String(error.message||'');
+      if(m.includes('rate limit')) showToast('Slow down — too many trades in a minute');
+      else if(m.includes('trade limit')) showToast('Trade limit reached');
+      console.error('trade save failed'); return false;
+    }
     return true;
   },
   async getAccounts(){

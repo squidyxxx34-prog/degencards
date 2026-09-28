@@ -25,11 +25,16 @@ Home / Collection / History / Achievements / Stats / Account ; hamburger mobile 
 - "Iconly Pro" n'est pas utilisable (payant) : icônes maison.
 
 ## Reste à faire côté Maxence (dashboard)
-1. Lancer `supabase/security_hardening.sql` dans Supabase > SQL Editor.
+1. ~~SQL de durcissement~~ : fait (v1 + v2 appliqués via le connecteur Supabase le 2026-09-28).
 2. Auth > URL Configuration : Site URL = URL Vercel, seule redirection autorisée.
 3. Auth > Providers : Web3 Wallet (Solana + Ethereum), Google (Client ID/Secret), Anonymous sign-ins.
 4. Auth > Attack Protection : captcha.
-5. Supprimer dans History les faux trades `PUMPFUN` créés avant le correctif.
+5. ~~Faux trades PUMPFUN~~ : aucun en base.
+6. Auth > Rate Limits : baisser les envois d'email / sign-ins anonymes ; Auth > Sessions : durée max raisonnable.
 
 ## Sécurité
 Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RLS).
+
+## Sécurité — rappel
+- Si `vendor/supabase.js` change : recalculer le hash SRI dans index.html (`openssl dgst -sha384 -binary vendor/supabase.js | openssl base64 -A`).
+- Nouvelle table = RLS + grants minimaux + checks, puis `get_advisors`.
