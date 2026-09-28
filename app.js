@@ -808,78 +808,97 @@ function showToast(msg){
   setTimeout(()=>el.classList.remove('show'), 2400);
 }
 
-/* ---------- hCaptcha (required by Supabase Auth) ---------- */
+/* ---------- hCaptcha (visible, required by Supabase Auth) ---------- */
 const HCAPTCHA_SITEKEY = 'e5784d60-9d86-44f4-80b2-c7dcc64e3258';
 let hcWidget = null;
-async function getCaptchaToken(){
-  for(let i=0; i<80 && !window.hcaptcha?.render; i++) await new Promise(r=>setTimeout(r,100));
-  if(!window.hcaptcha?.render) throw new Error('Captcha failed to load — refresh the page.');
-  if(hcWidget === null) hcWidget = window.hcaptcha.render('hcaptchaBox', { sitekey: HCAPTCHA_SITEKEY, size: 'invisible' });
-  else window.hcaptcha.reset(hcWidget);                 // tokens are single-use
-  try{
-    const { response } = await window.hcaptcha.execute(hcWidget, { async: true });
-    return response;
-  }catch(e){ throw new Error('Captcha not completed.'); }
+async function renderCaptcha(){
+  if(hcWidget !== null) return;
+  for(let i=0; i<100 && !window.hcaptcha?.render; i++) await new Promise(r=>setTimeout(r,100));
+  if(!window.hcaptcha?.render || hcWidget !== null) return;
+  hcWidget = window.hcaptcha.render('hcaptchaBox', { sitekey: HCAPTCHA_SITEKEY, theme: 'dark' });
 }
+function takeCaptcha(note){
+  const token = hcWidget !== null ? window.hcaptcha.getResponse(hcWidget) : '';
+  if(!token){ note.textContent = hcWidget === null ? 'Captcha is loading — try again in a second.' : 'Complete the captcha first.'; return null; }
+  return token;
+}
+function resetCaptcha(){ try{ if(hcWidget !== null) window.hcaptcha.reset(hcWidget); }catch(e){} }  // tokens are single-use
+renderCaptcha();
 
-/* ---------- auth ---------- */
-let magicLinkCooldownUntil = 0;
-document.getElementById('btnMagicLink').addEventListener('click', async ()=>{
+/* ---------- auth: email + password ---------- */
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const authNote = document.getElementById('authNote');
+let authBusy = false;
+function readCreds(needPassword){
   const email = document.getElementById('authEmail').value.trim();
-  const note = document.getElementById('authNote');
-  if(!/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(email) || email.length>254){ note.textContent = "Enter a valid email."; return; }
-  if(Date.now() < magicLinkCooldownUntil){ note.textContent = "Please wait a few seconds before requesting another link."; return; }
-  magicLinkCooldownUntil = Date.now() + 30000;
-  note.textContent = "Sending...";
-  let captchaToken;
-  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; magicLinkCooldownUntil = 0; return; }
-  const {error} = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: REDIRECT_URL, captchaToken } });
-  note.textContent = error ? "Error — try again." : "Check your inbox for the link.";
-});
+  const password = document.getElementById('authPassword').value;
+  if(!EMAIL_RE.test(email) || email.length > 254){ authNote.textContent = 'Enter a valid email.'; return null; }
+  if(needPassword && (password.length < 8 || password.length > 72)){ authNote.textContent = 'Password must be 8 to 72 characters.'; return null; }
+  return { email, password };
+}
+async function authAction(needPassword, run){
+  if(authBusy) return;
+  const creds = readCreds(needPassword); if(!creds) return;
+  const captchaToken = takeCaptcha(authNote); if(!captchaToken) return;
+  authBusy = true; authNote.textContent = 'Please wait...';
+  try{ await run(creds, captchaToken); }
+  catch(e){ authNote.textContent = 'Something went wrong — try again.'; }
+  finally{ authBusy = false; resetCaptcha(); }
+}
+document.getElementById('btnSignIn').addEventListener('click', ()=>authAction(true, async ({email,password}, captchaToken)=>{
+  const { error } = await sb.auth.signInWithPassword({ email, password, options:{ captchaToken } });
+  if(!error){ authNote.textContent = ''; return; }
+  const m = String(error.message||'').toLowerCase();
+  authNote.textContent = m.includes('not confirmed') ? 'Confirm your email first (check your inbox).'
+    : m.includes('captcha') ? 'Captcha failed — try again.' : 'Wrong email or password.';   // no account enumeration
+}));
+document.getElementById('btnSignUp').addEventListener('click', ()=>authAction(true, async ({email,password}, captchaToken)=>{
+  const { data, error } = await sb.auth.signUp({ email, password, options:{ captchaToken, emailRedirectTo: REDIRECT_URL } });
+  if(error){
+    const m = String(error.message||'').toLowerCase();
+    authNote.textContent = m.includes('password') ? 'Password too weak — use a longer, less common one.'
+      : m.includes('captcha') ? 'Captcha failed — try again.' : 'Could not create the account — try again.';
+    return;
+  }
+  authNote.textContent = data.session ? '' : 'Check your inbox to confirm your email.';
+}));
+document.getElementById('btnForgot').addEventListener('click', ()=>authAction(false, async ({email}, captchaToken)=>{
+  await sb.auth.resetPasswordForEmail(email, { redirectTo: REDIRECT_URL, captchaToken });
+  authNote.textContent = 'If an account exists, a reset link is on its way.';
+}));
 document.getElementById('btnGoogle').addEventListener('click', async ()=>{
   await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: REDIRECT_URL } });
 });
-function detectWallet(){
-  if(window.phantom?.solana?.isPhantom) return window.phantom.solana;
-  if(window.solflare?.isSolflare) return window.solflare;
-  if(window.backpack?.isBackpack) return window.backpack;
-  if(window.solana) return window.solana;
-  return null;
-}
+
+/* password recovery: the reset link lands here with a PASSWORD_RECOVERY event */
+const pwOverlay = document.getElementById('pwOverlay');
+document.getElementById('btnSetPassword').addEventListener('click', async ()=>{
+  const note = document.getElementById('pwNote');
+  const password = document.getElementById('newPassword').value;
+  if(password.length < 8 || password.length > 72){ note.textContent = 'Password must be 8 to 72 characters.'; return; }
+  note.textContent = 'Saving...';
+  const { error } = await sb.auth.updateUser({ password });
+  if(error){ note.textContent = 'Could not save — use a stronger password.'; return; }
+  document.getElementById('newPassword').value = '';
+  pwOverlay.classList.remove('show'); showToast('Password updated');
+});
+
+/* ---------- auth: watch-only wallet (public key) ---------- */
 async function loginWithPubkey(pubkey, note){
-  let captchaToken;
-  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
+  const captchaToken = takeCaptcha(note); if(!captchaToken) return;
+  note.textContent = 'Connecting...';
   const { data, error } = await sb.auth.signInAnonymously({ options:{ captchaToken } });
-  if(error){ note.textContent = "Auth error — try again."; return; }
+  resetCaptcha();
+  if(error){ note.textContent = 'Auth error — try again.'; return; }
   await sb.auth.updateUser({ data: { wallet_address: pubkey } });
   await sb.from('connected_accounts').upsert({ user_id: data.user.id, provider:'wallet', handle: pubkey }, { onConflict:'user_id,provider' });
-  note.textContent = "Wallet connected.";
+  note.textContent = 'Wallet connected.';
   await reload();
 }
-document.getElementById('btnWallet').addEventListener('click', async ()=>{
-  const note = document.getElementById('authNote');
-  if(!detectWallet()){ note.textContent = "No Solana wallet found — install Phantom, Solflare or Backpack."; return; }
-  let captchaToken;
-  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
-  note.textContent = "Confirm in your wallet...";
-  const { error } = await sb.auth.signInWithWeb3({ chain:'solana', statement:'Sign in to DEGENCARDS', options:{ captchaToken } });
-  note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
-});
-document.getElementById('btnWalletEth').addEventListener('click', async ()=>{
-  const note = document.getElementById('authNote');
-  if(!window.ethereum){ note.textContent = "No Ethereum wallet found — install MetaMask or similar."; return; }
-  let captchaToken;
-  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
-  note.textContent = "Confirm in your wallet...";
-  const { error } = await sb.auth.signInWithWeb3({ chain:'ethereum', statement:'Sign in to DEGENCARDS', options:{ captchaToken } });
-  note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
-});
 document.getElementById('btnPubkey').addEventListener('click', async ()=>{
-  const note = document.getElementById('authNote');
   const pk = document.getElementById('authPubkey').value.trim();
-  if(!B58.test(pk)){ note.textContent = "That doesn't look like a valid Solana address."; return; }
-  note.textContent = "Connecting...";
-  await loginWithPubkey(pk, note);
+  if(!B58.test(pk)){ authNote.textContent = "That doesn't look like a valid Solana address."; return; }
+  await loginWithPubkey(pk, authNote);
 });
 
 async function reload(){
@@ -909,6 +928,7 @@ function onSession(sess){
 }
 sb.auth.onAuthStateChange((event, sess)=>{
   if(event==='TOKEN_REFRESHED' || event==='USER_UPDATED'){ session = sess; return; }
+  if(event==='PASSWORD_RECOVERY') setTimeout(()=>pwOverlay.classList.add('show'), 0);
   setTimeout(()=>onSession(sess), 0);   // never call supabase inside this callback (known deadlock)
 });
 sb.auth.getSession().then(({data})=>onSession(data.session));

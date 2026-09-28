@@ -6,7 +6,7 @@ Static site (no build): `index.html` + `styles.css` + `app.js`. supabase-js is *
 
 ## Security model
 - **CSP + security headers** in `vercel.json`: scripts only from `'self'`, no inline script, no third-party CDN code, `frame-ancestors 'none'`, HSTS, nosniff, no-referrer, COOP/CORP, locked Permissions-Policy.
-- **Auth**: Supabase PKCE flow (no raw token in the URL, URL scrubbed after login), Web3 sign-in (Solana/Ethereum), Google, email magic link (30s client cooldown).
+- **Auth**: email + password (sign up with email confirmation, reset link), Google (PKCE), watch-only wallet by public key (anonymous user). Visible hCaptcha on email and wallet flows. Generic error messages (no account enumeration).
 - **XSS**: every DB-derived string is sanitized on read (`cleanTicker`, allow-lists) and escaped on render (`esc`).
 - **Inputs**: all numbers clamped client-side and re-validated by DB CHECK constraints; wallet addresses must be valid base58; handles are allow-listed.
 - **Data isolation**: RLS on every table (`authenticated` only, `auth.uid() = user_id`), anon role has no table privileges, trade numbering + per-user cap enforced by a DB trigger.

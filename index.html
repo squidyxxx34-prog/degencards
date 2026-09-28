@@ -24,26 +24,20 @@
       <div class="authbox">
         <h3>SIGN IN</h3>
         <input id="authEmail" type="email" placeholder="you@email.com" maxlength="254" autocomplete="email">
-        <button id="btnMagicLink">SEND MAGIC LINK</button>
-        <div class="authnote" id="authNote">No password. We email you a one-time link.</div>
-        <div style="display:flex;align-items:center;gap:10px;margin:14px 0;"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:10px;color:var(--tx2)">OR</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <input id="authPassword" type="password" placeholder="Password (8+ characters)" minlength="8" maxlength="72" autocomplete="current-password">
+        <div class="authrow"><button id="btnSignIn">SIGN IN</button><button id="btnSignUp" class="btn-ghost">CREATE ACCOUNT</button></div>
+        <button id="btnForgot" class="btn-link">Forgot password?</button>
+        <div class="authsep" style="margin:14px 0;"><span>OR</span></div>
         <button id="btnGoogle" style="background:#fff;color:#000;display:flex;align-items:center;justify-content:center;gap:8px;">
           <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.2-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3c-7.4 0-13.8 4.1-17.1 10.1z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.5 36 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.9 40.6 16.4 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.5C40.8 36.4 45 30.7 45 24c0-1.4-.2-2.7-.4-3.5z"/></svg>
           CONTINUE WITH GOOGLE
         </button>
-        <button id="btnWallet" style="background:#141420; color:#fff; border:1px solid rgba(220,31,255,.35); display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; font-weight:800;">
-          <svg width="16" height="16" viewBox="0 0 397 311" fill="none"><defs><linearGradient id="sg1" x1="360" y1="7" x2="141" y2="316" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><linearGradient id="sg2" x1="264" y1="-32" x2="45" y2="277" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient><linearGradient id="sg3" x1="312" y1="-11" x2="93" y2="298" gradientUnits="userSpaceOnUse"><stop stop-color="#00FFA3"/><stop offset="1" stop-color="#DC1FFF"/></linearGradient></defs><path d="M64.6 237.9a12.3 12.3 0 018.7-3.6h317.4a6.1 6.1 0 014.3 10.5l-62.7 62.7a12.3 12.3 0 01-8.7 3.6H6.2a6.1 6.1 0 01-4.3-10.5z" fill="url(#sg1)"/><path d="M64.6 3.6A12.6 12.6 0 0173.3 0h317.4a6.1 6.1 0 014.3 10.5l-62.7 62.7a12.3 12.3 0 01-8.7 3.6H6.2a6.1 6.1 0 01-4.3-10.5z" fill="url(#sg2)"/><path d="M332.3 120.1a12.3 12.3 0 00-8.7-3.6H6.2a6.1 6.1 0 00-4.3 10.5l62.7 62.7a12.3 12.3 0 008.7 3.6h317.4a6.1 6.1 0 004.3-10.5z" fill="url(#sg3)"/></svg>
-          SIGN IN WITH SOLANA
-        </button>
-        <button id="btnWalletEth" style="background:#627EEA; color:#fff; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; font-weight:800;">
-          <svg width="14" height="14" viewBox="0 0 256 417" fill="#fff"><path d="M127.9 0L125 10.5v275l2.9 2.9 127.9-75.6z"/><path d="M127.9 0L0 212.8l127.9 75.6V154.5z" fill-opacity=".8"/><path d="M127.9 312.2l-1.6 2v98l1.6 4.5L256 236.6z"/><path d="M127.9 416.7v-104.5L0 236.6z" fill-opacity=".8"/></svg>
-          SIGN IN WITH ETHEREUM
-        </button>
-        <div class="authnote">Native Supabase Web3 sign-in — real signature, no password.</div>
-        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 8px;"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:10px;color:var(--tx2)">OR WATCH-ONLY</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <div id="hcaptchaBox" class="captcha-box"></div>
+        <div class="authnote" id="authNote">The captcha is required for email and wallet sign-in.</div>
+        <div class="authsep" style="margin:14px 0 8px;"><span>OR WALLET TRACKING</span></div>
         <input id="authPubkey" type="text" placeholder="Paste a public key (Solana address)" maxlength="44" autocomplete="off" spellcheck="false">
-        <button id="btnPubkey" style="background:var(--surf2); color:var(--tx); border:1px solid var(--border);">CONTINUE WITH PUBLIC KEY</button>
-        <div class="authnote">No wallet app needed, no signature — read-only, can't sign transactions.</div>
+        <button id="btnPubkey" class="btn-ghost">CONTINUE WITH PUBLIC KEY</button>
+        <div class="authnote">Watch-only: no wallet app, no signature, can't move funds.</div>
       </div>
     </div>
   </div>
@@ -256,7 +250,16 @@
   </div>
 </div>
 
-<div id="hcaptchaBox"></div>
+<div class="overlay" id="pwOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">SET A NEW PASSWORD</h3>
+    <div class="authbox" style="padding:0;border:0;background:none;">
+      <input id="newPassword" type="password" placeholder="New password (8+ characters)" minlength="8" maxlength="72" autocomplete="new-password">
+      <button id="btnSetPassword">SAVE PASSWORD</button>
+      <div class="authnote" id="pwNote"></div>
+    </div>
+  </div>
+</div>
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
 <script src="/app.js" defer></script>
 </body>

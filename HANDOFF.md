@@ -17,7 +17,7 @@ DEGENCARDS : chaque trade crypto devient une carte collectible (rareté, grade, 
 - Tester avant de pousser (jsdom smoke test) : plusieurs régressions passées venaient de listeners perdus.
 
 ## Fonctions en place
-Home / Collection / History / Achievements / Stats / Account ; hamburger mobile (overlay) ; bouton + NEW TRADE flottant en bas ; saisie rapide (entry/exit MC + invested, ROI/PnL auto, hold time en chips) ; partage de carte (PNG canvas + "Look at my trade!") ; 29 achievements dont 4 de goal ; goal mensuel (éditable sur Stats, lecture seule sur Home) avec confettis + popup bottom-sheet ; connexion : email magic link, Google, Solana/Ethereum (signInWithWeb3), clé publique seule (anonyme) ; import wallet Solana réel (30 derniers jours, positions fermées = balance 0) ; couleur des cartes selon PnL.
+Home / Collection / History / Achievements / Stats / Account ; hamburger mobile (overlay) ; bouton + NEW TRADE flottant en bas ; saisie rapide (entry/exit MC + invested, ROI/PnL auto, hold time en chips) ; partage de carte (PNG canvas + "Look at my trade!") ; 29 achievements dont 4 de goal ; goal mensuel (éditable sur Stats, lecture seule sur Home) avec confettis + popup bottom-sheet ; connexion : email + mot de passe (+ reset), Google, wallet tracking par clé publique (anonyme), hCaptcha visible ; import wallet Solana réel (30 derniers jours, positions fermées = balance 0) ; couleur des cartes selon PnL.
 
 ## Limites connues
 - Pump.fun et Fomo : pas d'API publique. On lie juste le handle, aucun trade fabriqué.
@@ -27,7 +27,7 @@ Home / Collection / History / Achievements / Stats / Account ; hamburger mobile 
 ## Reste à faire côté Maxence (dashboard)
 1. ~~SQL de durcissement~~ : fait (v1 + v2 appliqués via le connecteur Supabase le 2026-09-28).
 2. Auth > URL Configuration : Site URL = URL Vercel, seule redirection autorisée.
-3. Auth > Providers : Web3 Wallet (Solana + Ethereum), Google (Client ID/Secret), Anonymous sign-ins.
+3. Auth > Providers : Email (password + Confirm email), Google, Anonymous sign-ins. Web3 Wallet désactivé (plus utilisé).
 4. ~~Captcha~~ : hCaptcha activé et branché (site key dans app.js).
 5. ~~Faux trades PUMPFUN~~ : aucun en base.
 6. Auth > Rate Limits : baisser les envois d'email / sign-ins anonymes ; Auth > Sessions : durée max raisonnable.
