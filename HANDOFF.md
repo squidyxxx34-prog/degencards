@@ -23,7 +23,7 @@ Home / Collection / History / Achievements / Stats / Account ; hamburger mobile 
 
 ## Limites connues
 - Pump.fun et Fomo : pas d'API, mais leurs trades sont on-chain → on lit l'adresse du wallet. Ventes d'un bag acheté avant le suivi et swaps token↔token ignorés.
-- Tickers : DexScreener → API pump.fun (`frontend-api-v3.pump.fun/coins-v2/<mint>`, non officielle) pour les mints en `pump` → Helius DAS si clé. Les cartes au ticker raccourci sont réparées à chaque run.
+- Tickers : DexScreener → API pump.fun (`frontend-api-v3.pump.fun/coins-v2/<mint>`, non officielle) pour les mints en `pump` → métadonnées on-chain (Token-2022 ou Metaplex, gratuit) → Helius DAS si clé. Les cartes au ticker raccourci sont réparées à chaque run.
 - Sans `HELIUS_API_KEY` (secret edge function) : RPC public, lent (120 tx / wallet / run) et tickers des tokens rugués illisibles.
 - Positions dont le token account a été fermé : indétectables.
 - "Iconly Pro" n'est pas utilisable (payant) : icônes maison.

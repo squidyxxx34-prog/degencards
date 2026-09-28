@@ -3,6 +3,7 @@
 // and turns every fully closed position into a trade card. Runs every 10 min via pg_cron, or on demand by a signed-in user.
 // Never fabricates: open positions and sells without a known buy are skipped.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { PublicKey } from "npm:@solana/web3.js@1.98.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -109,6 +110,15 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
 }
 
 /* ---------- token metadata ---------- */
+const MPL = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+function readMplSymbol(b: Uint8Array): string {
+  // Metaplex Metadata: key(1) update_authority(32) mint(32) name(borsh string) symbol(borsh string) ...
+  try {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength); let o = 65;
+    const str = () => { const n = dv.getUint32(o, true); if (n > 200) throw 0; o += 4; const s = new TextDecoder().decode(b.slice(o, o + n)); o += n; return s.replace(/\0/g, "").trim(); };
+    str(); return str();
+  } catch (_) { return ""; }
+}
 async function symbols(mints: string[]) {
   const out = new Map<string, string>();
   for (let i = 0; i < mints.length; i += 30) {
@@ -129,6 +139,28 @@ async function symbols(mints: string[]) {
         if (j?.mint === m && j?.symbol) out.set(m, String(j.symbol));
       } catch (_) { /* next fallback */ }
     }));
+  }
+  // on-chain metadata (free, any launchpad): Token-2022 metadata extension, else Metaplex metadata account
+  const chainMissing = mints.filter((m) => !out.get(m));
+  for (let i = 0; i < chainMissing.length; i += 100) {
+    const chunk = chainMissing.slice(i, i + 100);
+    try {
+      const mintAccs = await rpc("getMultipleAccounts", [chunk, { encoding: "jsonParsed" }]);
+      const needMpl: string[] = [];
+      chunk.forEach((m, j) => {
+        const ext = mintAccs?.value?.[j]?.data?.parsed?.info?.extensions?.find((e: any) => e.extension === "tokenMetadata");
+        if (ext?.state?.symbol) out.set(m, String(ext.state.symbol)); else needMpl.push(m);
+      });
+      if (needMpl.length) {
+        const pdas = needMpl.map((m) => PublicKey.findProgramAddressSync([new TextEncoder().encode("metadata"), MPL.toBytes(), new PublicKey(m).toBytes()], MPL)[0].toBase58());
+        const accs = await rpc("getMultipleAccounts", [pdas, { encoding: "base64" }]);
+        needMpl.forEach((m, j) => {
+          const a = accs?.value?.[j]; if (!a?.data?.[0]) return;
+          const sym = readMplSymbol(Uint8Array.from(atob(a.data[0]), (c) => c.charCodeAt(0)));
+          if (sym) out.set(m, sym);
+        });
+      }
+    } catch (e) { console.error("onchain meta", (e as Error).message); }
   }
   const missing = mints.filter((m) => !out.get(m));
   if (HELIUS && missing.length) {                                // rugged / unlisted tokens: on-chain metadata via Helius DAS
