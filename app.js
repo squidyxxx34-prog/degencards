@@ -354,21 +354,82 @@ function renderStatsRow(){
   ];
   document.getElementById('statsRow').innerHTML = rows.map(r=>`<div class="stat"><div class="l">${r.l}</div><div class="v ${r.cls}">${r.v}</div></div>`).join('');
 }
+/* ---------- levels ----------
+   XP rewards quality and consistency, not spam:
+   - base per trade (on-chain imports are worth more than manual entries), max 25 trades/day counted
+   - grade + rarity bonus, unique achievements (once each), trading days, best win streak, trade-count milestones
+   Curve: XP for LVL n -> n+1 = 100 * n^1.6 (lvl 10 ~ 13k XP total, lvl 20 ~ 87k, lvl 50 ~ 1M, cap 100). */
+const LVL_MAX = 100;
+const LVL_TITLES = [
+  [1,'PAPER HANDS'],[3,'FRESH APE'],[6,'DEGEN'],[10,'CHART READER'],[15,'SNIPER'],[20,'BAG HUNTER'],
+  [30,'WHALE WATCHER'],[40,'MARKET MAKER'],[50,'ALPHA'],[65,'LEGEND'],[80,'MYTHIC'],[100,'GOAT'],
+];
+const XP_GRADE = { S:40, A:25, B:12, C:5, D:1 };
+const XP_RARITY = { legendary:60, mythic:150 };
+const XP_MILESTONES = [[10,100],[50,300],[100,600],[250,1200],[500,2500],[1000,5000]];
+const xpForNext = n => Math.round(100 * Math.pow(n, 1.6));
+function levelTitle(l){ let t = LVL_TITLES[0][1]; for(const [min,name] of LVL_TITLES) if(l>=min) t = name; return t; }
+function nextTitle(l){ return LVL_TITLES.find(([min])=>min>l) || null; }
+function unlockedAchievementKeys(){
+  const set = new Set();
+  computedTrades().forEach(t=>t.meta.achievements.forEach(a=>set.add(a.key)));
+  ["goal_first_milestone","goal_crusher","goal_smasher","goal_legend"].forEach(k=>{ try{ if(localStorage.getItem(goalFlagKey(k))==='1') set.add(k); }catch(e){} });
+  return set;
+}
+function computeXP(){
+  const all = computedTrades().slice().sort((a,b)=>a.timestamp-b.timestamp);
+  const perDay = {}; let trades_ = 0, quality = 0;
+  const days = new Set();
+  let streak = 0, best = 0;
+  for(const t of all){
+    const day = new Date(t.timestamp).toISOString().slice(0,10);
+    days.add(day);
+    perDay[day] = (perDay[day]||0) + 1;
+    if(perDay[day] <= 25){
+      trades_ += t.source==='wallet' ? 15 : 6;
+      quality += (XP_GRADE[t.meta.grade]||0) + (XP_RARITY[t.meta.rarity]||0);
+    }
+    if(t.pnl > 0){ streak++; best = Math.max(best, streak); } else streak = 0;
+  }
+  const ach = unlockedAchievementKeys().size * 120;
+  const activity = days.size * 8;
+  const streakXp = best * 10;
+  const milestones = XP_MILESTONES.filter(([n])=>all.length>=n).reduce((s,[,x])=>s+x,0);
+  const total = trades_ + quality + ach + activity + streakXp + milestones;
+  return { total, parts:[
+    ['Trades logged', trades_], ['Grades & rarity', quality], ['Achievements', ach],
+    ['Trading days', activity], ['Best win streak', streakXp], ['Milestones', milestones],
+  ]};
+}
+function levelFromXP(xp){
+  let lvl = 1, left = xp;
+  while(lvl < LVL_MAX && left >= xpForNext(lvl)){ left -= xpForNext(lvl); lvl++; }
+  return { lvl, cur: left, need: lvl>=LVL_MAX ? 0 : xpForNext(lvl) };
+}
 function renderLevel(){
-  const xp = trades.length*20 + computedTrades().reduce((s,t)=>s+t.meta.achievements.length*50 + (t.meta.rarity==='legendary'||t.meta.rarity==='mythic'?250:0),0);
-  const lvl = Math.floor(xp/100)+1, cur = xp%100;
+  const { total, parts } = computeXP();
+  const { lvl, cur, need } = levelFromXP(total);
+  const title = levelTitle(lvl), nt = nextTitle(lvl);
+  const pct = need ? Math.min(100, cur/need*100) : 100;
   document.getElementById('lvlLabel').textContent = "LVL "+lvl;
+  document.getElementById('lvlTitle').textContent = title;
   document.getElementById('chipLvl').textContent = lvl;
-  document.getElementById('xpFill').style.width = cur+"%";
-  document.getElementById('xpLabel').textContent = cur+" / 100 XP";
+  document.getElementById('xpFill').style.width = pct.toFixed(1)+"%";
+  document.getElementById('xpLabel').textContent = need ? `${cur.toLocaleString('en-US')} / ${need.toLocaleString('en-US')} XP` : 'MAX LEVEL';
+  document.getElementById('lvlDetail').innerHTML = `
+    <div class="lvl-rows">${parts.map(([l,v])=>`<div><span>${l}</span><b>+${v.toLocaleString('en-US')}</b></div>`).join('')}
+      <div class="lvl-total"><span>Total</span><b>${total.toLocaleString('en-US')} XP</b></div></div>
+    <div class="lvl-hint">${nt ? `Next title: <b>${nt[1]}</b> at LVL ${nt[0]}` : 'Top title reached.'}
+      <br>On-chain imports earn more XP than manual entries. Only 25 trades per day count.</div>`;
+  // level-up toast (per account)
+  try{
+    const k = 'dc_lvl_'+(session?.user?.id||'anon'), prev = Number(localStorage.getItem(k)||0);
+    if(prev && lvl > prev) showToast(`LEVEL UP — LVL ${lvl} · ${title}`);
+    if(lvl !== prev) localStorage.setItem(k, String(lvl));
+  }catch(e){}
 }
 function renderAchievements(){
-  const all = computedTrades();
-  const unlocked = new Set();
-  all.forEach(t=>t.meta.achievements.forEach(a=>unlocked.add(a.key)));
-  ["goal_first_milestone","goal_crusher","goal_smasher","goal_legend"].forEach(k=>{
-    if(localStorage.getItem(goalFlagKey(k))==='1') unlocked.add(k);
-  });
+  const unlocked = unlockedAchievementKeys();
   document.getElementById('achCount').textContent = unlocked.size;
   document.getElementById('achTotal').textContent = ACH_CATALOG.length;
   document.getElementById('achAll').innerHTML = ACH_CATALOG.map(a=>{
@@ -725,6 +786,11 @@ async function connectProvider(key){
     await syncNow(false);
   } finally { importing = false; }
 }
+
+document.getElementById('levelBar').addEventListener('click', ()=>{
+  const d = document.getElementById('lvlDetail'), open = d.hidden;
+  d.hidden = !open; document.getElementById('levelBar').setAttribute('aria-expanded', String(open));
+});
 
 /* ---------- nav ---------- */
 document.getElementById('nav').addEventListener('click', e=>{

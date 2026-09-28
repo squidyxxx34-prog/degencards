@@ -82,11 +82,12 @@
       <h1>YOUR TRADES.<br><span class="g">TURNED INTO CARDS.</span></h1>
       <p>Every trade becomes a piece of your trading history.</p>
       <div class="stats" id="statsRow"></div>
-      <div class="levelbar">
-        <div class="lvl" id="lvlLabel">LVL 1</div>
+      <button class="levelbar" id="levelBar" type="button" aria-expanded="false" aria-controls="lvlDetail">
+        <div class="lvl-id"><div class="lvl" id="lvlLabel">LVL 1</div><div class="lvl-title" id="lvlTitle">PAPER HANDS</div></div>
         <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
         <div class="xp" id="xpLabel">0 / 100 XP</div>
-      </div>
+      </button>
+      <div class="lvl-detail" id="lvlDetail" hidden></div>
       <div class="goal-card" style="margin-top:16px;">
         <div class="goal-top">
           <div>

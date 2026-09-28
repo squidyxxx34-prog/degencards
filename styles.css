@@ -230,3 +230,13 @@ tr.is-sel{background:rgba(220,31,255,.08);}
 .bin-tk{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bin-date{color:var(--tx2);}
 .bin-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer;}
+.lvl-id{display:flex;flex-direction:column;gap:2px;min-width:92px;}
+.lvl-title{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--purple);white-space:nowrap;}
+.lvl-detail{margin-top:8px;padding:14px 16px;background:var(--surf);border:1px solid var(--border);border-radius:12px;font-family:var(--mono);font-size:12px;}
+.lvl-rows > div{display:flex;justify-content:space-between;padding:5px 0;color:var(--tx2);}
+.lvl-rows b{color:var(--tx);}
+.lvl-rows .lvl-total{border-top:1px solid var(--border);margin-top:4px;padding-top:9px;}
+.lvl-rows .lvl-total b{color:var(--gold);}
+.lvl-hint{margin-top:10px;font-size:11px;color:var(--tx2);line-height:1.5;}
+.lvl-hint b{color:var(--gold);}
