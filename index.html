@@ -247,6 +247,18 @@
   </div>
 </div>
 
+<div class="overlay" id="shareOverlay">
+  <div class="modal share-modal">
+    <button class="closebtn" data-close>×</button>
+    <h3>SHARE CARD</h3>
+    <div class="share-fmts"><button data-share-fmt="post" class="on">POST 4:5</button><button data-share-fmt="story">STORY 9:16</button></div>
+    <div class="share-stage"><canvas id="sharePreview"></canvas></div>
+    <label class="share-opt"><input type="checkbox" id="shareHideUsd"> Hide $ amount (show % only)</label>
+    <button class="share-btn" id="shareVideo">SHARE VIDEO</button>
+    <div class="share-row"><button class="hbtn" id="shareImage">SHARE IMAGE</button><button class="hbtn" id="shareCaption">COPY CAPTION</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- MOBILE NAV MENU -->
@@ -277,5 +289,6 @@
 </div>
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
 <script src="/app.js" defer></script>
+<script src="/share.js" defer></script>
 </body>
 </html>

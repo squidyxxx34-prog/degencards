@@ -1030,58 +1030,7 @@ function openDetail(id){
   detailOverlay.classList.add('show');
 }
 
-/* ---------- share ---------- */
-function drawCardCanvas(t, meta){
-  const c = document.createElement('canvas'); c.width=600; c.height=840;
-  const ctx = c.getContext('2d');
-  const win = t.pnl>=0;
-  const rarityHex = {common:'#ADADB8',uncommon:'#3DFFA0',rare:'#6EC0FF',epic:'#C09EFF',legendary:'#FFD35C',mythic:'#ff5adc'}[meta.rarity];
-  ctx.fillStyle = '#07070A'; ctx.fillRect(0,0,600,840);
-  const grad = ctx.createRadialGradient(180,80,20,180,80,500);
-  grad.addColorStop(0, meta.color.glow); grad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle = grad; ctx.fillRect(0,0,600,840);
-  ctx.strokeStyle = meta.color.border; ctx.lineWidth=4; ctx.strokeRect(10,10,580,820);
-  ctx.fillStyle = rarityHex; ctx.font='700 20px sans-serif'; ctx.textAlign='right';
-  ctx.fillText(meta.rarity.toUpperCase(), 560, 60);
-  ctx.textAlign='left'; ctx.fillStyle='#ADADB8'; ctx.font='600 20px monospace';
-  ctx.fillText('#'+String(t.tradeId).padStart(4,'0'), 40, 60);
-  ctx.textAlign='center'; ctx.fillStyle='#ADADB8'; ctx.font='700 32px sans-serif';
-  ctx.fillText(tk(t.ticker), 300, 160);
-  ctx.fillStyle = win?'#3DFFA0':'#FF5C6C'; ctx.font='900 84px monospace';
-  ctx.fillText(fmt.usd(t.pnl), 300, 280);
-  ctx.font='700 40px monospace';
-  ctx.fillText(fmt.pct(t.roi), 300, 335);
-  ctx.fillStyle='#ADADB8'; ctx.font='600 24px monospace';
-  ctx.fillText(fmt.hold(t.holdTime)+'  ·  Grade '+meta.grade, 300, 400);
-  if(meta.achievements.length){
-    ctx.font='600 22px sans-serif'; ctx.fillStyle='#FFFFFF';
-    ctx.fillText(meta.achievements.slice(0,3).map(a=>a.name).join('   ·   '), 300, 460);
-  }
-  ctx.fillStyle='#C09EFF'; ctx.font='900 34px sans-serif';
-  ctx.fillText('DEGENCARDS', 300, 780);
-  return c;
-}
-async function shareCard(t, meta){
-  const caption = `Look at my trade! ${tk(t.ticker)} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) — Collect yours on DEGENCARDS`;
-  const canvas = drawCardCanvas(t, meta);
-  canvas.toBlob(async (blob)=>{
-    if(!blob){ showToast("Couldn't build the image"); return; }
-    const safeName = (t.ticker.replace(/[^A-Za-z0-9_-]/g,'') || 'card');
-    const file = new File([blob], `degencards-${safeName}.png`, {type:'image/png'});
-    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file], text:caption}); return; }
-      catch(e){ if(e && e.name==='AbortError') return; }   // user closed the share sheet: do nothing
-    }
-    try{ await navigator.clipboard.writeText(caption); }catch(e){}
-    // desktop fallback: download the PNG
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = file.name; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    showToast('Caption copied · image downloaded');
-  }, 'image/png');
-}
+/* ---------- share: see share.js (cinematic post / story, image or video) ---------- */
 detailOverlay.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>detailOverlay.classList.remove('show')));
 [newOverlay,detailOverlay].forEach(ov=>ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('show'); }));
 
