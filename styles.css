@@ -269,7 +269,7 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .share-fmts button{flex:1;padding:9px;border-radius:8px;font:700 11px var(--mono);color:var(--tx2);background:none;}
 .share-fmts button.on{background:var(--purple);color:#000;}
 .share-stage{display:flex;justify-content:center;background:#050507;border-radius:12px;padding:10px;}
-.share-stage canvas{width:100%;max-width:300px;max-height:52vh;height:auto;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);}
+.share-stage canvas{display:block;width:auto;height:auto;max-width:min(100%,300px);max-height:52vh;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);}
 .share-opt{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-top:12px;cursor:pointer;}
 .share-opt input{width:16px;height:16px;accent-color:var(--purple);}
 .share-row{display:flex;gap:8px;margin-top:8px;}

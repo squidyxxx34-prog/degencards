@@ -304,7 +304,6 @@ function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
   const cv = document.getElementById('sharePreview'), F = FORMATS[state.fmt];
   const scale = Math.min(1, 360 / F.w); cv.width = F.w * scale * (window.devicePixelRatio > 1 ? 2 : 1) | 0; cv.height = F.h * (cv.width / F.w) | 0;
-  cv.style.aspectRatio = `${F.w} / ${F.h}`;
   const ctx = cv.getContext('2d'), k = cv.width / F.w;
   cancelAnimationFrame(state.anim);
   const t0 = performance.now(), loop = () => {                    // live animated preview, loops
@@ -356,8 +355,8 @@ window.shareCard = function(t, meta){
   sheet().classList.add('show');
   fontsReady().then(preview);
 };
-document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 'loading') init();
 let inited = false;
+document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 'loading') init();
 function init(){
   if(inited || !sheet()) return; inited = true;
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.addEventListener('click', () => { state.fmt = b.dataset.shareFmt; syncButtons(); preview(); }));
