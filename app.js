@@ -305,18 +305,26 @@ function parseChart(c){
   return (p.length || m.length) ? { p, m, w } : null;
 }
 const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFixed(1)+'M' : v>=1e3 ? (v/1e3).toFixed(1)+'K' : String(Math.round(v));
+/* B / S pinned at the top of the chart, a dashed drop line down to the exact fill point on the candles */
+const CH_TOP = 24;   // % of the chart height reserved for the markers
 function markersHtml(marks, X, Y, big){
   const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
-  const close = (a,b)=> Math.abs(a.x-b.x) < (big?5:9) && Math.abs(a.y-b.y) < 30;
-  return pos.map(m=>{
-    const clash = pos.some(o=>o!==m && o.kind!==m.kind && close(m,o));
-    return `<span class="mk mk-${m.kind}${clash ? (m.kind==='b'?' nudge-down':' nudge-up') : ''}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`;
-  }).join('');
+  // markers that would touch at the top: spread them sideways (B left, S right), the drop line stays on the real time
+  const gap = big ? 4.5 : 8;
+  const sorted = [...pos].sort((p,q)=>p.x-q.x || (p.kind==='b'?-1:1));
+  sorted.forEach((m,i)=>{ m.mx = m.x; if(i && m.mx - sorted[i-1].mx < gap) m.mx = sorted[i-1].mx + gap; });
+  const over = Math.max(0, sorted.length ? sorted[sorted.length-1].mx - 100 : 0);
+  sorted.forEach(m=>{ m.mx = Math.max(0, m.mx - over); });
+  const mkPx = big ? 20 : 16, hPx = big ? 170 : 66, mb = (mkPx / hPx) * 100;          // marker bottom, in % of height
+  const lines = pos.map(m=>`<line x1="${m.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${m.x.toFixed(2)}" y2="${m.y.toFixed(2)}" stroke="${m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
+  return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>` + pos.map(m=>`
+    <span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%"></span>
+    <span class="mk mk-top mk-${m.kind}" style="left:${m.mx.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */
 function miniChart(t, big){
-  const h = big ? 140 : 50;
+  const h = big ? 170 : 66;
   const ch = t.chart;
   if(ch && ch.v === 2){
     const cs = ch.c, iv = ch.i;
@@ -326,7 +334,7 @@ function miniChart(t, big){
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
-    const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
+    const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
     const bw = Math.max(0.35, (iv/(x1-x0))*100*0.7);
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
@@ -336,7 +344,7 @@ function miniChart(t, big){
     }).join('');
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
     const marks = ch.m.map(m=>[m[0], m[1], ch.src==='pump' && m[2] > 0 ? m[2] : at(m[0])]);   // pump: exact fill price
-    const labels = big ? `<span class="ch-lbl top">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
+    const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
   }
@@ -347,7 +355,7 @@ function miniChart(t, big){
   let y0 = Math.min(p[0][1],p[1][1]), y1 = Math.max(p[0][1],p[1][1]);
   if(y1 - y0 < 1e-9){ y0 = y0*0.9 - 1; y1 = y1*1.1 + 1; }
   const pad = (y1-y0)*0.25; y0 -= pad; y1 += pad;
-  const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
+  const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
   const c = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
   return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
     <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M${X(p[0][0]).toFixed(2)},${Y(p[0][1]).toFixed(2)} L${X(p[1][0]).toFixed(2)},${Y(p[1][1]).toFixed(2)}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" opacity=".5"/></svg>

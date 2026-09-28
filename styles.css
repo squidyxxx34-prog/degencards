@@ -254,3 +254,12 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .ch-lbl{position:absolute;left:0;font:600 9px/1 var(--mono);color:var(--tx2);background:rgba(10,10,15,.6);padding:1px 3px;border-radius:3px;}
 .ch-lbl.top{top:0;}
 .ch-lbl.bot{bottom:0;}
+/* markers on top + dashed drop lines */
+.mk.mk-top{top:0;transform:translate(-50%,0);width:16px;height:16px;font-size:9px;}
+.chartbox.big .mk.mk-top{width:20px;height:20px;font-size:10px;}
+.mk-line{position:absolute;width:0;border-left:1.5px dashed;transform:translateX(-50%);opacity:.9;pointer-events:none;}
+.mk-line-b{border-color:#18c964;}
+.mk-line-s{border-color:#ff3b4e;}
+.mk-dot{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 1.5px var(--surf);z-index:1;}
+.chartbox.big .mk-dot{width:9px;height:9px;}
+.chartbox svg.mk-lines{z-index:1;pointer-events:none;}
