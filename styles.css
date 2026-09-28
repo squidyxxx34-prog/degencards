@@ -207,3 +207,5 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
 .acc-form{display:flex;flex-direction:column;gap:10px;margin-top:10px;}
 .acc-form input{width:100%;background:var(--surf2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;color:var(--tx);font-size:14px;}
 .acc-form button{background:linear-gradient(90deg,var(--purple),var(--gold));color:#000;font-weight:800;padding:12px;border-radius:9px;font-size:13px;}
+.btn-unlink{background:none;border:1px solid var(--border);border-radius:8px;padding:7px 8px;color:var(--tx2);flex-shrink:0;}
+.sync-err{color:#ff4d5e;}

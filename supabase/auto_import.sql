@@ -1,0 +1,4 @@
+-- DEGENCARDS — auto-import (appliqué en prod le 2026-09-28 : migrations auto_import_wallets + schedule_sync_trades)
+-- trades.ext_id/mint (dedupe), connected_accounts.last_sig/last_synced_at/sync_error/sync_state (server-owned, column grants),
+-- trigger assign_trade_id autorise service_role, vault secret 'sync_cron_key' + verify_sync_cron_key(),
+-- pg_cron 'sync-trades' toutes les 10 min -> net.http_post vers l'edge function avec x-cron-key.

@@ -17,10 +17,11 @@ DEGENCARDS : chaque trade crypto devient une carte collectible (rareté, grade, 
 - Tester avant de pousser (jsdom smoke test) : plusieurs régressions passées venaient de listeners perdus.
 
 ## Fonctions en place
-Home / Collection / History / Achievements / Stats / Account ; hamburger mobile (overlay) ; bouton + NEW TRADE flottant en bas ; saisie rapide (entry/exit MC + invested, ROI/PnL auto, hold time en chips) ; partage de carte (PNG canvas + "Look at my trade!") ; 29 achievements dont 4 de goal ; goal mensuel (éditable sur Stats, lecture seule sur Home) avec confettis + popup bottom-sheet ; connexion : email + mot de passe (+ reset), Google, wallet tracking par clé publique (anonyme), hCaptcha visible ; import wallet Solana réel (30 derniers jours, positions fermées = balance 0) ; couleur des cartes selon PnL.
+Home / Collection / History / Achievements / Stats / Account ; hamburger mobile (overlay) ; bouton + NEW TRADE flottant en bas ; saisie rapide (entry/exit MC + invested, ROI/PnL auto, hold time en chips) ; partage de carte (PNG canvas + "Look at my trade!") ; 29 achievements dont 4 de goal ; goal mensuel (éditable sur Stats, lecture seule sur Home) avec confettis + popup bottom-sheet ; connexion : email + mot de passe (+ reset), Google, wallet tracking par clé publique (anonyme), hCaptcha visible ; auto-import serveur (edge function `sync-trades`, cron 10 min + bouton SYNC) depuis les adresses Solana connectées (Pump.fun, Fomo, autre wallet) : achats SOL/USDC/USDT → reventes, 30 jours de backfill, seules les positions fermées deviennent des cartes ; couleur des cartes selon PnL.
 
 ## Limites connues
-- Pump.fun et Fomo : pas d'API publique. On lie juste le handle, aucun trade fabriqué.
+- Pump.fun et Fomo : pas d'API, mais leurs trades sont on-chain → on lit l'adresse du wallet. Ventes d'un bag acheté avant le suivi et swaps token↔token ignorés.
+- Sans `HELIUS_API_KEY` (secret edge function) : RPC public, lent (120 tx / wallet / run) et tickers des tokens rugués illisibles.
 - Positions dont le token account a été fermé : indétectables.
 - "Iconly Pro" n'est pas utilisable (payant) : icônes maison.
 
@@ -38,3 +39,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 ## Sécurité — rappel
 - Si `vendor/supabase.js` change : recalculer le hash SRI dans index.html (`openssl dgst -sha384 -binary vendor/supabase.js | openssl base64 -A`).
 - Nouvelle table = RLS + grants minimaux + checks, puis `get_advisors`.
+
+## Auto-import
+- Code : `supabase/functions/sync-trades/index.ts` (déployé via le connecteur, verify_jwt=false : auth maison = JWT user ou header x-cron-key vérifié en DB).
+- Cron : job pg_cron `sync-trades` (*/10). Secret cron dans Vault (`sync_cron_key`).
+- Redéployer après modif du fichier.

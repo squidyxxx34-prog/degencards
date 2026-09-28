@@ -13,6 +13,7 @@ Static site (no build): `index.html` + `styles.css` + `app.js`. supabase-js is *
 - **Least privilege (v2)**: `authenticated` only gets the verbs the app uses (no UPDATE on trades, no TRUNCATE anywhere), trade numbering / `created_at` / `updated_at` / `connected_at` are server-owned, 120 trades/min + 5000 trades per user, all CHECK constraints validated, trigger functions are SECURITY INVOKER, GraphQL API removed. See `supabase/security_hardening_v2.sql`.
 - **No third party at runtime** except Supabase, Solana RPC, CoinGecko and hCaptcha (invisible, required on email / anonymous / wallet sign-in): fonts are self-hosted (`fonts/`), supabase-js pinned with SRI.
 - **Not deployed**: `.vercelignore` keeps README/HANDOFF/SQL off the public site.
+- **Auto-import**: Edge Function `sync-trades` (server-side, cron every 10 min) reads connected Solana addresses and turns closed positions into cards. Users can only write `user_id/provider/handle` on `connected_accounts`; sync columns are server-owned.
 - The Supabase anon key in `app.js` is public by design; RLS is the protection.
 
 ## One-time setup

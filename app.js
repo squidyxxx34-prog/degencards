@@ -8,7 +8,6 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 const SOURCES = ['manual','pumpfun','fomo','wallet'];
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;                 // Solana address shape
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const HANDLE_RE = /^[A-Za-z0-9_.@-]{2,40}$/;                  // pump.fun / fomo handles
 function cleanTicker(s){ return String(s||'').replace(/[\u0000-\u001f\u007f<>&"'`\\]/g,'').trim().slice(0,24); }
 function num(v, min, max, dflt){ v = Number(v); if(!Number.isFinite(v)) return dflt||0; return Math.min(max, Math.max(min, v)); }
 const REDIRECT_URL = location.origin + location.pathname;      // never echo query/hash back to the auth server
@@ -100,9 +99,9 @@ function icon(name, size, color){
   return `<svg width="${size||18}" height="${size||18}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-4px;flex-shrink:0;"><path d="${d}"/></svg>`;
 }
 const PROVIDERS = [
-  {key:"pumpfun", name:"Pump.fun", sub:"Wallet activity on Pump.fun"},
-  {key:"fomo", name:"Fomo", sub:"Fomo.so trade feed"},
-  {key:"wallet", name:"Wallet tracking", sub:"Any Solana address"},
+  {key:"pumpfun", name:"Pump.fun", sub:"Paste your Pump.fun wallet address"},
+  {key:"fomo", name:"Fomo", sub:"Paste your Fomo wallet address"},
+  {key:"wallet", name:"Other Solana wallet", sub:"Phantom, Solflare, Backpack..."},
 ];
 
 /* ---------- data layer (Supabase) ---------- */
@@ -137,14 +136,23 @@ const store = {
     return true;
   },
   async getAccounts(){
-    const {data,error} = await sb.from('connected_accounts').select('provider,handle');
+    const {data,error} = await sb.from('connected_accounts').select('provider,handle,last_synced_at,sync_error');
     if(error){ console.error('accounts load failed'); return []; }
-    return data.filter(a=>['pumpfun','fomo','wallet'].includes(a.provider)).map(a=>({provider:a.provider, handle:String(a.handle).slice(0,120)}));
+    return data.filter(a=>['pumpfun','fomo','wallet'].includes(a.provider)).map(a=>({
+      provider:a.provider, handle:String(a.handle).slice(0,120),
+      syncedAt: a.last_synced_at ? Date.parse(a.last_synced_at) : 0, error: a.sync_error ? String(a.sync_error).slice(0,120) : ''
+    }));
   },
   async connectAccount(provider, handle){
-    const {error} = await sb.from('connected_accounts').upsert({user_id:session.user.id, provider, handle:String(handle).slice(0,120)}, {onConflict:'user_id,provider', ignoreDuplicates:true});
-    if(error) console.error('account link failed');
+    const {error} = await sb.from('connected_accounts').upsert({user_id:session.user.id, provider, handle:String(handle).slice(0,120)}, {onConflict:'user_id,provider'});
+    if(error){ console.error('account link failed'); return false; }
+    return true;
   },
+  async disconnectAccount(provider){
+    const {error} = await sb.from('connected_accounts').delete().eq('provider', provider);
+    return !error;
+  },
+
   async getGoal(){
     const {data} = await sb.from('goals').select('target_pnl').eq('user_id', session.user.id).maybeSingle();
     return data ? num(data.target_pnl,0,1e9) : 0;
@@ -499,15 +507,26 @@ function renderAccount(){
   document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
+    let status = p.sub;
+    if(acc){
+      const addr = acc.handle.length>20 ? acc.handle.slice(0,6)+'…'+acc.handle.slice(-4) : acc.handle;
+      const st = acc.error ? `<span class="sync-err">Sync issue — retrying</span>`
+        : acc.syncedAt ? `synced ${ago(acc.syncedAt)}` : 'first sync in progress…';
+      status = `${esc(addr)} · ${st}`;
+    }
     return `<div class="provider-row">
-      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${acc? esc(acc.handle.length>20 ? acc.handle.slice(0,6)+'…'+acc.handle.slice(-4) : acc.handle) : p.sub}</div></div>
-      <button class="btn-connect ${acc?'connected':''}" data-p="${p.key}">${acc?'CONNECTED':'CONNECT'}</button>
+      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${status}</div></div>
+      ${acc ? `<button class="btn-connect connected" data-sync="${p.key}">SYNC</button><button class="btn-unlink" data-unlink="${p.key}" aria-label="Disconnect">${icon('x',14)}</button>`
+            : `<button class="btn-connect" data-p="${p.key}">CONNECT</button>`}
     </div>`;
   }).join('');
-  document.getElementById('providerList').querySelectorAll('.btn-connect').forEach(b=>{
-    if(b.classList.contains('connected')) return;
-    b.addEventListener('click', ()=>connectProvider(b.dataset.p));
-  });
+  const list = document.getElementById('providerList');
+  list.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click', ()=>connectProvider(b.dataset.p)));
+  list.querySelectorAll('[data-sync]').forEach(b=>b.addEventListener('click', ()=>syncNow(true)));
+  list.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!confirm('Disconnect this wallet? Imported cards stay.')) return;
+    await store.disconnectAccount(b.dataset.unlink); await reload();
+  }));
 }
 function renderHome(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
@@ -555,146 +574,52 @@ function renderHistory(){
 }
 function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); }
 
-/* ---------- real on-chain import (Solana wallet) ----------
-   pump.fun / fomo have no public API, so those two stay mocked below.
-   'wallet' is real: reads the connected wallet's SPL token accounts,
-   finds ones now at zero balance (= fully exited position), walks that
-   token account's own tx history to sum actual SOL in/out, and turns
-   any position where SOL actually went out then came back into a
-   closed trade. Accounts closed/reclaimed by the wallet (no leftover
-   0-balance account) can't be detected this way — Solana gives no
-   other free signal for that. */
-const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
-const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-let solPriceCache = null;
-async function rpc(method, params){
-  const r = await fetch(SOLANA_RPC, { method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jsonrpc:'2.0', id:1, method, params }) });
-  const j = await r.json();
-  if(j.error) throw new Error(j.error.message);
-  return j.result;
+/* ---------- auto-import (server side) ----------
+   The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
+   history, rebuilds positions and turns every fully closed one into a card.
+   It runs every 10 minutes by itself (pg_cron); the app also nudges it on open
+   and when the user taps SYNC. Nothing is fabricated: open positions are skipped. */
+function ago(ts){
+  const s = Math.max(0, Math.round((Date.now()-ts)/1000));
+  if(s < 60) return 'just now'; if(s < 3600) return Math.round(s/60)+' min ago';
+  if(s < 86400) return Math.round(s/3600)+' h ago'; return Math.round(s/86400)+' d ago';
 }
-async function rpcBatch(reqs){
-  const body = reqs.map((r,i)=>({ jsonrpc:'2.0', id:i, method:r.method, params:r.params }));
-  const res = await fetch(SOLANA_RPC, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  const arr = await res.json();
-  arr.sort((a,b)=>a.id-b.id);
-  return arr.map(x=> x.error ? null : x.result);
-}
-async function getSolPriceUsd(){
-  if(solPriceCache) return solPriceCache;
+let syncing = false;
+async function syncNow(manual){
+  if(syncing || !session || !connectedAccounts.length) return;
+  syncing = true;
+  if(manual) showToast('Syncing your wallets...');
   try{
-    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-    const j = await r.json();
-    solPriceCache = j.solana.usd;
-  }catch(e){ solPriceCache = 150; } // fallback if price API is unreachable
-  return solPriceCache;
+    const { data, error } = await sb.functions.invoke('sync-trades', { body:{} });
+    if(error) throw error;
+    const before = trades.length;
+    await reload();
+    const n = Number(data?.imported)||0;
+    if(n) showToast(`${n} new trade card${n>1?'s':''} imported`);
+    else if(manual) showToast(data?.pending ? 'Still catching up on history — more cards soon' : (data?.synced ? 'Up to date' : 'Synced less than a minute ago'));
+    if(data?.pending && before !== trades.length) setTimeout(()=>syncNow(false), 15000);
+  }catch(e){ if(manual) showToast('Sync failed — it will retry automatically'); }
+  finally{ syncing = false; }
 }
-/* Pulls the wallet's last 30 days of activity in one shot, groups every
-   SOL <-> SPL-token balance change by mint, then only turns a mint into a
-   card if the wallet is now sitting at zero of it (= closed). Still-open
-   positions are left out rather than given a fake exit price. */
-async function detectClosedTradesFromWallet(walletAddr, toast, existingTickers){
-  toast("Fetching last 30 days of activity...");
-  const cutoff = Date.now() - 30*24*3600*1000;
-  let sigs = await rpc('getSignaturesForAddress', [walletAddr, {limit:1000}]);
-  sigs = (sigs||[]).filter(s => !s.blockTime || s.blockTime*1000 >= cutoff);
-  const CAP = 80; // stay well under public-RPC rate limits
-  const truncated = sigs.length > CAP;
-  sigs = sigs.slice(0, CAP);
-  if(sigs.length===0) return { trades:[], truncated:false };
-
-  toast(`Parsing ${sigs.length} transactions from the last 30 days...`);
-  const mintData = {}; // mint -> {invested, returned, firstTs, lastTs}
-  const BATCH = 15;
-  for(let i=0;i<sigs.length;i+=BATCH){
-    const chunk = sigs.slice(i,i+BATCH);
-    const results = await rpcBatch(chunk.map(s=>({ method:'getParsedTransaction', params:[s.signature, {maxSupportedTransactionVersion:0, encoding:'jsonParsed'}] })));
-    results.forEach((tx,j)=>{
-      if(!tx || !tx.meta) return;
-      const keys = tx.transaction.message.accountKeys.map(k=> typeof k==='string' ? k : k.pubkey);
-      const idx = keys.indexOf(walletAddr);
-      if(idx===-1) return;
-      const solDelta = (tx.meta.postBalances[idx]-tx.meta.preBalances[idx]) / 1e9;
-      const ts = chunk[j].blockTime ? chunk[j].blockTime*1000 : Date.now();
-      const mints = new Set([...(tx.meta.preTokenBalances||[]), ...(tx.meta.postTokenBalances||[])].filter(b=>b.owner===walletAddr).map(b=>b.mint));
-      mints.forEach(mint=>{
-        const pre = (tx.meta.preTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
-        const post = (tx.meta.postTokenBalances||[]).find(b=>b.mint===mint && b.owner===walletAddr);
-        const tokenDelta = (post?.uiTokenAmount?.uiAmount||0) - (pre?.uiTokenAmount?.uiAmount||0);
-        if(tokenDelta===0) return;
-        if(!mintData[mint]) mintData[mint] = { invested:0, returned:0, firstTs:ts, lastTs:ts };
-        const d = mintData[mint];
-        d.firstTs = Math.min(d.firstTs, ts); d.lastTs = Math.max(d.lastTs, ts);
-        if(tokenDelta>0) d.invested += Math.max(0,-solDelta);
-        else d.returned += Math.max(0, solDelta);
-      });
-    });
-  }
-  const mints = Object.keys(mintData);
-  if(mints.length===0) return { trades:[], truncated };
-
-  toast("Checking current balances...");
-  const accounts = await rpc('getTokenAccountsByOwner', [walletAddr, {programId: TOKEN_PROGRAM_ID}, {encoding:'jsonParsed'}]);
-  const currentBalance = {};
-  (accounts?.value||[]).forEach(a=>{
-    const info = a.account.data.parsed.info;
-    currentBalance[info.mint] = (currentBalance[info.mint]||0) + (info.tokenAmount.uiAmount||0);
-  });
-  const solPrice = await getSolPriceUsd();
-  const trades = [];
-  for(const mint of mints){
-    const d = mintData[mint];
-    if(d.invested <= 0) continue;
-    const bal = currentBalance[mint] ?? 0; // no account left = also closed
-    if(bal > 0) continue; // still open — no fabricated exit price
-    const label = mint.slice(0,4).toUpperCase()+'…'+mint.slice(-4);
-    if(existingTickers.has(label)) continue; // don't re-import the same closed position twice
-    const pnlSol = d.returned - d.invested;
-    trades.push({
-      ticker: label,
-      pnl: Math.round(pnlSol*solPrice*100)/100,
-      roi: Math.round((pnlSol/d.invested)*1000)/10,
-      entryMc: Math.round(d.invested*solPrice),
-      exitMc: Math.round(d.returned*solPrice),
-      holdTime: Math.max(1, Math.round((d.lastTs-d.firstTs)/1000)),
-      timestamp: d.lastTs,
-      source: 'wallet'
-    });
-  }
-  return { trades, truncated };
+function maybeAutoSync(){
+  const stale = connectedAccounts.some(a=>!a.syncedAt || Date.now()-a.syncedAt > 10*60*1000);
+  if(stale) syncNow(false);
 }
 
 let importing = false;
 async function connectProvider(key){
   if(importing) return;
   const p = PROVIDERS.find(x=>x.key===key);
-  const raw = prompt(`${p.name} — enter your ${key==='wallet'?'Solana wallet address':'handle'}:`);
+  const raw = prompt(`${p.name} — paste the PUBLIC address of your ${key==='wallet'?'Solana wallet':p.name+' wallet'}.\nNever your seed phrase or private key.`);
   if(!raw) return;
   const handle = raw.trim();
-  if(key==='wallet' ? !B58.test(handle) : !HANDLE_RE.test(handle)){
-    showToast(key==='wallet' ? "That doesn't look like a Solana address" : "Invalid handle");
-    return;
-  }
+  if(!B58.test(handle)){ showToast("That doesn't look like a Solana address"); return; }
   importing = true;
   try{
-    await store.connectAccount(key, handle);
-    if(key === 'wallet'){
-      try{
-        const existingTickers = new Set(trades.filter(t=>t.source==='wallet').map(t=>t.ticker));
-        const { trades: found, truncated } = await detectClosedTradesFromWallet(handle, showToast, existingTickers);
-        let saved = 0;
-        for(const t of found){ if(await store.saveTrade(t)) saved++; }
-        await reload();
-        showToast(saved ? `${saved} closed position(s) imported from the last 30 days${truncated?' (older activity not scanned)':''}` : "No new closed positions in the last 30 days");
-      }catch(e){
-        showToast("On-chain scan failed — RPC may be rate-limited, try again shortly");
-      }
-      return;
-    }
-    // pump.fun / fomo expose no public API: we link the handle but never fabricate trades
+    if(!await store.connectAccount(key, handle)){ showToast('Could not connect — try again'); return; }
     await reload();
-    showToast(`${p.name} linked — live import isn't available yet. Use manual entry or wallet tracking.`);
+    showToast('Connected — importing the last 30 days...');
+    await syncNow(false);
   } finally { importing = false; }
 }
 
@@ -955,6 +880,7 @@ async function loginWithPubkey(pubkey, note){
   await sb.from('connected_accounts').upsert({ user_id: data.user.id, provider:'wallet', handle: pubkey }, { onConflict:'user_id,provider' });
   setNote(note, 'Wallet connected.', 'ok');
   await reload();
+  syncNow(false);
 }
 document.getElementById('btnPubkey').addEventListener('click', async ()=>{
   const pk = document.getElementById('authPubkey').value.trim();
@@ -975,6 +901,8 @@ async function showApp(){
   document.getElementById('landing').hidden = true;
   document.getElementById('app').hidden = false;
   await reload();
+  maybeAutoSync();
+  setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 5*60*1000);
 }
 function showLanding(){
   document.getElementById('landing').hidden = false;
