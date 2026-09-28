@@ -808,6 +808,20 @@ function showToast(msg){
   setTimeout(()=>el.classList.remove('show'), 2400);
 }
 
+/* ---------- hCaptcha (required by Supabase Auth) ---------- */
+const HCAPTCHA_SITEKEY = 'e5784d60-9d86-44f4-80b2-c7dcc64e3258';
+let hcWidget = null;
+async function getCaptchaToken(){
+  for(let i=0; i<80 && !window.hcaptcha?.render; i++) await new Promise(r=>setTimeout(r,100));
+  if(!window.hcaptcha?.render) throw new Error('Captcha failed to load — refresh the page.');
+  if(hcWidget === null) hcWidget = window.hcaptcha.render('hcaptchaBox', { sitekey: HCAPTCHA_SITEKEY, size: 'invisible' });
+  else window.hcaptcha.reset(hcWidget);                 // tokens are single-use
+  try{
+    const { response } = await window.hcaptcha.execute(hcWidget, { async: true });
+    return response;
+  }catch(e){ throw new Error('Captcha not completed.'); }
+}
+
 /* ---------- auth ---------- */
 let magicLinkCooldownUntil = 0;
 document.getElementById('btnMagicLink').addEventListener('click', async ()=>{
@@ -817,7 +831,9 @@ document.getElementById('btnMagicLink').addEventListener('click', async ()=>{
   if(Date.now() < magicLinkCooldownUntil){ note.textContent = "Please wait a few seconds before requesting another link."; return; }
   magicLinkCooldownUntil = Date.now() + 30000;
   note.textContent = "Sending...";
-  const {error} = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: REDIRECT_URL } });
+  let captchaToken;
+  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; magicLinkCooldownUntil = 0; return; }
+  const {error} = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: REDIRECT_URL, captchaToken } });
   note.textContent = error ? "Error — try again." : "Check your inbox for the link.";
 });
 document.getElementById('btnGoogle').addEventListener('click', async ()=>{
@@ -831,7 +847,9 @@ function detectWallet(){
   return null;
 }
 async function loginWithPubkey(pubkey, note){
-  const { data, error } = await sb.auth.signInAnonymously();
+  let captchaToken;
+  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
+  const { data, error } = await sb.auth.signInAnonymously({ options:{ captchaToken } });
   if(error){ note.textContent = "Auth error — try again."; return; }
   await sb.auth.updateUser({ data: { wallet_address: pubkey } });
   await sb.from('connected_accounts').upsert({ user_id: data.user.id, provider:'wallet', handle: pubkey }, { onConflict:'user_id,provider' });
@@ -841,15 +859,19 @@ async function loginWithPubkey(pubkey, note){
 document.getElementById('btnWallet').addEventListener('click', async ()=>{
   const note = document.getElementById('authNote');
   if(!detectWallet()){ note.textContent = "No Solana wallet found — install Phantom, Solflare or Backpack."; return; }
+  let captchaToken;
+  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
   note.textContent = "Confirm in your wallet...";
-  const { error } = await sb.auth.signInWithWeb3({ chain:'solana', statement:'Sign in to DEGENCARDS' });
+  const { error } = await sb.auth.signInWithWeb3({ chain:'solana', statement:'Sign in to DEGENCARDS', options:{ captchaToken } });
   note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
 });
 document.getElementById('btnWalletEth').addEventListener('click', async ()=>{
   const note = document.getElementById('authNote');
   if(!window.ethereum){ note.textContent = "No Ethereum wallet found — install MetaMask or similar."; return; }
+  let captchaToken;
+  try{ captchaToken = await getCaptchaToken(); }catch(e){ note.textContent = e.message; return; }
   note.textContent = "Confirm in your wallet...";
-  const { error } = await sb.auth.signInWithWeb3({ chain:'ethereum', statement:'Sign in to DEGENCARDS' });
+  const { error } = await sb.auth.signInWithWeb3({ chain:'ethereum', statement:'Sign in to DEGENCARDS', options:{ captchaToken } });
   note.textContent = error ? (error.message || "Sign-in failed.") : "Connected.";
 });
 document.getElementById('btnPubkey').addEventListener('click', async ()=>{

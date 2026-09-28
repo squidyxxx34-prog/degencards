@@ -11,7 +11,7 @@ Static site (no build): `index.html` + `styles.css` + `app.js`. supabase-js is *
 - **Inputs**: all numbers clamped client-side and re-validated by DB CHECK constraints; wallet addresses must be valid base58; handles are allow-listed.
 - **Data isolation**: RLS on every table (`authenticated` only, `auth.uid() = user_id`), anon role has no table privileges, trade numbering + per-user cap enforced by a DB trigger.
 - **Least privilege (v2)**: `authenticated` only gets the verbs the app uses (no UPDATE on trades, no TRUNCATE anywhere), trade numbering / `created_at` / `updated_at` / `connected_at` are server-owned, 120 trades/min + 5000 trades per user, all CHECK constraints validated, trigger functions are SECURITY INVOKER, GraphQL API removed. See `supabase/security_hardening_v2.sql`.
-- **No third party at runtime** except Supabase, Solana RPC and CoinGecko: fonts are self-hosted (`fonts/`), supabase-js pinned with SRI.
+- **No third party at runtime** except Supabase, Solana RPC, CoinGecko and hCaptcha (invisible, required on email / anonymous / wallet sign-in): fonts are self-hosted (`fonts/`), supabase-js pinned with SRI.
 - **Not deployed**: `.vercelignore` keeps README/HANDOFF/SQL off the public site.
 - The Supabase anon key in `app.js` is public by design; RLS is the protection.
 

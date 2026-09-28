@@ -28,7 +28,7 @@ Home / Collection / History / Achievements / Stats / Account ; hamburger mobile 
 1. ~~SQL de durcissement~~ : fait (v1 + v2 appliqués via le connecteur Supabase le 2026-09-28).
 2. Auth > URL Configuration : Site URL = URL Vercel, seule redirection autorisée.
 3. Auth > Providers : Web3 Wallet (Solana + Ethereum), Google (Client ID/Secret), Anonymous sign-ins.
-4. Auth > Attack Protection : captcha.
+4. ~~Captcha~~ : hCaptcha activé et branché (site key dans app.js).
 5. ~~Faux trades PUMPFUN~~ : aucun en base.
 6. Auth > Rate Limits : baisser les envois d'email / sign-ins anonymes ; Auth > Sessions : durée max raisonnable.
 
