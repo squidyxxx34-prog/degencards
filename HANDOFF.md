@@ -47,3 +47,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Code : `supabase/functions/sync-trades/index.ts` (déployé via le connecteur, verify_jwt=false : auth maison = JWT user ou header x-cron-key vérifié en DB).
 - Cron : job pg_cron `sync-trades` (*/10). Secret cron dans Vault (`sync_cron_key`).
 - Redéployer après modif du fichier.
+
+## Courbes réelles sur les cartes
+- Extrait réel du market cap : 2 min avant le 1er achat → 2 min après la dernière vente, marqueurs B (vert) / S (rouge) posés sur la courbe à chaque fill.
+- Bougies minute GeckoTerminal (gratuit ; la granularité seconde est payante). GeckoTerminal bloque les IP cloud → le graphe est construit dans le navigateur de l'utilisateur (`buildChartsInBrowser`, 1 req / 2,2 s) puis mis en cache dans `trades.chart` (grant update(chart) own rows).
+- Les fills (`trades.legs`) sont enregistrés par `sync-trades` à l'import. Trades manuels / sans données : ligne pointillée entrée → sortie.

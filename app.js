@@ -115,7 +115,8 @@ const store = {
   async getTrades(){
     const {data,error} = await sb.from('trades').select('*').is('deleted_at', null).order('timestamp_ms',{ascending:false}).limit(2000);
     if(error){ console.error('trades load failed'); return []; }
-    return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual' }));
+    return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual', chart: parseChart(r.chart),
+      mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
   },
   async getDeleted(){
     const {data,error} = await sb.from('trades').select('id,ticker,pnl,roi,timestamp_ms,source,deleted_at')
@@ -288,12 +289,50 @@ function generateTradeCard(trade, allTrades){
   const rarity = computeRarity(trade, ctx);
   return { rarity, grade:computeGrade(trade,rarity), achievements:computeAchievements(trade,ctx), vibe:vibeFor(trade), color:pnlColor(trade) };
 }
-function miniChart(pnl){
-  const up = pnl>=0;
-  const pts = up ? [40,32,34,20,24,8] : [10,16,12,26,22,34];
-  const path = pts.map((y,i)=>`${i===0?'M':'L'}${i*40},${y}`).join(' ');
-  const c = up ? 'var(--green)' : 'var(--red)';
-  return `<svg width="100%" height="42" viewBox="0 0 200 42" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/></svg>`;
+/* real price extract: market cap from 2 min before the first fill to 2 min after the last one.
+   Points come from the server (GeckoTerminal minute candles); B / S markers sit on the curve at each fill. */
+function parseChart(c){
+  if(!c || typeof c!=='object') return null;
+  const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
+  const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
+  const m = Array.isArray(c.m) ? c.m.filter(x=>Array.isArray(x) && okN(+x[0]) && (x[1]==='b'||x[1]==='s')).map(x=>[+x[0], x[1], okN(+x[2]) ? +x[2] : 0]).slice(0,20) : [];
+  const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
+  return (p.length || m.length) ? { p, m, w } : null;
+}
+function curveAt(p, t){
+  if(!p.length) return null;
+  if(t <= p[0][0]) return p[0][1];
+  for(let i=1;i<p.length;i++) if(t <= p[i][0]){ const [a,va]=p[i-1],[b,vb]=p[i]; return b===a ? vb : va + (vb-va)*(t-a)/(b-a); }
+  return p[p.length-1][1];
+}
+function miniChart(t, big){
+  const h = big ? 120 : 46;
+  const end = t.timestamp, start = end - (t.holdTime||0)*1000;
+  let p = t.chart?.p || [], marks = t.chart?.m?.length ? t.chart.m : [[start,'b',t.entryMc],[end,'s',t.exitMc]];
+  const real = p.length >= 2;
+  if(!real) p = [[start, t.entryMc||0], [end, t.exitMc||0]];          // no market data yet: entry -> exit only
+  const ts = [...p.map(x=>x[0]), ...marks.map(x=>x[0])];
+  let x0 = t.chart?.w?.[0] ?? Math.min(...ts), x1 = t.chart?.w?.[1] ?? Math.max(...ts);
+  if(!real){ const pad = Math.max(1000,(x1-x0)*0.12); x0 -= pad; x1 += pad; }
+  if(x1 <= x0) x1 = x0 + 1;
+  const pts = marks.map(m=>[m[0], m[1], real ? curveAt(p, m[0]) : (m[2]||curveAt(p,m[0]))]);
+  const ys = [...p.map(x=>x[1]), ...pts.map(x=>x[2])];
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if(y1 - y0 < 1e-9){ y0 = y0*0.9 - 1; y1 = y1*1.1 + 1; }
+  const padY = (y1-y0)*0.18; y0 -= padY; y1 += padY;
+  const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
+  const path = p.map((q,i)=>`${i?'L':'M'}${X(q[0]).toFixed(2)},${Y(q[1]).toFixed(2)}`).join(' ');
+  const c = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
+  const pos = pts.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
+  const close = (a,b)=> Math.abs(a.x-b.x) < (big?5:9) && Math.abs(a.y-b.y) < 30;   // B and S would overlap
+  const mk = pos.map(m=>{
+    const clash = pos.some(o=>o!==m && o.kind!==m.kind && close(m,o));
+    const nudge = clash ? (m.kind==='b' ? ' nudge-down' : ' nudge-up') : '';
+    return `<span class="mk mk-${m.kind}${nudge}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`;
+  }).join('');
+  return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" opacity="${real?'.9':'.5'}" ${real?'':'stroke-dasharray="4 4"'}/></svg>
+    ${mk}</div>`;
 }
 
 function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(t, trades)})); }
@@ -309,7 +348,7 @@ function renderCardHTML(t, meta){
     <div class="ticker">${esc(tk(t.ticker))}</div>
     <div class="pnl ${win?'pos':'neg'}">${fmt.usd(t.pnl)}</div>
     <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
-    <div class="mini">${miniChart(t.pnl)}</div>
+    <div class="mini">${miniChart(t)}</div>
     ${meta.achievements.length? `<div class="badge">${badges}</div>`:''}
     <div class="bottom"><span>${fmt.hold(t.holdTime)}</span><span>${icon(meta.vibe.icon,13,'var(--tx)')} ${meta.vibe.label}</span></div>
   `;
@@ -761,7 +800,7 @@ async function syncNow(manual){
     const before = trades.length;
     await reload();
     const n = Number(data?.imported)||0;
-    if(n) showToast(`${n} new trade card${n>1?'s':''} imported`);
+    if(n){ showToast(`${n} new trade card${n>1?'s':''} imported`); setTimeout(buildChartsInBrowser, 200000); }
     else if(manual) showToast(data?.pending ? 'Still catching up on history — more cards soon' : (data?.synced ? 'Up to date' : 'Synced less than a minute ago'));
     if(data?.pending && before !== trades.length) setTimeout(()=>syncNow(false), 15000);
   }catch(e){ if(manual) showToast('Sync failed — it will retry automatically'); }
@@ -793,6 +832,73 @@ document.getElementById('levelBar').addEventListener('click', ()=>{
   const d = document.getElementById('lvlDetail'), open = d.hidden;
   d.hidden = !open; document.getElementById('levelBar').setAttribute('aria-expanded', String(open));
 });
+
+
+/* ---------- build real charts in the browser (GeckoTerminal, free, CORS *) and cache them in the DB ----------
+   Runs in the background, one request every 2.2 s (free tier: 30/min), newest trades first. */
+const GT = 'https://api.geckoterminal.com/api/v2/networks/solana';
+let chartQueueRunning = false, gtLast = 0;
+async function gtGet(path){
+  const wait = gtLast + 2200 - Date.now(); if(wait > 0) await new Promise(r=>setTimeout(r, wait));
+  gtLast = Date.now();
+  const r = await fetch(GT + path, { headers:{ Accept:'application/json' } });
+  if(r.status === 429){ gtLast = Date.now() + 20000; throw new Error('429'); }
+  return r.ok ? r.json() : null;
+}
+function chartTries(id){ try{ return Number(localStorage.getItem('dc_ct_'+id)||0); }catch(e){ return 0; } }
+function bumpTries(id){ try{ localStorage.setItem('dc_ct_'+id, String(chartTries(id)+1)); }catch(e){} }
+async function buildChartsInBrowser(){
+  if(chartQueueRunning || !session) return;
+  chartQueueRunning = true;
+  const pools = new Map();
+  try{
+    const todo = trades.filter(t=>!t.chart && t.mint && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
+      .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
+    let dirty = 0;
+    for(const t of todo){
+      if(!session) break;
+      try{
+        const end = t.timestamp, start = end - (t.holdTime||0)*1000;
+        const marks = (t.legs && t.legs.length ? t.legs : [[start,'b',t.entryMc],[end,'s',t.exitMc]])
+          .filter(m=>Array.isArray(m) && Number.isFinite(+m[0]) && (m[1]==='b'||m[1]==='s')).map(m=>[+m[0], m[1], +m[2]||0]);
+        const ts = marks.map(m=>m[0]);
+        const t0 = Math.min(...ts) - 120000, t1 = Math.max(...ts) + 120000;
+        if(!pools.has(t.mint)){
+          const j = await gtGet(`/tokens/${t.mint}/pools?page=1`);
+          pools.set(t.mint, (j?.data||[]).map(p=>{
+            const a = p.attributes||{}, price = +a.base_token_price_usd, fdv = +a.fdv_usd;
+            const baseIsMint = String(p.relationships?.base_token?.data?.id||'').endsWith(t.mint);
+            return { addr:a.address, created: Date.parse(a.pool_created_at||'')||0, supply: baseIsMint && price>0 && fdv>0 ? fdv/price : 0 };
+          }));
+        }
+        const list = pools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
+        const supply = (pools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
+        const spanMin = (t1-t0)/60000;
+        const [tf, agg, step] = spanMin <= 900 ? ['minute',1,60000] : spanMin <= 15000 ? ['minute',15,900000] : ['hour',4,14400000];
+        const limit = Math.min(1000, Math.ceil((t1-t0)/step) + 2);
+        let best = [];
+        for(const p of list){
+          if(!supply) break;
+          const j = await gtGet(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(t1/1000)+60}&limit=${limit}&currency=usd&token=${t.mint}`);
+          const c = (j?.data?.attributes?.ohlcv_list||[]).map(x=>x.map(Number))
+            .filter(x=>x[0]*1000 >= t0-step && x[0]*1000 <= t1).sort((a,b)=>a[0]-b[0]);
+          if(c.length > best.length) best = c;
+          if(best.length >= 3) break;
+        }
+        const p = [];
+        for(const c of best){ p.push([Math.max(c[0]*1000,t0), Math.round(c[1]*supply)], [Math.min(c[0]*1000+step-1,t1), Math.round(c[4]*supply)]); }
+        if(p.length < 2){ bumpTries(t.id); continue; }
+        const step2 = p.length > 160 ? (p.length-1)/159 : 1;
+        const pp = step2===1 ? p : Array.from({length:160},(_,i)=>p[Math.round(i*step2)]);
+        const chart = { p: pp, m: marks.slice(0,20), w:[t0,t1] };
+        const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
+        if(!error){ t.chart = parseChart(chart); dirty++; if(dirty % 4 === 0) renderAll(); }
+        else bumpTries(t.id);
+      }catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
+    }
+    if(dirty) renderAll();
+  } finally { chartQueueRunning = false; }
+}
 
 /* ---------- nav ---------- */
 document.getElementById('nav').addEventListener('click', e=>{
@@ -882,7 +988,8 @@ function openDetail(id){
     <div style="font-weight:800;font-size:22px;margin-top:6px">${esc(tk(t.ticker))}</div>
     <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
     <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
-    ${miniChart(t.pnl)}
+    <div style="margin:12px 0 4px">${miniChart(t, true)}</div>
+    ${t.chart?.p?.length>=2 ? `<div class="chart-note">Market cap · 2 min before entry to 2 min after exit</div>` : ''}
     <div class="detail-stats">
       <div><div class="l">Entry MC</div><div class="v">${fmt.mc(t.entryMc)}</div></div>
       <div><div class="l">Exit MC</div><div class="v">${fmt.mc(t.exitMc)}</div></div>
@@ -1073,6 +1180,7 @@ async function showApp(){
   document.getElementById('app').hidden = false;
   await reload();
   maybeAutoSync();
+  setTimeout(buildChartsInBrowser, 1500);
   setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 5*60*1000);
 }
 function showLanding(){

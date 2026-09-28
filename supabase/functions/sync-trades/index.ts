@@ -218,12 +218,15 @@ async function syncAccount(acc: any, deadline: number) {
   for (const leg of legs.slice(0, done)) {
     if (!leg) continue;
     let p = state[leg.mint];
+    const px = Math.abs(leg.usd / leg.tok);                      // USD per token at this fill
     if (leg.tok > 0) {
       if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
       p.b += leg.tok; p.inv += -leg.usd; p.last = leg.ts;
+      p.bl = [...(p.bl || []), [leg.ts, px]].slice(-10);
     } else {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
       p.s += -leg.tok; p.ret += leg.usd; p.last = leg.ts;
+      p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
       if (p.s >= p.b * 0.98) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
     }
   }
@@ -251,6 +254,7 @@ async function syncAccount(acc: any, deadline: number) {
         exit_mc: Math.round(Math.min(1e13, sup && c.s ? (c.ret / c.s) * sup : 0)),
         hold_time: Math.max(1, Math.min(31536000, Math.round((c.last - c.first) / 1000))),
         timestamp_ms: Math.max(1230768000000, c.last),
+        legs: sup ? [...(c.bl || []).map(([t, px]: number[]) => [t, "b", Math.round(px * sup)]), ...(c.sl || []).map(([t, px]: number[]) => [t, "s", Math.round(px * sup)])] : null,
       };
       const { error } = await db.from("trades").insert(row);
       if (!error) imported++; else if (!String(error.code).includes("23505")) console.error("insert", error.message);
@@ -264,6 +268,8 @@ async function syncAccount(acc: any, deadline: number) {
   }).eq("id", acc.id);
   return { imported, pending: sigs.length - done };
 }
+
+/* The price chart itself is built in the user's browser (GeckoTerminal rate-limits cloud IPs); we only store the fills (legs). */
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
