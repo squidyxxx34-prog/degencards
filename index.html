@@ -184,6 +184,16 @@
         <button class="btn-logout" id="btnLogout">LOG OUT</button>
       </div>
     </div>
+    <div class="acc-block" id="pwBlock" style="display:none;">
+      <h4 id="pwTitle">PASSWORD</h4>
+      <div class="acc-form">
+        <input id="accPassword" type="password" placeholder="New password (8+ characters)" minlength="8" maxlength="72" autocomplete="new-password">
+        <input id="accPassword2" type="password" placeholder="Confirm password" minlength="8" maxlength="72" autocomplete="new-password">
+        <input id="accNonce" type="text" inputmode="numeric" placeholder="Code received by email" maxlength="10" autocomplete="one-time-code" style="display:none;">
+        <button id="btnAccPassword">SAVE PASSWORD</button>
+        <div class="authnote" id="accPwNote" style="text-align:left;"></div>
+      </div>
+    </div>
     <div class="acc-block">
       <h4>AUTO-IMPORT TRADES</h4>
       <div id="providerList"></div>

@@ -440,10 +440,62 @@ document.getElementById('btnSaveGoal').addEventListener('click', async ()=>{
   renderGoal(trades.reduce((s,t)=>s+t.pnl,0));
   showToast(v>0 ? 'Goal set to $'+v : 'Goal cleared');
 });
+/* ---------- account: set / change password (Google users can add one) ---------- */
+function hasPassword(){
+  const p = session?.user?.app_metadata?.providers || [];
+  return p.includes('email') || (session?.user?.identities||[]).some(i=>i.provider==='email');
+}
+function renderPasswordBlock(){
+  const u = session?.user;
+  const block = document.getElementById('pwBlock');
+  if(!u || !u.email || u.is_anonymous){ block.style.display = 'none'; return; }   // watch-only wallets have no email
+  block.style.display = '';
+  const has = hasPassword();
+  document.getElementById('pwTitle').textContent = has ? 'CHANGE PASSWORD' : 'ADD A PASSWORD';
+  const note = document.getElementById('accPwNote');
+  if(!note.textContent) setNote(note, has ? '' : `Sign in with ${u.email} + password too, not only Google.`, 'info');
+}
+let pwBusy = false;
+document.getElementById('btnAccPassword').addEventListener('click', async ()=>{
+  if(pwBusy) return;
+  const note = document.getElementById('accPwNote');
+  const p1 = document.getElementById('accPassword').value, p2 = document.getElementById('accPassword2').value;
+  const nonceEl = document.getElementById('accNonce'), nonce = nonceEl.value.trim();
+  if(p1.length < 8 || p1.length > 72){ setNote(note, 'Password must be 8 to 72 characters.', 'error'); return; }
+  if(p1 !== p2){ setNote(note, "Passwords don't match.", 'error'); return; }
+  if(nonceEl.style.display !== 'none' && !/^[0-9A-Za-z]{4,10}$/.test(nonce)){ setNote(note, 'Enter the code from the email.', 'error'); return; }
+  pwBusy = true; setNote(note, 'Saving...', 'info');
+  try{
+    const { error } = await sb.auth.updateUser(nonce ? { password: p1, nonce } : { password: p1 });
+    if(error){
+      const m = String(error.message||'').toLowerCase(), code = String(error.code||'');
+      if(code === 'reauthentication_needed' || m.includes('reauthentication')){
+        const r = await sb.auth.reauthenticate();
+        nonceEl.style.display = '';
+        setNote(note, r.error ? 'Could not send the confirmation code — try again later.' : 'For security, we emailed you a code. Enter it and save again.', r.error ? 'error' : 'info');
+      }else if(code === 'same_password' || m.includes('different from the old')){
+        setNote(note, 'New password must be different from the current one.', 'error');
+      }else if(code === 'weak_password' || m.includes('weak') || m.includes('password should')){
+        setNote(note, 'Password too weak — use a longer, less common one.', 'error');
+      }else if(m.includes('nonce') || code === 'reauthentication_not_valid'){
+        setNote(note, 'Wrong or expired code.', 'error');
+      }else setNote(note, 'Could not save the password — try again.', 'error');
+      return;
+    }
+    ['accPassword','accPassword2','accNonce'].forEach(id=>document.getElementById(id).value='');
+    nonceEl.style.display = 'none';
+    const { data } = await sb.auth.refreshSession(); if(data?.session) session = data.session;
+    setNote(note, 'Password saved. You can now sign in with email + password.', 'ok');
+    renderPasswordBlock();
+  }catch(e){ setNote(note, 'Could not save the password — try again.', 'error'); }
+  finally{ pwBusy = false; }
+});
+
 function renderAccount(){
   const walletAcc = connectedAccounts.find(a=>a.provider==='wallet');
   const idLabel = session?.user?.email || (walletAcc ? walletAcc.handle.slice(0,4)+'...'+walletAcc.handle.slice(-4) : 'Anonymous wallet');
   document.getElementById('accEmail').textContent = idLabel;
+  renderPasswordBlock();
   document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
