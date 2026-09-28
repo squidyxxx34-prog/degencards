@@ -132,11 +132,11 @@
   </div>
 
   <div id="historyView" style="display:none;">
-    <div class="sectionhead"><h2>HISTORY · <span id="histCount">0</span> trades</h2></div>
+    <div class="sectionhead hist-head"><h2>HISTORY · <span id="histCount">0</span> trades</h2><div class="hist-bar" id="histBar"></div></div>
     <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;">
       <table style="width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; min-width:640px;">
         <thead><tr style="background:var(--surf2); text-align:left; color:var(--tx); font-weight:700;">
-          <th style="padding:10px 12px;">DATE</th><th style="padding:10px 12px;">TICKER</th><th style="padding:10px 12px;">ENTRY</th><th style="padding:10px 12px;">EXIT</th><th style="padding:10px 12px;">HOLD</th><th style="padding:10px 12px;">P&L</th><th style="padding:10px 12px;">ROI</th><th style="padding:10px 12px;">RARITY</th><th style="padding:10px 12px;">SRC</th><th style="padding:10px 12px;"></th>
+          <th class="sel-cell" id="histHeadSel"></th><th style="padding:10px 12px;">DATE</th><th style="padding:10px 12px;">TICKER</th><th style="padding:10px 12px;">ENTRY</th><th style="padding:10px 12px;">EXIT</th><th style="padding:10px 12px;">HOLD</th><th style="padding:10px 12px;">P&L</th><th style="padding:10px 12px;">ROI</th><th style="padding:10px 12px;">RARITY</th><th style="padding:10px 12px;">SRC</th><th style="padding:10px 12px;"></th>
         </tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
@@ -198,6 +198,10 @@
       <h4>AUTO-IMPORT TRADES</h4>
       <div id="providerList"></div>
       <div class="authnote" style="margin-top:10px; text-align:left;">Connecting pulls in your recent activity as trade cards automatically. Manual entry still works for anything a connector misses.</div>
+    </div>
+    <div class="acc-block">
+      <h4>RECOVER TRADES <span id="recoverCount"></span></h4>
+      <div id="recoverBlock"></div>
     </div>
   </div>
 </div>

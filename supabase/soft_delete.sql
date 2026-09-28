@@ -1,0 +1,3 @@
+-- DEGENCARDS — corbeille (appliqué en prod le 2026-09-28 : migration trades_soft_delete)
+-- trades.deleted_at ; authenticated ne peut modifier QUE deleted_at (grant colonne + policy update own) ;
+-- trigger stamp_trade_delete force now() ; cron 'purge-deleted-trades' supprime après 30 jours.

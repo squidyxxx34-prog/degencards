@@ -26,6 +26,10 @@ function esc(s){
 let session = null;
 let trades = [];
 let connectedAccounts = [];
+let deletedTrades = [];
+let histSelect = false;           // History: select mode
+const histSel = new Set();        // History: selected ids
+const binSel = new Set();         // Recover: selected ids
 let goalTarget = 0;
 let view = "home";
 let activeFilter = "all";
@@ -107,10 +111,34 @@ const PROVIDERS = [
 /* ---------- data layer (Supabase) ---------- */
 const store = {
   async getTrades(){
-    const {data,error} = await sb.from('trades').select('*').order('timestamp_ms',{ascending:false}).limit(2000);
+    const {data,error} = await sb.from('trades').select('*').is('deleted_at', null).order('timestamp_ms',{ascending:false}).limit(2000);
     if(error){ console.error('trades load failed'); return []; }
     return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual' }));
   },
+  async getDeleted(){
+    const {data,error} = await sb.from('trades').select('id,ticker,pnl,roi,timestamp_ms,source,deleted_at')
+      .not('deleted_at','is',null).order('deleted_at',{ascending:false}).limit(2000);
+    if(error) return [];
+    return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), ticker:cleanTicker(r.ticker)||'UNKNOWN',
+      pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), timestamp:num(r.timestamp_ms,0,4102444800000),
+      source: SOURCES.includes(r.source)?r.source:'manual', deletedAt: Date.parse(r.deleted_at)||Date.now() }));
+  },
+  /* ids = array of uuids, or 'all'. Chunked so the URL stays short. */
+  async _bulk(ids, apply){
+    if(ids === 'all') return !(await apply(null)).error;
+    const clean = ids.filter(id=>UUID_RE.test(id));
+    for(let i=0;i<clean.length;i+=100){ const {error} = await apply(clean.slice(i,i+100)); if(error) return false; }
+    return true;
+  },
+  softDelete(ids){ return this._bulk(ids, chunk=>{
+    let q = sb.from('trades').update({deleted_at:new Date().toISOString()}).eq('user_id', session.user.id).is('deleted_at', null);
+    return chunk ? q.in('id', chunk) : q; }); },
+  restore(ids){ return this._bulk(ids, chunk=>{
+    let q = sb.from('trades').update({deleted_at:null}).eq('user_id', session.user.id).not('deleted_at','is',null);
+    return chunk ? q.in('id', chunk) : q; }); },
+  purge(ids){ return this._bulk(ids, chunk=>{
+    let q = sb.from('trades').delete().eq('user_id', session.user.id).not('deleted_at','is',null);
+    return chunk ? q.in('id', chunk) : q; }); },
   nextTradeId(){
     const base = trades.length ? Math.max(...trades.map(x=>x.tradeId)) : 0;
     idCounter = Math.max(idCounter, base) + 1;   // running counter: no more duplicate #numbers during multi-inserts
@@ -548,10 +576,24 @@ function goToView(v){
 }
 function renderHistory(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
+  const ids = new Set(all.map(t=>t.id));
+  for(const id of [...histSel]) if(!ids.has(id)) histSel.delete(id);
   document.getElementById('histCount').textContent = all.length;
+  const view = document.getElementById('historyView');
+  view.classList.toggle('selecting', histSelect);
+  const bar = document.getElementById('histBar');
+  bar.innerHTML = !all.length ? '' : histSelect
+    ? `<span class="hist-selcount">${histSel.size} selected</span>
+       <button class="hbtn danger" id="histDelSel" ${histSel.size?'':'disabled'}>DELETE SELECTED</button>
+       <button class="hbtn" id="histCancel">CANCEL</button>`
+    : `<button class="hbtn" id="histSelect">SELECT</button>
+       <button class="hbtn danger" id="histClear">CLEAR HISTORY</button>`;
+  const head = document.getElementById('histHeadSel');
+  head.innerHTML = histSelect ? `<input type="checkbox" id="histAll" aria-label="Select all" ${all.length && histSel.size===all.length?'checked':''}>` : '';
   document.getElementById('historyBody').innerHTML = all.map(t=>{
     const win = t.pnl>=0;
-    return `<tr style="border-top:1px solid var(--border);" data-id="${t.id}">
+    return `<tr style="border-top:1px solid var(--border);" data-id="${t.id}" class="${histSel.has(t.id)?'is-sel':''}">
+      <td class="sel-cell">${histSelect?`<input type="checkbox" class="hist-chk" data-id="${t.id}" ${histSel.has(t.id)?'checked':''} aria-label="Select trade">`:''}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.date(t.timestamp)}</td>
       <td style="padding:9px 12px; font-weight:700;">${esc(t.ticker)}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.entryMc)}</td>
@@ -561,18 +603,79 @@ function renderHistory(){
       <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.meta.rarity}</td>
       <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${esc(t.source||'manual')}</td>
-      <td style="padding:9px 12px;"><button class="hist-del" data-id="${t.id}" style="color:var(--red);">${icon('x',16,'var(--red)')}</button></td>
+      <td style="padding:9px 12px;">${histSelect?'':`<button class="hist-del" data-id="${t.id}" aria-label="Delete trade" style="color:var(--red);">${icon('x',16,'var(--red)')}</button>`}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="10" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
-  document.getElementById('historyBody').querySelectorAll('.hist-del').forEach(b=>{
-    b.addEventListener('click', async ()=>{
-      if(!confirm('Delete this trade?')) return;
-      await sb.from('trades').delete().eq('id', b.dataset.id);
-      await reload();
-    });
+  }).join('') || `<tr><td colspan="11" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
+
+  const body = document.getElementById('historyBody');
+  body.querySelectorAll('.hist-del').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!confirm('Delete this trade? You can recover it from Account for 30 days.')) return;
+    if(await store.softDelete([b.dataset.id])){ await reload(); showToast('Trade deleted — recoverable in Account'); }
+    else showToast('Could not delete — try again');
+  }));
+  body.querySelectorAll('.hist-chk').forEach(c=>c.addEventListener('change', ()=>{
+    c.checked ? histSel.add(c.dataset.id) : histSel.delete(c.dataset.id); renderHistory();
+  }));
+  if(histSelect) body.querySelectorAll('tr[data-id]').forEach(tr=>tr.addEventListener('click', e=>{
+    if(e.target.closest('input,button')) return;
+    const id = tr.dataset.id; histSel.has(id) ? histSel.delete(id) : histSel.add(id); renderHistory();
+  }));
+  document.getElementById('histAll')?.addEventListener('change', e=>{
+    histSel.clear(); if(e.target.checked) all.forEach(t=>histSel.add(t.id)); renderHistory();
+  });
+  document.getElementById('histSelect')?.addEventListener('click', ()=>{ histSelect = true; histSel.clear(); renderHistory(); });
+  document.getElementById('histCancel')?.addEventListener('click', ()=>{ histSelect = false; histSel.clear(); renderHistory(); });
+  document.getElementById('histDelSel')?.addEventListener('click', async ()=>{
+    const n = histSel.size; if(!n) return;
+    if(!confirm(`Delete ${n} trade${n>1?'s':''}? You can recover them from Account for 30 days.`)) return;
+    if(await store.softDelete([...histSel])){ histSelect = false; histSel.clear(); await reload(); showToast(`${n} trade${n>1?'s':''} deleted — recoverable in Account`); }
+    else showToast('Could not delete — try again');
+  });
+  document.getElementById('histClear')?.addEventListener('click', async ()=>{
+    if(!confirm(`Clear your whole history (${all.length} trades)? You can recover them from Account for 30 days.`)) return;
+    if(await store.softDelete('all')){ histSel.clear(); await reload(); showToast('History cleared — recoverable in Account'); }
+    else showToast('Could not clear — try again');
   });
 }
-function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); }
+
+/* ---------- Account: recover deleted trades ---------- */
+function renderRecover(){
+  const ids = new Set(deletedTrades.map(t=>t.id));
+  for(const id of [...binSel]) if(!ids.has(id)) binSel.delete(id);
+  const box = document.getElementById('recoverBlock');
+  document.getElementById('recoverCount').textContent = deletedTrades.length ? `(${deletedTrades.length})` : '';
+  if(!deletedTrades.length){ box.innerHTML = `<div class="authnote" style="text-align:left;">No deleted trades. Deleted trades stay here 30 days.</div>`; return; }
+  box.innerHTML = `
+    <div class="bin-bar">
+      <label class="bin-all"><input type="checkbox" id="binAll" ${binSel.size===deletedTrades.length?'checked':''}> Select all</label>
+      <span class="hist-selcount">${binSel.size} selected</span>
+    </div>
+    <div class="bin-list">${deletedTrades.map(t=>`
+      <label class="bin-row ${binSel.has(t.id)?'is-sel':''}">
+        <input type="checkbox" class="bin-chk" data-id="${t.id}" ${binSel.has(t.id)?'checked':''}>
+        <span class="bin-tk">${esc(t.ticker)}</span>
+        <span class="bin-date">${fmt.date(t.timestamp)}</span>
+        <span class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</span>
+      </label>`).join('')}
+    </div>
+    <div class="bin-actions">
+      <button class="hbtn" id="binRestoreSel" ${binSel.size?'':'disabled'}>RECOVER SELECTED</button>
+      <button class="hbtn good" id="binRestoreAll">RECOVER ALL</button>
+      <button class="hbtn danger" id="binPurgeSel" ${binSel.size?'':'disabled'}>DELETE FOREVER</button>
+    </div>
+    <div class="authnote" style="text-align:left;">Deleted trades are kept 30 days, then removed for good.</div>`;
+  box.querySelectorAll('.bin-chk').forEach(c=>c.addEventListener('change', ()=>{ c.checked ? binSel.add(c.dataset.id) : binSel.delete(c.dataset.id); renderRecover(); }));
+  document.getElementById('binAll').addEventListener('change', e=>{ binSel.clear(); if(e.target.checked) deletedTrades.forEach(t=>binSel.add(t.id)); renderRecover(); });
+  const act = async (fn, ids, okMsg)=>{ if(await fn(ids)){ binSel.clear(); await reload(); showToast(okMsg); } else showToast('Something went wrong — try again'); };
+  document.getElementById('binRestoreSel').addEventListener('click', ()=>{ const n = binSel.size; if(n) act(store.restore.bind(store), [...binSel], `${n} trade${n>1?'s':''} recovered`); });
+  document.getElementById('binRestoreAll').addEventListener('click', ()=>act(store.restore.bind(store), 'all', 'All trades recovered'));
+  document.getElementById('binPurgeSel').addEventListener('click', ()=>{
+    const n = binSel.size; if(!n) return;
+    if(!confirm(`Permanently delete ${n} trade${n>1?'s':''}? This can't be undone.`)) return;
+    act(store.purge.bind(store), [...binSel], `${n} trade${n>1?'s':''} permanently deleted`);
+  });
+}
+function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
 
 /* ---------- auto-import (server side) ----------
    The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
@@ -890,7 +993,7 @@ document.getElementById('btnPubkey').addEventListener('click', async ()=>{
 
 async function reload(){
   idCounter = 0;
-  trades = await store.getTrades();
+  [trades, deletedTrades] = await Promise.all([store.getTrades(), store.getDeleted()]);
   connectedAccounts = await store.getAccounts();
   goalTarget = await store.getGoal();
   renderAll();
