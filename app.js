@@ -808,6 +808,9 @@ function showToast(msg){
   setTimeout(()=>el.classList.remove('show'), 2400);
 }
 
+/* ---------- auth notes: red for errors, green for success, grey for info ---------- */
+function setNote(el, msg, kind='info'){ el.textContent = msg; el.classList.remove('is-error','is-ok'); if(kind==='error') el.classList.add('is-error'); if(kind==='ok') el.classList.add('is-ok'); }
+
 /* ---------- hCaptcha (visible, required by Supabase Auth) ---------- */
 const HCAPTCHA_SITEKEY = 'e5784d60-9d86-44f4-80b2-c7dcc64e3258';
 let hcWidget = null;
@@ -819,8 +822,11 @@ async function renderCaptcha(){
 }
 function takeCaptcha(note){
   const token = hcWidget !== null ? window.hcaptcha.getResponse(hcWidget) : '';
-  if(!token){ note.textContent = hcWidget === null ? 'Captcha is loading — try again in a second.' : 'Complete the captcha first.'; return null; }
+  if(!token){ setNote(note, hcWidget === null ? 'Captcha is loading — try again in a second.' : 'Complete the captcha first.', 'error'); return null; }
   return token;
+}
+function captchaMsg(m){
+  return (m.includes('secret') || m.includes('sitekey')) ? 'Captcha is misconfigured on our side — try Google for now.' : 'Captcha failed — solve it again.';
 }
 function resetCaptcha(){ try{ if(hcWidget !== null) window.hcaptcha.reset(hcWidget); }catch(e){} }  // tokens are single-use
 renderCaptcha();
@@ -832,39 +838,42 @@ let authBusy = false;
 function readCreds(needPassword){
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
-  if(!EMAIL_RE.test(email) || email.length > 254){ authNote.textContent = 'Enter a valid email.'; return null; }
-  if(needPassword && (password.length < 8 || password.length > 72)){ authNote.textContent = 'Password must be 8 to 72 characters.'; return null; }
+  if(!EMAIL_RE.test(email) || email.length > 254){ setNote(authNote, 'Enter a valid email.', 'error'); return null; }
+  if(needPassword && (password.length < 8 || password.length > 72)){ setNote(authNote, 'Password must be 8 to 72 characters.', 'error'); return null; }
   return { email, password };
 }
 async function authAction(needPassword, run){
   if(authBusy) return;
   const creds = readCreds(needPassword); if(!creds) return;
   const captchaToken = takeCaptcha(authNote); if(!captchaToken) return;
-  authBusy = true; authNote.textContent = 'Please wait...';
+  authBusy = true; setNote(authNote, 'Please wait...', 'info');
   try{ await run(creds, captchaToken); }
-  catch(e){ authNote.textContent = 'Something went wrong — try again.'; }
+  catch(e){ setNote(authNote, 'Something went wrong — try again.', 'error'); }
   finally{ authBusy = false; resetCaptcha(); }
 }
 document.getElementById('btnSignIn').addEventListener('click', ()=>authAction(true, async ({email,password}, captchaToken)=>{
   const { error } = await sb.auth.signInWithPassword({ email, password, options:{ captchaToken } });
-  if(!error){ authNote.textContent = ''; return; }
+  if(!error){ setNote(authNote, '', 'info'); return; }
   const m = String(error.message||'').toLowerCase();
-  authNote.textContent = m.includes('not confirmed') ? 'Confirm your email first (check your inbox).'
-    : m.includes('captcha') ? 'Captcha failed — try again.' : 'Wrong email or password.';   // no account enumeration
+  setNote(authNote, m.includes('not confirmed') ? 'Confirm your email first (check your inbox).'
+    : m.includes('captcha') ? captchaMsg(m) : 'Wrong email or password.', 'error');   // no account enumeration
 }));
 document.getElementById('btnSignUp').addEventListener('click', ()=>authAction(true, async ({email,password}, captchaToken)=>{
   const { data, error } = await sb.auth.signUp({ email, password, options:{ captchaToken, emailRedirectTo: REDIRECT_URL } });
   if(error){
     const m = String(error.message||'').toLowerCase();
-    authNote.textContent = m.includes('password') ? 'Password too weak — use a longer, less common one.'
-      : m.includes('captcha') ? 'Captcha failed — try again.' : 'Could not create the account — try again.';
+    setNote(authNote, m.includes('captcha') ? captchaMsg(m)
+      : m.includes('password') ? 'Password too weak — use a longer, less common one.'
+      : m.includes('rate limit') || m.includes('too many') ? 'Too many attempts — wait a minute.'
+      : m.includes('already') ? 'Could not create the account — try signing in.' : 'Could not create the account — try again.', 'error');
     return;
   }
-  authNote.textContent = data.session ? '' : 'Check your inbox to confirm your email.';
+  setNote(authNote, data.session ? '' : 'Check your inbox to confirm your email.', 'ok');
 }));
 document.getElementById('btnForgot').addEventListener('click', ()=>authAction(false, async ({email}, captchaToken)=>{
-  await sb.auth.resetPasswordForEmail(email, { redirectTo: REDIRECT_URL, captchaToken });
-  authNote.textContent = 'If an account exists, a reset link is on its way.';
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: REDIRECT_URL, captchaToken });
+  if(error && String(error.message||'').toLowerCase().includes('captcha')){ setNote(authNote, captchaMsg(String(error.message).toLowerCase()), 'error'); return; }
+  setNote(authNote, 'If an account exists, a reset link is on its way.', 'ok');
 }));
 document.getElementById('btnGoogle').addEventListener('click', async ()=>{
   await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: REDIRECT_URL } });
@@ -875,10 +884,10 @@ const pwOverlay = document.getElementById('pwOverlay');
 document.getElementById('btnSetPassword').addEventListener('click', async ()=>{
   const note = document.getElementById('pwNote');
   const password = document.getElementById('newPassword').value;
-  if(password.length < 8 || password.length > 72){ note.textContent = 'Password must be 8 to 72 characters.'; return; }
-  note.textContent = 'Saving...';
+  if(password.length < 8 || password.length > 72){ setNote(note, 'Password must be 8 to 72 characters.', 'error'); return; }
+  setNote(note, 'Saving...', 'info');
   const { error } = await sb.auth.updateUser({ password });
-  if(error){ note.textContent = 'Could not save — use a stronger password.'; return; }
+  if(error){ setNote(note, 'Could not save — use a stronger password.', 'error'); return; }
   document.getElementById('newPassword').value = '';
   pwOverlay.classList.remove('show'); showToast('Password updated');
 });
@@ -886,18 +895,18 @@ document.getElementById('btnSetPassword').addEventListener('click', async ()=>{
 /* ---------- auth: watch-only wallet (public key) ---------- */
 async function loginWithPubkey(pubkey, note){
   const captchaToken = takeCaptcha(note); if(!captchaToken) return;
-  note.textContent = 'Connecting...';
+  setNote(note, 'Connecting...', 'info');
   const { data, error } = await sb.auth.signInAnonymously({ options:{ captchaToken } });
   resetCaptcha();
-  if(error){ note.textContent = 'Auth error — try again.'; return; }
+  if(error){ const m = String(error.message||'').toLowerCase(); setNote(note, m.includes('captcha') ? captchaMsg(m) : 'Auth error — try again.', 'error'); return; }
   await sb.auth.updateUser({ data: { wallet_address: pubkey } });
   await sb.from('connected_accounts').upsert({ user_id: data.user.id, provider:'wallet', handle: pubkey }, { onConflict:'user_id,provider' });
-  note.textContent = 'Wallet connected.';
+  setNote(note, 'Wallet connected.', 'ok');
   await reload();
 }
 document.getElementById('btnPubkey').addEventListener('click', async ()=>{
   const pk = document.getElementById('authPubkey').value.trim();
-  if(!B58.test(pk)){ authNote.textContent = "That doesn't look like a valid Solana address."; return; }
+  if(!B58.test(pk)){ setNote(authNote, "That doesn't look like a valid Solana address.", 'error'); return; }
   await loginWithPubkey(pk, authNote);
 });
 

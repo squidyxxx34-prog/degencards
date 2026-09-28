@@ -202,3 +202,5 @@ footer{text-align:center; padding:50px 0 calc(100px + env(safe-area-inset-bottom
 .authbox .btn-link{background:none;color:var(--tx2);font-weight:600;font-size:11px;padding:8px 0 0;text-decoration:underline;}
 .captcha-box{display:flex;justify-content:center;margin-top:14px;min-height:78px;}
 #btnPubkey{margin-top:0;}
+.authnote.is-error{color:#ff4d5e; font-weight:600;}
+.authnote.is-ok{color:#3ddc97; font-weight:600;}
