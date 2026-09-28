@@ -53,3 +53,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Coins pump.fun : `sync-trades` lit le flux de trades pump.fun (`swap-api.pump.fun/v2/coins/<mint>/trades`, curseur `<x>-<timestamp_ms>` pour sauter à la bonne période) → bougies à la seconde + B/S posés exactement sur les transactions du wallet (prix de fill). Format `trades.chart` v2 : `{v:2, src, i, w, c:[[t,o,h,l,c]], m:[[t,'b'|'s',mc]]}`.
 - Autres coins : bougies minute GeckoTerminal construites dans le navigateur (GeckoTerminal bloque les IP cloud ; pump.fun bloque les navigateurs).
 - Trades manuels : ligne pointillée entrée → sortie.
+
+## PnL : brut (comme Fomo / pump.fun) vs net
+- `pnl` / `roi` / MC = prix du trade (ce que la pool / bonding curve a reçu ou payé, retrouvé via la contrepartie du token, en suivant jusqu'à 3 swaps intermédiaires). C'est ce qu'affichent Fomo et pump.fun.
+- `pnl_net` = ce que le wallet a réellement gagné ; `fees_usd` = frais de plateforme + dépôts (écart net/brut). Affichés dans le détail d'une carte.
+- Un rescan (cursor remis à zéro) met à jour les chiffres des cartes existantes via `ext_id` sans toucher à `deleted_at` ni au graphe.

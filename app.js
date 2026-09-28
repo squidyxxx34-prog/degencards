@@ -116,7 +116,8 @@ const store = {
     const {data,error} = await sb.from('trades').select('*').is('deleted_at', null).order('timestamp_ms',{ascending:false}).limit(2000);
     if(error){ console.error('trades load failed'); return []; }
     return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual', chart: parseChart(r.chart),
-      mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, chartTries: Number(r.chart_tries)||0, legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
+      mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, chartTries: Number(r.chart_tries)||0,
+      fees: r.fees_usd==null ? null : num(r.fees_usd,-1e10,1e10), pnlNet: r.pnl_net==null ? null : num(r.pnl_net,-1e10,1e10), legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
   },
   async getDeleted(){
     const {data,error} = await sb.from('trades').select('id,ticker,pnl,roi,timestamp_ms,source,deleted_at')
@@ -1011,6 +1012,8 @@ function openDetail(id){
       <div><div class="l">Exit MC</div><div class="v">${fmt.mc(t.exitMc)}</div></div>
       <div><div class="l">Hold time</div><div class="v">${fmt.hold(t.holdTime)}</div></div>
       <div><div class="l">Date</div><div class="v" style="font-size:11px">${fmt.date(t.timestamp)}</div></div>
+      ${t.pnlNet!=null ? `<div><div class="l">Fees &amp; costs</div><div class="v">${fmt.usd(-Math.abs(t.fees||0))}</div></div>
+      <div><div class="l">Net PnL (wallet)</div><div class="v ${t.pnlNet>=0?'pos':'neg'}">${fmt.usd(t.pnlNet)}</div></div>` : ''}
     </div>
     ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="color:var(--purple)">${icon(a.icon,18)}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
     <button class="share-btn" id="btnShare">SHARE CARD</button>

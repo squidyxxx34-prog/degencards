@@ -78,7 +78,7 @@ function solUsdAt(ts: number) {
 }
 
 /* ---------- one transaction -> swap leg ---------- */
-type Leg = { mint: string; tok: number; usd: number; sol: number; ts: number; sig: string };
+type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string };
 function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   if (!tx?.meta || tx.meta.err) return null;
   const msg = tx.transaction.message;
@@ -104,9 +104,52 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   if (moved.length !== 1) return null;                          // transfers, airdrops, token<->token swaps: skipped
   const [mint, tok] = moved[0];
   const sol = lamports / 1e9;
-  const usdTotal = usd + sol * solUsdAt(ts);
+  const solUsd = solUsdAt(ts);
+  const usdTotal = usd + sol * solUsd;                          // NET: what really left / entered the wallet (fees included)
   if (!(tok > 0 && usdTotal < 0) && !(tok < 0 && usdTotal > 0)) return null;   // not a buy or a sell
-  return { mint, tok, usd: usdTotal, sol, ts, sig };
+  // GROSS (trade price, like pump.fun / Fomo show it): what the pool / bonding curve received or paid.
+  // Counterparty = the other owner whose balance of this token moved the opposite way by ~the same amount.
+  const byOwner = new Map<string, Map<string, number>>();
+  const addO = (list: any[], sign: number) => {
+    for (const b of list || []) {
+      if (!b.owner || b.owner === wallet) continue;
+      const m = byOwner.get(b.owner) || new Map<string, number>(); byOwner.set(b.owner, m);
+      m.set(b.mint, (m.get(b.mint) || 0) + sign * Number(b.uiTokenAmount?.uiAmountString ?? b.uiTokenAmount?.uiAmount ?? 0));
+    }
+  };
+  addO(tx.meta.preTokenBalances, -1); addO(tx.meta.postTokenBalances, 1);
+  let best: string | null = null, bestErr = Infinity;
+  for (const [owner, m] of byOwner) {
+    const d = m.get(mint) || 0;
+    if (d === 0 || Math.sign(d) === Math.sign(tok)) continue;
+    const err = Math.abs(Math.abs(d) - Math.abs(tok)) / Math.abs(tok);
+    if (err < bestErr) { bestErr = err; best = owner; }
+  }
+  // value (USD) the counterparty received for the token, following up to 3 intermediate hops (route tokens)
+  const lam = (owner: string) => { const i = keys.indexOf(owner); return i >= 0 ? (tx.meta.postBalances[i] - tx.meta.preBalances[i]) / 1e9 : 0; };
+  const quoteVal = (owner: string, seen: Set<string>, depth: number): number => {
+    const m = byOwner.get(owner) || new Map<string, number>();
+    let v = (lam(owner) + (m.get(WSOL) || 0)) * solUsd; for (const u of USD_MINTS) v += m.get(u) || 0;
+    if (Math.abs(v) > 1e-9 || depth >= 3) return v;
+    for (const [q, dq] of m) {                                  // received an intermediate token: who gave it, and for what?
+      if (q === mint || seen.has(q) || Math.abs(dq) === 0) continue;
+      let o2: string | null = null, e2 = Infinity;
+      for (const [o, mm] of byOwner) {
+        if (o === owner) continue;
+        const d = mm.get(q) || 0;
+        if (d === 0 || Math.sign(d) === Math.sign(dq)) continue;
+        const e = Math.abs(Math.abs(d) - Math.abs(dq)) / Math.abs(dq); if (e < e2) { e2 = e; o2 = o; }
+      }
+      if (o2 && e2 < 0.05) { const r = quoteVal(o2, new Set([...seen, q]), depth + 1); if (Math.abs(r) > 1e-9) return r; }
+    }
+    return 0;
+  };
+  let gusd = usdTotal;
+  if (best && bestErr < 0.05) {
+    const g = -quoteVal(best, new Set([mint]), 0);              // counterparty received value  <=>  we paid it
+    if (Math.sign(g) === Math.sign(usdTotal) && Math.abs(g) > 1e-6 && Math.abs(g) < 1e7) gusd = g;
+  }
+  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig };
 }
 
 /* ---------- token metadata ---------- */
@@ -218,14 +261,14 @@ async function syncAccount(acc: any, deadline: number) {
   for (const leg of legs.slice(0, done)) {
     if (!leg) continue;
     let p = state[leg.mint];
-    const px = Math.abs(leg.usd / leg.tok);                      // USD per token at this fill
+    const px = Math.abs(leg.gusd / leg.tok);                     // USD per token at this fill (trade price)
     if (leg.tok > 0) {
-      if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
-      p.b += leg.tok; p.inv += -leg.usd; p.last = leg.ts;
+      if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, ninv: 0, nret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
+      p.b += leg.tok; p.inv += -leg.gusd; p.ninv = (p.ninv || 0) - leg.usd; p.last = leg.ts;
       p.bl = [...(p.bl || []), [leg.ts, px]].slice(-10);
     } else {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
-      p.s += -leg.tok; p.ret += leg.usd; p.last = leg.ts;
+      p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.last = leg.ts;
       p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
       if (p.s >= p.b * 0.98) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
     }
@@ -254,10 +297,16 @@ async function syncAccount(acc: any, deadline: number) {
         exit_mc: Math.round(Math.min(1e13, sup && c.s ? (c.ret / c.s) * sup : 0)),
         hold_time: Math.max(1, Math.min(31536000, Math.round((c.last - c.first) / 1000))),
         timestamp_ms: Math.max(1230768000000, c.last),
+        pnl_net: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.nret || 0) - c.ninv)) * 100) / 100 : null,
+        fees_usd: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.ninv - c.inv) + (c.ret - (c.nret || 0)))) * 100) / 100 : null,
         legs: sup ? [...(c.bl || []).map(([t, px]: number[]) => [t, "b", Math.round(px * sup)]), ...(c.sl || []).map(([t, px]: number[]) => [t, "s", Math.round(px * sup)])] : null,
       };
       const { error } = await db.from("trades").insert(row);
-      if (!error) imported++; else if (!String(error.code).includes("23505")) console.error("insert", error.message);
+      if (!error) imported++;
+      else if (String(error.code).includes("23505")) {                // already imported (rescan): refresh the figures only
+        const { user_id: _u, source: _s, ext_id, ...fig } = row as any;
+        await db.from("trades").update(fig).eq("user_id", acc.user_id).eq("ext_id", ext_id);
+      } else console.error("insert", error.message);
     }
   }
 
