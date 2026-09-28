@@ -251,3 +251,6 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .mk.nudge-up{margin-top:-9px;}
 .chartbox.big .mk.nudge-down{margin-top:12px;}
 .chartbox.big .mk.nudge-up{margin-top:-12px;}
+.ch-lbl{position:absolute;left:0;font:600 9px/1 var(--mono);color:var(--tx2);background:rgba(10,10,15,.6);padding:1px 3px;border-radius:3px;}
+.ch-lbl.top{top:0;}
+.ch-lbl.bot{bottom:0;}

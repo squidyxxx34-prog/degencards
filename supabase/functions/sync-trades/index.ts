@@ -269,7 +269,73 @@ async function syncAccount(acc: any, deadline: number) {
   return { imported, pending: sigs.length - done };
 }
 
-/* The price chart itself is built in the user's browser (GeckoTerminal rate-limits cloud IPs); we only store the fills (legs). */
+/* ---------- second-level candles for pump.fun coins ----------
+   pump.fun's trade feed gives every swap (signature, second, price). We rebuild candles over
+   [first fill - 2 min, last fill + 2 min] (clipped to the coin's first trade), bucket size picked for ~50 candles,
+   and place B / S exactly on this wallet's own fills. Non-pump coins fall back to minute candles built in the browser. */
+const BUCKETS = [1, 2, 3, 5, 10, 15, 30, 60, 120, 300];
+async function pumpTrades(mint: string, t0: number, t1: number) {
+  const out: any[] = []; let cursor = `9999999999999999999999-${t1 + 1000}`;
+  for (let page = 0; page < 40; page++) {
+    const r = await fetch(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}&minSolAmount=0`,
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(`pump trades ${r.status}`);
+    const j = await r.json(); const tr = j?.trades || [];
+    for (const t of tr) out.push(t);
+    const oldest = tr.length ? Date.parse(tr[tr.length - 1].timestamp) : 0;
+    if (!j?.pagination?.hasMore || !tr.length || oldest < t0) break;
+    cursor = j.pagination.nextCursor;
+  }
+  return out;
+}
+async function buildPumpCharts(deadline: number, userId: string | null) {
+  let q = db.from("trades").select("id,mint,ext_id,timestamp_ms,hold_time,legs,chart,chart_tries")
+    .like("mint", "%pump").is("deleted_at", null).lt("chart_tries", 3).lt("timestamp_ms", Date.now() - 150_000)
+    .or("chart.is.null,chart->>v.is.null").order("timestamp_ms", { ascending: false }).limit(15);
+  if (userId) q = q.eq("user_id", userId);
+  const { data: rows, error } = await q;
+  if (error) { console.error("charts query", error.message); return 0; }
+  let built = 0; const supplyCache = new Map<string, number>();
+  for (const t of rows || []) {
+    if (Date.now() > deadline - 6_000) break;
+    try {
+      const wallet = String(t.ext_id || "").split(":")[0];
+      const legTs = Array.isArray(t.legs) ? t.legs.map((l: any) => Number(l[0])).filter(Number.isFinite) : [];
+      const end = legTs.length ? Math.max(...legTs) : Number(t.timestamp_ms);
+      const start = legTs.length ? Math.min(...legTs) : end - Number(t.hold_time) * 1000;
+      const t0 = start - 120_000, t1 = end + 120_000;
+      if (!supplyCache.has(t.mint)) { const r = await rpc("getTokenSupply", [t.mint]); supplyCache.set(t.mint, Number(r?.value?.uiAmountString || 0)); }
+      const sup = supplyCache.get(t.mint) || 0;
+      const all = (await pumpTrades(t.mint, t0, t1))
+        .map((x: any) => ({ ts: Date.parse(x.timestamp), slot: String(x.slotIndexId || ""), px: Number(x.priceUsd), fill: Number(x.fillPriceUsd || x.priceUsd), type: x.type, user: x.userAddress, tx: x.tx }))
+        .filter((x) => x.ts >= t0 && x.ts <= t1 && x.px > 0)
+        .sort((a, b) => a.ts - b.ts || (a.slot < b.slot ? -1 : 1));
+      if (all.length < 2 || !sup) { await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id); continue; }
+      const a = all[0].ts, b = Math.max(all[all.length - 1].ts, Math.min(t1, end + 1000));
+      const spanS = Math.max(1, (b - a) / 1000);
+      const bucket = BUCKETS.find((x) => spanS / x <= 60) || 300, bms = bucket * 1000;
+      const candles: number[][] = [];
+      for (const x of all) {
+        const k = a + Math.floor((x.ts - a) / bms) * bms, v = x.px * sup;
+        const c = candles[candles.length - 1];
+        if (c && c[0] === k) { c[2] = Math.max(c[2], v); c[3] = Math.min(c[3], v); c[4] = v; }
+        else { const o = c ? c[4] : v; candles.push([k, o, Math.max(o, v), Math.min(o, v), v]); }   // open = previous close (continuous)
+      }
+      const round = (n: number) => Math.round(n * 100) / 100;
+      const marks = all.filter((x) => wallet && x.user === wallet && (x.type === "buy" || x.type === "sell"))
+        .map((x) => [x.ts, x.type === "buy" ? "b" : "s", round(x.fill * sup)]).slice(0, 20);
+      const chart = { v: 2, src: "pump", i: bms, w: [a, b + bms], c: candles.map((c) => [c[0], round(c[1]), round(c[2]), round(c[3]), round(c[4])]), m: marks };
+      const { error: e2 } = await db.from("trades").update({ chart }).eq("id", t.id);
+      if (e2) throw new Error(e2.message);
+      built++;
+    } catch (e) {
+      console.error("pump chart", (e as Error).message);
+      await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
+    }
+  }
+  return built;
+}
+
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -322,5 +388,7 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.error("repair", (e as Error).message); }
   }
-  return new Response(JSON.stringify({ synced, imported, pending, repaired }), { headers: h });
+  let charts = 0;
+  if (Date.now() < deadline - 10_000) { try { charts = await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
+  return new Response(JSON.stringify({ synced, imported, pending, repaired, charts }), { headers: h });
 });

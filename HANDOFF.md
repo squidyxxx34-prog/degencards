@@ -48,7 +48,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Cron : job pg_cron `sync-trades` (*/10). Secret cron dans Vault (`sync_cron_key`).
 - Redéployer après modif du fichier.
 
-## Courbes réelles sur les cartes
-- Extrait réel du market cap : 2 min avant le 1er achat → 2 min après la dernière vente, marqueurs B (vert) / S (rouge) posés sur la courbe à chaque fill.
-- Bougies minute GeckoTerminal (gratuit ; la granularité seconde est payante). GeckoTerminal bloque les IP cloud → le graphe est construit dans le navigateur de l'utilisateur (`buildChartsInBrowser`, 1 req / 2,2 s) puis mis en cache dans `trades.chart` (grant update(chart) own rows).
-- Les fills (`trades.legs`) sont enregistrés par `sync-trades` à l'import. Trades manuels / sans données : ligne pointillée entrée → sortie.
+## Courbes réelles sur les cartes (bougies)
+- Chandeliers du market cap : jusqu'à 2 min avant le 1er achat / 2 min après la dernière vente, bornés au 1er trade du coin. Taille de bougie auto (1 s → 5 min) pour ~50 bougies.
+- Coins pump.fun : `sync-trades` lit le flux de trades pump.fun (`swap-api.pump.fun/v2/coins/<mint>/trades`, curseur `<x>-<timestamp_ms>` pour sauter à la bonne période) → bougies à la seconde + B/S posés exactement sur les transactions du wallet (prix de fill). Format `trades.chart` v2 : `{v:2, src, i, w, c:[[t,o,h,l,c]], m:[[t,'b'|'s',mc]]}`.
+- Autres coins : bougies minute GeckoTerminal construites dans le navigateur (GeckoTerminal bloque les IP cloud ; pump.fun bloque les navigateurs).
+- Trades manuels : ligne pointillée entrée → sortie.

@@ -116,7 +116,7 @@ const store = {
     const {data,error} = await sb.from('trades').select('*').is('deleted_at', null).order('timestamp_ms',{ascending:false}).limit(2000);
     if(error){ console.error('trades load failed'); return []; }
     return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual', chart: parseChart(r.chart),
-      mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
+      mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, chartTries: Number(r.chart_tries)||0, legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
   },
   async getDeleted(){
     const {data,error} = await sb.from('trades').select('id,ticker,pnl,roi,timestamp_ms,source,deleted_at')
@@ -294,45 +294,63 @@ function generateTradeCard(trade, allTrades){
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
-  const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   const m = Array.isArray(c.m) ? c.m.filter(x=>Array.isArray(x) && okN(+x[0]) && (x[1]==='b'||x[1]==='s')).map(x=>[+x[0], x[1], okN(+x[2]) ? +x[2] : 0]).slice(0,20) : [];
   const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
+  if(c.v === 2){
+    const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
+    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : 'gt' } : null;
+  }
+  const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
 }
-function curveAt(p, t){
-  if(!p.length) return null;
-  if(t <= p[0][0]) return p[0][1];
-  for(let i=1;i<p.length;i++) if(t <= p[i][0]){ const [a,va]=p[i-1],[b,vb]=p[i]; return b===a ? vb : va + (vb-va)*(t-a)/(b-a); }
-  return p[p.length-1][1];
-}
-function miniChart(t, big){
-  const h = big ? 120 : 46;
-  const end = t.timestamp, start = end - (t.holdTime||0)*1000;
-  let p = t.chart?.p || [], marks = t.chart?.m?.length ? t.chart.m : [[start,'b',t.entryMc],[end,'s',t.exitMc]];
-  const real = p.length >= 2;
-  if(!real) p = [[start, t.entryMc||0], [end, t.exitMc||0]];          // no market data yet: entry -> exit only
-  const ts = [...p.map(x=>x[0]), ...marks.map(x=>x[0])];
-  let x0 = t.chart?.w?.[0] ?? Math.min(...ts), x1 = t.chart?.w?.[1] ?? Math.max(...ts);
-  if(!real){ const pad = Math.max(1000,(x1-x0)*0.12); x0 -= pad; x1 += pad; }
-  if(x1 <= x0) x1 = x0 + 1;
-  const pts = marks.map(m=>[m[0], m[1], real ? curveAt(p, m[0]) : (m[2]||curveAt(p,m[0]))]);
-  const ys = [...p.map(x=>x[1]), ...pts.map(x=>x[2])];
-  let y0 = Math.min(...ys), y1 = Math.max(...ys);
-  if(y1 - y0 < 1e-9){ y0 = y0*0.9 - 1; y1 = y1*1.1 + 1; }
-  const padY = (y1-y0)*0.18; y0 -= padY; y1 += padY;
-  const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
-  const path = p.map((q,i)=>`${i?'L':'M'}${X(q[0]).toFixed(2)},${Y(q[1]).toFixed(2)}`).join(' ');
-  const c = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
-  const pos = pts.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
-  const close = (a,b)=> Math.abs(a.x-b.x) < (big?5:9) && Math.abs(a.y-b.y) < 30;   // B and S would overlap
-  const mk = pos.map(m=>{
+const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFixed(1)+'M' : v>=1e3 ? (v/1e3).toFixed(1)+'K' : String(Math.round(v));
+function markersHtml(marks, X, Y, big){
+  const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
+  const close = (a,b)=> Math.abs(a.x-b.x) < (big?5:9) && Math.abs(a.y-b.y) < 30;
+  return pos.map(m=>{
     const clash = pos.some(o=>o!==m && o.kind!==m.kind && close(m,o));
-    const nudge = clash ? (m.kind==='b' ? ' nudge-down' : ' nudge-up') : '';
-    return `<span class="mk mk-${m.kind}${nudge}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`;
+    return `<span class="mk mk-${m.kind}${clash ? (m.kind==='b'?' nudge-down':' nudge-up') : ''}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`;
   }).join('');
+}
+/* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
+   pump.fun coins: second-level candles + exact fills; others: minute candles. */
+function miniChart(t, big){
+  const h = big ? 140 : 50;
+  const ch = t.chart;
+  if(ch && ch.v === 2){
+    const cs = ch.c, iv = ch.i;
+    let x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
+    if(x1 <= x0) x1 = x0 + iv;
+    const ys = [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
+    let y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
+    const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
+    const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
+    const bw = Math.max(0.35, (iv/(x1-x0))*100*0.7);
+    const body = cs.map(([ts,o,hi,lo,c])=>{
+      const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
+      const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
+      return `<line x1="${cx.toFixed(2)}" x2="${cx.toFixed(2)}" y1="${Y(hi).toFixed(2)}" y2="${Y(lo).toFixed(2)}" stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"/>`+
+             `<rect x="${(cx-bw/2).toFixed(2)}" y="${top.toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(0.8, bot-top).toFixed(2)}" fill="${col}"/>`;
+    }).join('');
+    const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
+    const marks = ch.m.map(m=>[m[0], m[1], ch.src==='pump' && m[2] > 0 ? m[2] : at(m[0])]);   // pump: exact fill price
+    const labels = big ? `<span class="ch-lbl top">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
+    return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
+  }
+  // no candles yet (manual trade / still loading): dashed entry -> exit
+  const end = t.timestamp, start = end - (t.holdTime||0)*1000;
+  const p = [[start, t.entryMc||0], [end, t.exitMc||0]];
+  let x0 = start, x1 = end; const padX = Math.max(1000,(x1-x0)*0.12); x0 -= padX; x1 += padX;
+  let y0 = Math.min(p[0][1],p[1][1]), y1 = Math.max(p[0][1],p[1][1]);
+  if(y1 - y0 < 1e-9){ y0 = y0*0.9 - 1; y1 = y1*1.1 + 1; }
+  const pad = (y1-y0)*0.25; y0 -= pad; y1 += pad;
+  const X = v => ((v-x0)/(x1-x0))*100, Y = v => (1-(v-y0)/(y1-y0))*100;
+  const c = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
   return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" opacity="${real?'.9':'.5'}" ${real?'':'stroke-dasharray="4 4"'}/></svg>
-    ${mk}</div>`;
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M${X(p[0][0]).toFixed(2)},${Y(p[0][1]).toFixed(2)} L${X(p[1][0]).toFixed(2)},${Y(p[1][1]).toFixed(2)}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="4 4" opacity=".5"/></svg>
+    ${markersHtml([[start,'b',p[0][1]],[end,'s',p[1][1]]], X, Y, big)}</div>`;
 }
 
 function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(t, trades)})); }
@@ -852,7 +870,7 @@ async function buildChartsInBrowser(){
   chartQueueRunning = true;
   const pools = new Map();
   try{
-    const todo = trades.filter(t=>!t.chart && t.mint && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
+    const todo = trades.filter(t=>(!t.chart || t.chart.v!==2) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
       .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
     let dirty = 0;
     for(const t of todo){
@@ -885,12 +903,10 @@ async function buildChartsInBrowser(){
           if(c.length > best.length) best = c;
           if(best.length >= 3) break;
         }
-        const p = [];
-        for(const c of best){ p.push([Math.max(c[0]*1000,t0), Math.round(c[1]*supply)], [Math.min(c[0]*1000+step-1,t1), Math.round(c[4]*supply)]); }
-        if(p.length < 2){ bumpTries(t.id); continue; }
-        const step2 = p.length > 160 ? (p.length-1)/159 : 1;
-        const pp = step2===1 ? p : Array.from({length:160},(_,i)=>p[Math.round(i*step2)]);
-        const chart = { p: pp, m: marks.slice(0,20), w:[t0,t1] };
+        if(!best.length){ bumpTries(t.id); continue; }
+        const r2 = n => Math.round(n*supply*100)/100;
+        const cs = best.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
+        const chart = { v:2, src:'gt', i:step, w:[Math.max(t0, cs[0][0]), t1], c:cs, m:marks.slice(0,20) };
         const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
         if(!error){ t.chart = parseChart(chart); dirty++; if(dirty % 4 === 0) renderAll(); }
         else bumpTries(t.id);
@@ -989,7 +1005,7 @@ function openDetail(id){
     <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
     <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
     <div style="margin:12px 0 4px">${miniChart(t, true)}</div>
-    ${t.chart?.p?.length>=2 ? `<div class="chart-note">Market cap · 2 min before entry to 2 min after exit</div>` : ''}
+    ${t.chart?.v===2 ? `<div class="chart-note">Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+'m' : (t.chart.i/1000)+'s'} candles · up to 2 min before entry / after exit</div>` : `<div class="chart-note">Loading real candles…</div>`}
     <div class="detail-stats">
       <div><div class="l">Entry MC</div><div class="v">${fmt.mc(t.entryMc)}</div></div>
       <div><div class="l">Exit MC</div><div class="v">${fmt.mc(t.exitMc)}</div></div>
