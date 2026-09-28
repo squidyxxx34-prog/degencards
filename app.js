@@ -8,6 +8,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 const SOURCES = ['manual','pumpfun','fomo','wallet'];
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;                 // Solana address shape
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/* display form of a ticker: always "$TICKER" (never "$$"), except placeholders */
+function tk(s){ s = String(s||''); return (!s || s.startsWith('$') || s.includes('…') || s==='UNKNOWN') ? s : '$'+s; }
 function cleanTicker(s){ return String(s||'').replace(/[\u0000-\u001f\u007f<>&"'`\\]/g,'').trim().slice(0,24); }
 function num(v, min, max, dflt){ v = Number(v); if(!Number.isFinite(v)) return dflt||0; return Math.min(max, Math.max(min, v)); }
 const REDIRECT_URL = location.origin + location.pathname;      // never echo query/hash back to the auth server
@@ -304,7 +306,7 @@ function renderCardHTML(t, meta){
       <div class="top-left"><span>#${String(t.tradeId).padStart(4,'0')}</span>${t.source && t.source!=='manual' ? `<span class="src">${esc(t.source)}</span>` : ''}</div>
       <div class="top-right"><span class="rarity-tag">${meta.rarity}</span><div class="grade">${meta.grade}</div></div>
     </div>
-    <div class="ticker">${esc(t.ticker)}</div>
+    <div class="ticker">${esc(tk(t.ticker))}</div>
     <div class="pnl ${win?'pos':'neg'}">${fmt.usd(t.pnl)}</div>
     <div class="roi ${win?'pos':'neg'}">${fmt.pct(t.roi)}</div>
     <div class="mini">${miniChart(t.pnl)}</div>
@@ -656,7 +658,7 @@ function renderHistory(){
     return `<tr style="border-top:1px solid var(--border);" data-id="${t.id}" class="${histSel.has(t.id)?'is-sel':''}">
       <td class="sel-cell">${histSelect?`<input type="checkbox" class="hist-chk" data-id="${t.id}" ${histSel.has(t.id)?'checked':''} aria-label="Select trade">`:''}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.date(t.timestamp)}</td>
-      <td style="padding:9px 12px; font-weight:700;">${esc(t.ticker)}</td>
+      <td style="padding:9px 12px; font-weight:700;">${esc(tk(t.ticker))}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.entryMc)}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.exitMc)}</td>
       <td style="padding:9px 12px; color:var(--tx2);">${fmt.hold(t.holdTime)}</td>
@@ -714,7 +716,7 @@ function renderRecover(){
     <div class="bin-list">${deletedTrades.map(t=>`
       <label class="bin-row ${binSel.has(t.id)?'is-sel':''}">
         <input type="checkbox" class="bin-chk" data-id="${t.id}" ${binSel.has(t.id)?'checked':''}>
-        <span class="bin-tk">${esc(t.ticker)}</span>
+        <span class="bin-tk">${esc(tk(t.ticker))}</span>
         <span class="bin-date">${fmt.date(t.timestamp)}</span>
         <span class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</span>
       </label>`).join('')}
@@ -877,7 +879,7 @@ function openDetail(id){
   const win = t.pnl>=0;
   document.getElementById('detailBody').innerHTML = `
     <div style="font-family:var(--mono);font-size:11px;color:var(--tx2)">TRADE #${String(t.tradeId).padStart(4,'0')} · ${meta.rarity.toUpperCase()}</div>
-    <div style="font-weight:800;font-size:22px;margin-top:6px">${esc(t.ticker)}</div>
+    <div style="font-weight:800;font-size:22px;margin-top:6px">${esc(tk(t.ticker))}</div>
     <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
     <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
     ${miniChart(t.pnl)}
@@ -910,7 +912,7 @@ function drawCardCanvas(t, meta){
   ctx.textAlign='left'; ctx.fillStyle='#ADADB8'; ctx.font='600 20px monospace';
   ctx.fillText('#'+String(t.tradeId).padStart(4,'0'), 40, 60);
   ctx.textAlign='center'; ctx.fillStyle='#ADADB8'; ctx.font='700 32px sans-serif';
-  ctx.fillText(t.ticker, 300, 160);
+  ctx.fillText(tk(t.ticker), 300, 160);
   ctx.fillStyle = win?'#3DFFA0':'#FF5C6C'; ctx.font='900 84px monospace';
   ctx.fillText(fmt.usd(t.pnl), 300, 280);
   ctx.font='700 40px monospace';
@@ -926,7 +928,7 @@ function drawCardCanvas(t, meta){
   return c;
 }
 async function shareCard(t, meta){
-  const caption = `Look at my trade! ${t.ticker} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) — Collect yours on DEGENCARDS`;
+  const caption = `Look at my trade! ${tk(t.ticker)} ${fmt.pct(t.roi)} (${fmt.usd(t.pnl)}) — Collect yours on DEGENCARDS`;
   const canvas = drawCardCanvas(t, meta);
   canvas.toBlob(async (blob)=>{
     if(!blob){ showToast("Couldn't build the image"); return; }
