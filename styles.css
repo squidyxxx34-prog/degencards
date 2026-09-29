@@ -483,3 +483,5 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .share-styles button.on{background:linear-gradient(90deg,var(--purple),var(--gold));}
 .share-styles button:disabled{opacity:.4;cursor:not-allowed;}
 .share-note{font-size:12px;color:var(--tx2);margin:-4px 0 10px;}
+.share-stage{position:relative;}
+.share-sound{position:absolute;right:16px;bottom:16px;min-height:40px;padding:0 14px;border-radius:999px;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:13px;font-weight:700;}

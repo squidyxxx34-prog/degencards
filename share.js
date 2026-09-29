@@ -287,23 +287,29 @@ function renderStill(t, meta, fmtKey, opt){
 }
 function videoMime(){
   if(typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
-  return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => { try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } }) || null;
+  return ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => { try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } }) || null;
 }
 /* records any animation: frameAt(ctx, W, H, ms) drawn for `total` ms at 30 fps */
-function recordAnim(W, H, total, frameAt, onProgress){
+function recordAnim(W, H, total, frameAt, onProgress, audio){
   return new Promise((resolve, reject) => {
     const mime = videoMime(); if(!mime) return reject(new Error('unsupported'));
     const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const ctx = c.getContext('2d'), stream = c.captureStream(30);
-    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9_000_000 }); }catch(e){ return reject(e); }
+    const ctx = c.getContext('2d'), vstream = c.captureStream(30);
+    let stream = vstream, dest = null;
+    if(audio && audio.ac){                                              // mix the synthesized soundtrack into the file
+      try{ dest = audio.ac.createMediaStreamDestination(); stream = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]); }catch(e){ dest = null; stream = vstream; }
+    }
+    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9_000_000, audioBitsPerSecond: 160_000 }); }catch(e){ return reject(e); }
     const chunks = []; rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = () => resolve(new Blob(chunks, { type: mime.split(';')[0] }));
     rec.onerror = e => reject(e.error || e);
-    const t0 = performance.now(); frameAt(ctx, W, H, 0); rec.start(250);
+    frameAt(ctx, W, H, 0); rec.start(250);
+    if(dest){ try{ audio.schedule(audio.ac, dest, audio.ac.currentTime + 0.02); }catch(e){} }
+    const t0 = performance.now();
     const tick = () => {
       const el = performance.now() - t0;
       frameAt(ctx, W, H, Math.min(el, total)); onProgress && onProgress(Math.min(1, el / total));
-      if(el < total) requestAnimationFrame(tick); else { stream.getTracks().forEach(tr => tr.requestFrame ? tr.requestFrame() : 0); setTimeout(() => rec.stop(), 150); }
+      if(el < total) requestAnimationFrame(tick); else { vstream.getTracks().forEach(tr => tr.requestFrame ? tr.requestFrame() : 0); setTimeout(() => { rec.stop(); if(audio && audio.ac) setTimeout(() => audio.ac.close().catch(()=>{}), 300); }, 150); }
     };
     requestAnimationFrame(tick);
   });
@@ -312,10 +318,12 @@ function recordVideo(t, meta, fmtKey, opt, onProgress){
   const F = FORMATS[fmtKey];
   return recordAnim(F.w, F.h, VIDEO_MS, (ctx, W, H, el) => drawFrame(ctx, W, H, t, meta, Math.min(1, el / (VIDEO_MS - 1200)), opt), onProgress);   // last 1.2 s = hold
 }
-function recordReplay(t, meta, opt, onProgress){
+function recordReplay(t, meta, opt, onProgress, ac){
   const R = window.dcReplay;
-  return recordAnim(R.W, R.H, R.DURATION, (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt), onProgress);
+  const audio = ac ? { ac, schedule: (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt) } : null;
+  return recordAnim(R.W, R.H, R.DURATION, (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt), onProgress, audio);
 }
+const newAudio = () => { try{ const A = window.AudioContext || window.webkitAudioContext; if(!A) return null; const ac = new A(); ac.resume && ac.resume(); return ac; }catch(e){ return null; } };
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
 function captionFor(t, opt){
   const res = opt.hideUsd ? fmt.pct(t.roi) : `${fmt.usd(t.pnl)} (${fmt.pct(t.roi)})`;
@@ -335,7 +343,7 @@ async function deliver(blob, name, caption){
 }
 
 /* ---------- share sheet ---------- */
-let state = { t:null, meta:null, fmt:'post', style:'card', hideUsd:false, anim:0, busy:false };
+let state = { t:null, meta:null, fmt:'post', style:'card', hideUsd:false, anim:0, busy:false, sound:false, pac:null };
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
   const cv = document.getElementById('sharePreview'), R = window.dcReplay;
@@ -343,13 +351,24 @@ function preview(){
   const scale = Math.min(1, 360 / F.w); cv.width = F.w * scale * (window.devicePixelRatio > 1 ? 2 : 1) | 0; cv.height = F.h * (cv.width / F.w) | 0;
   const ctx = cv.getContext('2d'), k = cv.width / F.w;
   cancelAnimationFrame(state.anim);
+  stopPreviewSound();
+  let cycle = -1;
   const t0 = performance.now(), loop = () => {                    // live animated preview, loops
     ctx.setTransform(k,0,0,k,0,0);
-    if(isReplay()){ const el = (performance.now() - t0) % (R.DURATION + 900); R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, R.DURATION), state); }
+    if(isReplay()){
+      const tot = R.DURATION + 900, raw = performance.now() - t0, el = raw % tot, c = Math.floor(raw / tot);
+      if(c !== cycle){ cycle = c; if(state.sound) playPreviewSound(); }       // soundtrack restarts with each loop
+      R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, R.DURATION), state);
+    }
     else { const el = (performance.now() - t0) % (VIDEO_MS + 900), p = Math.min(1, el / (VIDEO_MS - 1200)); drawFrame(ctx, F.w, F.h, state.t, state.meta, p, state); }
     if(sheet().classList.contains('show')) state.anim = requestAnimationFrame(loop);
   };
   loop();
+}
+function stopPreviewSound(){ if(state.pac){ try{ state.pac.close(); }catch(e){} state.pac = null; } }
+function playPreviewSound(){
+  stopPreviewSound(); const ac = newAudio(); if(!ac || !window.dcReplay) return; state.pac = ac;
+  try{ window.dcReplay.soundtrack(ac, ac.destination, ac.currentTime + 0.02, state.t, state); }catch(e){}
 }
 function syncButtons(){
   const canReplay = !!(window.dcReplay && window.dcReplay.available(state.t));
@@ -357,6 +376,7 @@ function syncButtons(){
   document.querySelectorAll('[data-share-style]').forEach(b => { b.classList.toggle('on', b.dataset.shareStyle === state.style); if(b.dataset.shareStyle === 'replay'){ b.disabled = !canReplay; b.title = canReplay ? '' : 'Needs the real candles of this trade'; } });
   document.getElementById('shareFmts').hidden = state.style === 'replay';
   document.getElementById('shareReplayNote').hidden = canReplay;
+  const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   const v = document.getElementById('shareVideo'), mime = videoMime();
@@ -378,11 +398,12 @@ async function doStill(){
 }
 async function doVideo(){
   if(state.busy) return; state.busy = true;
+  const ac = isReplay() ? newAudio() : null;                         // created synchronously in the tap, before any await
   const btn = document.getElementById('shareVideo'), label = btn.textContent;
   try{
     await fontsReady(); await loadCoinImage(state.t.image);
     const prog = pr => { btn.textContent = `RENDERING… ${Math.round(pr*100)}%`; };
-    const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog) : await recordVideo(state.t, state.meta, state.fmt, state, prog);
+    const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog, ac) : await recordVideo(state.t, state.meta, state.fmt, state, prog);
     btn.textContent = label;
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
     const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.${ext}`, captionFor(state.t, state));
@@ -394,7 +415,7 @@ const safeName = () => (String(state.t.ticker).replace(/[^A-Za-z0-9_-]/g,'') || 
 
 window.__dcLoadImg = loadCoinImage;
 window.__dcImgCache = IMG_CACHE;
-window.__dcShareReplay = (t, meta, opt) => recordReplay(t, meta, opt);
+window.__dcShareReplay = (t, meta, opt, withSound) => recordReplay(t, meta, opt, null, withSound ? newAudio() : null);
 window.__dcShareFrame = (canvas, t, meta, fmtKey, opt, p) => { const F = FORMATS[fmtKey]; canvas.width = F.w; canvas.height = F.h; drawFrame(canvas.getContext('2d'), F.w, F.h, t, meta, p, opt); };   // used by the visual tests
 window.__dcShareRecord = (t, meta, fmtKey, opt) => recordVideo(t, meta, fmtKey, opt);
 window.shareCard = function(t, meta){
@@ -410,13 +431,14 @@ function init(){
   if(inited || !sheet()) return; inited = true;
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.addEventListener('click', () => { state.fmt = b.dataset.shareFmt; syncButtons(); preview(); }));
   document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); preview(); }));
+  document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);
   document.getElementById('shareCaption').addEventListener('click', async () => {
     try{ await navigator.clipboard.writeText(captionFor(state.t, state)); showToast('Caption copied'); }catch(e){ showToast("Couldn't copy"); }
   });
-  sheet().querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { sheet().classList.remove('show'); cancelAnimationFrame(state.anim); }));
-  sheet().addEventListener('click', e => { if(e.target === sheet()){ sheet().classList.remove('show'); cancelAnimationFrame(state.anim); } });
+  sheet().querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); }));
+  sheet().addEventListener('click', e => { if(e.target === sheet()){ sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); } });
 }
 })();
