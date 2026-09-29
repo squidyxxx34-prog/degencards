@@ -64,3 +64,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - SHARE IMAGE (PNG) ou SHARE VIDEO (6 s : fondu, compteur PnL, bougies qui se dessinent, B/S qui tombent, reflet lumineux). MP4 quand le navigateur sait l'enregistrer (iOS/Chrome récents), sinon WebM ; bouton caché si MediaRecorder absent.
 - Envoi via la feuille de partage native (navigator.share) → Insta, X, TikTok… ; sinon téléchargement + légende copiée.
 - Tout est dessiné en canvas, aucune requête externe. `window.__dcShareFrame` / `__dcShareRecord` = hooks de test visuel.
+
+## Guide de démarrage (guide.js)
+- 10 étapes, lancé automatiquement au 1er affichage de l'app (par utilisateur, `localStorage dc_guide_done_<uid>`), rejouable via le bouton « ? » du header ou Account > Getting started.
+- Accessibilité : vraie boîte de dialogue (role=dialog, aria-modal, labelledby/describedby), focus sur le titre à chaque étape, focus piégé, reste de la page `inert`, annonces aria-live, Esc = passer, ← → = naviguer, boutons ≥ 44 px, texte 16 px, prefers-reduced-motion et prefers-contrast respectés.
+- Téléphone : fiche en bas d'écran, la cible est amenée au-dessus (le scroll se fait sur le vrai conteneur, ici `body`). Tablette/ordi : bulle placée à côté de la cible.
