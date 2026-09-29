@@ -15,6 +15,7 @@ const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9v
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const BACKFILL_DAYS = 30, MAX_SIGS = 2000, MAX_TX_PER_ACCOUNT = HELIUS ? 400 : 120, CONCURRENCY = HELIUS ? 8 : 3;
 const TIME_BUDGET_MS = 95_000, MANUAL_COOLDOWN_MS = 60_000;
+const freshPump: string[] = [];                                     // pump trades imported during this run -> chart them right away
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -301,8 +302,8 @@ async function syncAccount(acc: any, deadline: number) {
         fees_usd: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.ninv - c.inv) + (c.ret - (c.nret || 0)))) * 100) / 100 : null,
         legs: sup ? [...(c.bl || []).map(([t, px]: number[]) => [t, "b", Math.round(px * sup)]), ...(c.sl || []).map(([t, px]: number[]) => [t, "s", Math.round(px * sup)])] : null,
       };
-      const { error } = await db.from("trades").insert(row);
-      if (!error) imported++;
+      const { data: ins, error } = await db.from("trades").insert(row).select("id").maybeSingle();
+      if (!error) { imported++; if (ins?.id && c.mint.endsWith("pump")) freshPump.push(ins.id); }
       else if (String(error.code).includes("23505")) {                // already imported (rescan): refresh the figures only
         const { user_id: _u, source: _s, ext_id, ...fig } = row as any;
         await db.from("trades").update(fig).eq("user_id", acc.user_id).eq("ext_id", ext_id);
@@ -323,13 +324,13 @@ async function syncAccount(acc: any, deadline: number) {
    [first fill - 2 min, last fill + 2 min] (clipped to the coin's first trade), bucket size picked for ~50 candles,
    and place B / S exactly on this wallet's own fills. Non-pump coins fall back to minute candles built in the browser. */
 const BUCKETS = [1, 2, 3, 5, 10, 15, 30, 60, 120, 300];
-let pumpLast = 0;
+let pumpLast = 0, pumpGap = 2500;
 async function pumpTrades(mint: string, t0: number, t1: number) {
   const out: any[] = []; let cursor = `9999999999999999999999-${t1 + 1000}`;
   for (let page = 0; page < 40; page++) {
     let r: Response | null = null;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const wait = pumpLast + 2500 - Date.now(); if (wait > 0) await sleep(wait);          // stay under pump.fun's rate limit
+      const wait = pumpLast + pumpGap - Date.now(); if (wait > 0) await sleep(wait);        // stay under pump.fun's rate limit
       pumpLast = Date.now();
       r = await fetch(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}&minSolAmount=0`,
         { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
@@ -346,12 +347,13 @@ async function pumpTrades(mint: string, t0: number, t1: number) {
   }
   return out;
 }
-async function buildPumpCharts(deadline: number, userId: string | null, onlyId: string | null = null) {
+async function buildPumpCharts(deadline: number, userId: string | null, onlyIds: string[] | null = null) {
+  const onlyId = onlyIds && onlyIds.length ? onlyIds : null;
   let q = db.from("trades").select("id,mint,ext_id,timestamp_ms,hold_time,legs,chart,chart_tries")
     .like("mint", "%pump").is("deleted_at", null).lt("chart_tries", onlyId ? 6 : 3).lt("timestamp_ms", Date.now() - 150_000)
-    .or("chart.is.null,chart->>v.is.null,chart->>src.eq.gt").order("timestamp_ms", { ascending: false }).limit(onlyId ? 1 : 15);   // pump coins drawn in minutes get upgraded to seconds
+    .or("chart.is.null,chart->>v.is.null,chart->>src.eq.gt").order("timestamp_ms", { ascending: false }).limit(onlyId ? onlyId.length : 15);   // pump coins drawn in minutes get upgraded to seconds
   if (userId) q = q.eq("user_id", userId);
-  if (onlyId) q = q.eq("id", onlyId);
+  if (onlyId) q = q.in("id", onlyId);
   const { data: rows, error } = await q;
   if (error) { console.error("charts query", error.message); return 0; }
   let built = 0, rateHits = 0; const supplyCache = new Map<string, number>();
@@ -503,6 +505,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: h });
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const deadline = Date.now() + TIME_BUDGET_MS;
+  pumpGap = 2500;                                                    // default pacing; the on-demand path speeds it up
   const body: any = await req.json().catch(() => ({}));
   const task = ["images", "charts", "chart"].includes(body?.task) ? body.task : "all";   // cron: images / charts passes; user: one chart
 
@@ -527,10 +530,12 @@ Deno.serve(async (req) => {
     const { data: u, error } = await db.auth.getUser(jwt);
     if (error || !u?.user) return new Response('{"error":"unauthorized"}', { status: 401, headers: h });
     userId = u.user.id;
-    if (task === "chart") {                                            // "open a card": build this one chart now
-      const id = String(body?.id || "");
-      if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response('{"error":"id"}', { status: 400, headers: h });
-      let charts = 0; try { charts = await buildPumpCharts(Date.now() + 45_000, userId, id); } catch (e) { console.error("chart", (e as Error).message); }
+    if (task === "chart") {                                            // "open a card" / "cards on screen": build these charts now
+      const raw = Array.isArray(body?.ids) ? body.ids : [body?.id];
+      const ids = raw.map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+      if (!ids.length) return new Response('{"error":"id"}', { status: 400, headers: h });
+      pumpGap = 700;
+      let charts = 0; try { charts = await buildPumpCharts(Date.now() + 50_000, userId, ids); } catch (e) { console.error("chart", (e as Error).message); }
       return new Response(JSON.stringify({ charts }), { headers: h });
     }
     const { data } = await db.from("connected_accounts").select("*").eq("user_id", u.user.id);
@@ -565,7 +570,9 @@ Deno.serve(async (req) => {
     } catch (e) { console.error("repair", (e as Error).message); }
   }
   let charts = 0;
-  if (userId && Date.now() < deadline - 10_000) { try { charts = await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
+  const fresh = freshPump.splice(0);
+  if (fresh.length && Date.now() < deadline - 10_000) { try { charts += await buildPumpCharts(deadline, null, fresh.slice(0, 15)); } catch (e) { console.error("charts", (e as Error).message); } }
+  if (userId && Date.now() < deadline - 10_000) { try { charts += await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
   let images = 0;
   if (userId && Date.now() < deadline - 10_000) { try { images = await fillCoinImages(deadline, userId); } catch (e) { console.error("images", (e as Error).message); } }
   return new Response(JSON.stringify({ synced, imported, pending, repaired, charts, images }), { headers: h });

@@ -81,3 +81,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - `fmt.mc` gère K / M / B.
 - Ouvrir une carte sans bougies les construit tout de suite : pump.fun → edge function `{task:"chart", id}` (JWT user, un seul trade, bougies à la seconde) ; sinon, ou si pump.fun bloque, bougies minute GeckoTerminal dans le navigateur. Les graphes minute des coins pump sont ensuite remplacés par la version seconde par le cron.
 - Crons décalés pour ne jamais frapper pump.fun en même temps : sync */10, images 2-59/5, graphes 4-59/4 (tâche `charts`). Si pump.fun bloque 3 passages de suite pour un trade, le navigateur prend le relais en bougies minute.
+
+## Graphes : chargement rapide
+- À l'ouverture de l'app, tous les graphes manquants sont demandés tout de suite (`warmCharts`) : coins pump.fun par lots de 10 à l'edge function (`{task:"chart", ids}`, rythme pump.fun 0,7 s en mode à la demande), autres coins dans la file navigateur (GeckoTerminal). Les cartes visibles à l'écran passent en premier (IntersectionObserver).
+- Les trades pump.fun importés par la synchro reçoivent leur graphe dans le même passage (`freshPump`).
+- Pools GeckoTerminal mis en cache 7 jours (localStorage) : 1 requête de moins par coin.
+- Pendant le chargement : squelette de bougies animé (plus de fausse ligne).

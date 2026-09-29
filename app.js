@@ -358,7 +358,11 @@ function miniChart(t, big){
     return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
       <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
   }
-  // no candles yet (manual trade / still loading): dashed entry -> exit
+  if(t.mint && chartState(t) === 'loading'){                        // loading: animated skeleton candles, not a fake line
+    const n = big ? 26 : 16, bars = Array.from({length:n}, (_,i)=>{ const h = 18 + 30*Math.abs(Math.sin(i*1.7 + t.tradeId)); return `<i style="height:${h.toFixed(0)}%;animation-delay:${(i*60)}ms"></i>`; }).join('');
+    return `<div class="chartbox skel ${big?'big':''}" style="height:${h}px" aria-label="Loading chart">${bars}</div>`;
+  }
+  // no candles (manual trade / no market data): dashed entry -> exit
   const end = t.timestamp, start = end - (t.holdTime||0)*1000;
   const p = [[start, t.entryMc||0], [end, t.exitMc||0]];
   let x0 = start, x1 = end; const padX = Math.max(1000,(x1-x0)*0.12); x0 -= padX; x1 += padX;
@@ -923,7 +927,7 @@ function renderRecover(){
     act(store.purge.bind(store), [...binSel], `${n} trade${n>1?'s':''} permanently deleted`);
   });
 }
-function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
+function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); observeCards(); }
 
 /* ---------- auto-import (server side) ----------
    The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
@@ -1005,12 +1009,16 @@ async function buildOneInBrowser(t){
   const ts = marks.map(m=>m[0]);
   const t0 = Math.min(...ts) - 120000, t1 = Math.max(...ts) + 120000;
   if(!gtPools.has(t.mint)){
+    try{ const c = JSON.parse(localStorage.getItem('dc_gtp_'+t.mint)||'null'); if(c && Date.now()-c.at < 7*864e5) gtPools.set(t.mint, c.p); }catch(e){}
+  }
+  if(!gtPools.has(t.mint)){
     const j = await gtGet(`/tokens/${t.mint}/pools?page=1`);
     gtPools.set(t.mint, (j?.data||[]).map(p=>{
       const a = p.attributes||{}, price = +a.base_token_price_usd, fdv = +a.fdv_usd;
       const baseIsMint = String(p.relationships?.base_token?.data?.id||'').endsWith(t.mint);
       return { addr:a.address, created: Date.parse(a.pool_created_at||'')||0, supply: baseIsMint && price>0 && fdv>0 ? fdv/price : 0 };
     }));
+    try{ localStorage.setItem('dc_gtp_'+t.mint, JSON.stringify({ at:Date.now(), p:gtPools.get(t.mint) })); }catch(e){}
   }
   const list = gtPools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
   const supply = (gtPools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
@@ -1041,8 +1049,10 @@ async function buildChartsInBrowser(){
     const todo = trades.filter(t=>(!t.chart || t.chart.v!==2) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
       .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
     let dirty = 0;
-    for(const t of todo){
+    while(todo.length){
       if(!session) break;
+      const k = Math.max(0, todo.findIndex(x=>onScreen.has(x.id)));   // cards on screen first
+      const t = todo.splice(k, 1)[0];
       if(t.chart && t.chart.v === 2) continue;                        // built meanwhile (card opened)
       try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } }
       catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
@@ -1050,6 +1060,43 @@ async function buildChartsInBrowser(){
     if(dirty) renderAll();
   } finally { chartQueueRunning = false; }
 }
+/* ultra-fast charts: everything missing is requested as soon as the app opens, cards on screen first.
+   pump.fun coins -> the server builds them in batches of 10 (second candles); other coins -> the browser queue. */
+const onScreen = new Set();
+const chartObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
+  let add = false;
+  entries.forEach(e=>{ const id = e.target.dataset.id; if(!id) return; if(e.isIntersecting){ onScreen.add(id); add = true; } else onScreen.delete(id); });
+  if(add) scheduleWarm();
+}, { rootMargin:'300px 0px' }) : null;
+function observeCards(){ if(!chartObserver) return; document.querySelectorAll('.card[data-id]').forEach(el=>chartObserver.observe(el)); }
+let warmTimer = null, warmBusy = false;
+function scheduleWarm(){ clearTimeout(warmTimer); warmTimer = setTimeout(warmCharts, 120); }
+const pumpAsked = new Set();
+async function warmCharts(){
+  if(!session) return;
+  buildChartsInBrowser();                                            // non-pump coins (and pump fallbacks) in the browser
+  if(warmBusy) return; warmBusy = true;
+  try{
+    for(let round = 0; round < 6; round++){
+      const missing = trades.filter(t=>t.mint && t.mint.endsWith('pump') && !(t.chart && t.chart.v===2) && (t.chartTries||0) < 3
+        && t.timestamp < Date.now()-150000 && !pumpAsked.has(t.id) && !chartInFlight.has(t.id));
+      if(!missing.length) break;
+      missing.sort((a,b)=>(onScreen.has(b.id)-onScreen.has(a.id)) || (b.timestamp-a.timestamp));
+      const batch = missing.slice(0, 10); batch.forEach(t=>{ pumpAsked.add(t.id); chartInFlight.add(t.id); });
+      try{
+        const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', ids: batch.map(t=>t.id) } });
+        const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
+        let changed = 0;
+        (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c){ t.chart = c; changed++; } });
+        batch.forEach(t=>chartInFlight.delete(t.id));
+        if(changed) renderAll();
+        if(!data?.charts && !changed) break;                           // pump.fun is throttling: the browser fallback / cron will finish
+      }catch(e){ batch.forEach(t=>chartInFlight.delete(t.id)); break; }
+    }
+  } finally { warmBusy = false; }
+  buildChartsInBrowser();
+}
+
 /* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
 const chartInFlight = new Set();
 async function ensureChart(t){
@@ -1396,7 +1443,7 @@ async function showApp(){
   document.getElementById('app').hidden = false;
   await reload();
   maybeAutoSync();
-  setTimeout(buildChartsInBrowser, 1500);
+  warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself
   window.dcGuide?.maybeStart(window.__dcGuideUser);
   setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 5*60*1000);
