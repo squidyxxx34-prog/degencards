@@ -8,12 +8,17 @@ import { PublicKey } from "npm:@solana/web3.js@1.98.0";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const HELIUS = Deno.env.get("HELIUS_API_KEY") || "";
-const RPC_URL = HELIUS ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS}` : "https://api.mainnet-beta.solana.com";
+// history (signatures, transactions) only from full-history nodes; simple reads can also use a backup node
+const RPCS_HIST = HELIUS ? [`https://mainnet.helius-rpc.com/?api-key=${HELIUS}`, "https://api.mainnet-beta.solana.com"] : ["https://api.mainnet-beta.solana.com"];
+const RPCS = [...RPCS_HIST, "https://solana-rpc.publicnode.com"];
+const HIST_METHODS = new Set(["getSignaturesForAddress", "getTransaction"]);
+let rpcIdx = 0;
+const RPC_URL = RPCS[0];                                              // kept for rpcObj (Helius DAS)
 const ALLOWED_ORIGIN = "https://degencards.vercel.app";
 const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const BACKFILL_DAYS = 30, MAX_SIGS = 2000, MAX_TX_PER_ACCOUNT = HELIUS ? 400 : 120, CONCURRENCY = HELIUS ? 8 : 3;
+const BACKFILL_DAYS = 30, MAX_SIGS = 30000, MAX_TX_PER_ACCOUNT = HELIUS ? 800 : 500, CONCURRENCY = HELIUS ? 8 : 3;
 const TIME_BUDGET_MS = 95_000, MANUAL_COOLDOWN_MS = 60_000;
 const freshPump: string[] = [];                                     // pump trades imported during this run -> chart them right away
 
@@ -29,18 +34,25 @@ function cors(origin: string | null) {
   };
 }
 
-async function rpc(method: string, params: unknown[], tries = 5): Promise<any> {
+async function rpc(method: string, params: unknown[], tries = 6): Promise<any> {
+  let lastErr: unknown = null;
+  const pool = HIST_METHODS.has(method) ? RPCS_HIST : RPCS;
   for (let i = 0; i < tries; i++) {
+    const url = pool[(rpcIdx + i) % pool.length];                    // rotate endpoints: one being rate-limited or down never blocks the sync
     try {
-      const r = await fetch(RPC_URL, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
-      if (r.status === 429 || r.status >= 500) { await sleep(600 * (i + 1) ** 2); continue; }
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal: AbortSignal.timeout(15000) });
+      if (r.status === 429 || r.status >= 500) { lastErr = new Error(`rpc ${r.status}`); await sleep(300 * (i + 1)); continue; }
       const j = await r.json();
-      if (j.error) { if (String(j.error.code) === "-32429") { await sleep(600 * (i + 1) ** 2); continue; } throw new Error(j.error.message); }
+      if (j.error) {
+        if (String(j.error.code) === "-32429" || /rate|limit|timeout|unavailable/i.test(String(j.error.message))) { lastErr = new Error(j.error.message); await sleep(300 * (i + 1)); continue; }
+        throw new Error(j.error.message);
+      }
+      rpcIdx = (rpcIdx + i) % pool.length;                            // stick with the endpoint that answered
       return j.result;
-    } catch (e) { if (i === tries - 1) throw e; await sleep(500 * (i + 1)); }
+    } catch (e) { lastErr = e; if (i === tries - 1) break; await sleep(400 * (i + 1)); }
   }
-  throw new Error("rpc rate limited");
+  throw lastErr || new Error("rpc failed");
 }
 
 async function rpcObj(method: string, params: Record<string, unknown>): Promise<any> {
@@ -218,12 +230,31 @@ async function symbols(mints: string[]) {
 const cleanSym = (s: string, mint: string) =>
   (s || "").replace(/[\u0000-\u001f\u007f<>&"'`\\$]/g, "").trim().toUpperCase().slice(0, 24) || (mint.slice(0, 4) + "…" + mint.slice(-4)).toUpperCase();
 
+/* ---------- is this really a wallet? ---------- */
+const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+async function checkWallet(addr: string): Promise<string | null> {
+  const info = await rpc("getAccountInfo", [addr, { encoding: "base64" }]);
+  const v = info?.value;
+  if (!v) {                                                           // no account at all: never funded
+    const sigs = await rpc("getSignaturesForAddress", [addr, { limit: 1 }]);
+    return sigs?.length ? null : "No activity on this address yet. Check it's your trading wallet's address.";
+  }
+  if (v.executable) return "This is a program address, not a wallet. Paste your wallet's public address.";
+  if (v.owner === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" || v.owner === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") return "This is a coin (token) address, not your wallet. Paste your wallet's public address.";
+  if (v.owner !== SYSTEM_PROGRAM) return null;                        // smart / embedded wallets can be owned by another program: allowed
+  return null;
+}
+
 /* ---------- one connected account ---------- */
 async function syncAccount(acc: any, deadline: number) {
   const wallet = acc.handle;
   if (!B58.test(wallet)) return { imported: 0, error: "not a Solana address" };
   const first = !acc.last_sig;
-  if (first) await db.from("trades").delete().eq("user_id", acc.user_id).eq("source", "wallet").is("ext_id", null);   // legacy client-side imports
+  if (first) {
+    const bad = await checkWallet(wallet);
+    if (bad) return { imported: 0, error: bad };
+    await db.from("trades").delete().eq("user_id", acc.user_id).eq("source", "wallet").is("ext_id", null);   // legacy client-side imports
+  }
 
   // 1. new signatures since the cursor (newest first), first sync = last 30 days
   const cutoff = Date.now() - BACKFILL_DAYS * 864e5;
@@ -237,7 +268,7 @@ async function syncAccount(acc: any, deadline: number) {
     if (stop || page.length < 1000) break;
     before = page[page.length - 1].signature;
   }
-  if (!sigs.length) { await db.from("connected_accounts").update({ last_synced_at: new Date().toISOString(), sync_error: null }).eq("id", acc.id); return { imported: 0 }; }
+  if (!sigs.length) { await db.from("connected_accounts").update({ last_synced_at: new Date().toISOString(), sync_error: null, sync_pending: 0 }).eq("id", acc.id); return { imported: 0 }; }
   sigs.reverse();                                              // oldest first
   const batch = sigs.slice(0, MAX_TX_PER_ACCOUNT);
   const oldestTs = (batch[0].blockTime || Date.now() / 1000) * 1000;
@@ -245,16 +276,37 @@ async function syncAccount(acc: any, deadline: number) {
 
   // 2. fetch + parse (bounded concurrency, stop cleanly on time budget)
   const legs: (Leg | null)[] = new Array(batch.length).fill(null);
-  let done = 0;
+  let done = 0, stuck: { sig: string; n: number } | null = null;
+  const prevStuck = acc.sync_state?.stuck || null;                   // a tx unreadable 5 runs in a row is skipped (logged), so a wallet can never stay blocked
   for (let i = 0; i < batch.length && Date.now() < deadline; i += CONCURRENCY) {
     const chunk = batch.slice(i, i + CONCURRENCY);
-    const res = await Promise.all(chunk.map((s) => s.err ? null :
-      rpc("getTransaction", [s.signature, { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" }])));
-    res.forEach((tx, j) => { legs[i + j] = parseTx(tx, wallet, chunk[j].signature); });
-    done = i + chunk.length;
+    const res = await Promise.all(chunk.map(async (s) => {
+      if (s.err) return { ok: true, tx: null, err: "" };                // failed on-chain: nothing to import
+      let err = "";
+      for (let k = 0; k < 3; k++) {                                   // an empty answer means "not available yet", NOT "nothing there"
+        try { const tx = await rpc("getTransaction", [s.signature, { encoding: "json", maxSupportedTransactionVersion: 1, commitment: "confirmed" }]); if (tx) return { ok: true, tx, err: "" }; err = ""; }
+        catch (e) { err = String((e as Error).message || e); }
+        await sleep(500 * (k + 1));
+      }
+      // only an EMPTY answer 5 runs in a row can be skipped; a real error (new format, bad params…) always blocks and is reported
+      if (!err && prevStuck?.sig === s.signature && prevStuck.n >= 5) { console.error("skipping permanently empty tx", s.signature); return { ok: true, tx: null, err: "" }; }
+      return { ok: false, tx: null, err };
+    }));
+    const firstMiss = res.findIndex((r) => !r.ok);
+    const usable = firstMiss < 0 ? res.length : firstMiss;            // stop BEFORE an unreadable tx: the cursor never moves past it
+    for (let j = 0; j < usable; j++) legs[i + j] = parseTx(res[j].tx, wallet, chunk[j].signature);
+    done = i + usable;
+    if (usable < res.length) {
+      const sig = chunk[usable].signature, err = (res[usable] as any).err || "";
+      stuck = { sig, n: err ? 0 : (prevStuck?.sig === sig ? prevStuck.n + 1 : 1), ...(err ? { err: err.slice(0, 160) } : {}) } as any;
+      console.error("unreadable tx, will retry next run", sig, err || `empty x${(stuck as any).n}`); break;
+    }
     if (!HELIUS) await sleep(250);
   }
-  if (!done) return { imported: 0, error: null };
+  if (!done) {
+    if (stuck) await db.from("connected_accounts").update({ sync_state: { ...(acc.sync_state || {}), stuck }, sync_pending: sigs.length }).eq("id", acc.id);
+    return { imported: 0, error: (stuck as any)?.err || null, pending: sigs.length };
+  }
 
   // 3. rebuild positions
   const state = acc.sync_state?.positions || {};
@@ -271,7 +323,8 @@ async function syncAccount(acc: any, deadline: number) {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
       p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.last = leg.ts;
       p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
-      if (p.s >= p.b * 0.98) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
+      const leftUsd = Math.max(0, p.b - p.s) * px;                   // what the remaining bag is worth at this sell price
+      if (p.s >= p.b * 0.97 || leftUsd < Math.max(0.05, p.inv * 0.01)) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
     }
   }
   const openMints = Object.keys(state);
@@ -314,7 +367,7 @@ async function syncAccount(acc: any, deadline: number) {
   // 5. cursor + state
   await db.from("connected_accounts").update({
     last_sig: batch[done - 1].signature, last_synced_at: new Date().toISOString(), sync_error: null,
-    sync_state: { positions: state },
+    sync_state: { positions: state, ...(stuck ? { stuck } : {}) }, sync_pending: Math.max(0, sigs.length - done), sync_imported: (acc.sync_imported || 0) + imported,
   }).eq("id", acc.id);
   return { imported, pending: sigs.length - done };
 }
@@ -507,7 +560,7 @@ Deno.serve(async (req) => {
   const deadline = Date.now() + TIME_BUDGET_MS;
   pumpGap = 2500;                                                    // default pacing; the on-demand path speeds it up
   const body: any = await req.json().catch(() => ({}));
-  const task = ["images", "charts", "chart"].includes(body?.task) ? body.task : "all";   // cron: images / charts passes; user: one chart
+  const task = ["images", "charts", "chart", "catchup"].includes(body?.task) ? body.task : "all";   // cron: images / charts passes; user: one chart
 
   let accounts: any[] = [];
   let userId: string | null = null;
@@ -523,8 +576,13 @@ Deno.serve(async (req) => {
       let images = 0; try { images = await fillCoinImages(deadline, null); } catch (e) { console.error("images", (e as Error).message); }
       return new Response(JSON.stringify({ images }), { headers: h });
     }
-    const { data } = await db.from("connected_accounts").select("*").order("last_synced_at", { ascending: true, nullsFirst: true }).limit(60);
-    accounts = data || [];
+    if (task === "catchup") {                                         // extra passes only for wallets still catching up on history
+      const { data } = await db.from("connected_accounts").select("*").gt("sync_pending", 0).order("sync_pending", { ascending: false }).limit(6);
+      accounts = data || [];
+    } else {
+      const { data } = await db.from("connected_accounts").select("*").order("last_synced_at", { ascending: true, nullsFirst: true }).limit(60);
+      accounts = data || [];
+    }
   } else {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u, error } = await db.auth.getUser(jwt);
@@ -538,13 +596,22 @@ Deno.serve(async (req) => {
       let charts = 0; try { charts = await buildPumpCharts(Date.now() + 50_000, userId, ids); } catch (e) { console.error("chart", (e as Error).message); }
       return new Response(JSON.stringify({ charts }), { headers: h });
     }
+    if (body?.task === "resync" && ["pumpfun", "fomo", "wallet"].includes(body?.provider)) {   // start this wallet over (cards are kept, duplicates impossible)
+      await db.from("connected_accounts").update({ last_sig: null, sync_state: {}, sync_pending: 0, sync_error: null, last_synced_at: null })
+        .eq("user_id", u.user.id).eq("provider", body.provider);
+    }
     const { data } = await db.from("connected_accounts").select("*").eq("user_id", u.user.id);
     accounts = (data || []).filter((a) => !a.last_synced_at || Date.now() - Date.parse(a.last_synced_at) > MANUAL_COOLDOWN_MS || !a.last_sig);
   }
 
   let imported = 0, synced = 0, pending = 0, repaired = 0;
+  const seen = new Set<string>();
   for (const acc of accounts) {
     if (Date.now() > deadline) break;
+    const key = acc.user_id + ":" + acc.handle;
+    if (seen.has(key)) continue; seen.add(key);                       // same wallet linked twice (e.g. Pump.fun + Fomo): read it once
+    const { data: locked } = await db.rpc("try_lock_account", { p_id: acc.id, p_seconds: 150 });
+    if (locked !== true) continue;                                    // another sync is already on this wallet
     try {
       const r: any = await syncAccount(acc, deadline);
       imported += r.imported || 0; pending += r.pending || 0; synced++;
@@ -552,6 +619,8 @@ Deno.serve(async (req) => {
     } catch (e) {
       console.error("sync", acc.id, (e as Error).message);
       await db.from("connected_accounts").update({ sync_error: String((e as Error).message).slice(0, 200) }).eq("id", acc.id);
+    } finally {
+      await db.from("connected_accounts").update({ sync_lock_until: null }).eq("id", acc.id);
     }
   }
   // repair cards still showing a shortened mint (imported before a ticker source was available)

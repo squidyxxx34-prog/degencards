@@ -100,3 +100,12 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Pas de grain ni de lignes de balayage dans les vidéos (ils se transforment en blocs après la recompression TikTok).
 - Export image par image : WebCodecs (H.264 High 12 Mb/s, keyframe chaque seconde, VP9 si pas d'encodeur H.264) + son rendu hors-ligne (AAC, sinon Opus) + `vendor/mp4-muxer.js` (MIT, chargé à la demande avec SRI). 30 i/s parfaitement constants quelle que soit la vitesse du téléphone. Repli : MediaRecorder temps réel (1 image par créneau de 1/30 s ; export muet si le son ne peut pas démarrer).
 - Si mp4-muxer est mis à jour : recalculer `MUXER_SRI` dans share.js.
+
+## Auto-import « infaillible »
+- Transactions Solana v1 acceptées (`maxSupportedTransactionVersion: 1`).
+- Une transaction illisible bloque le curseur (jamais sautée en silence). Seule une réponse VIDE 5 passages de suite est sautée ; une vraie erreur est toujours remontée (`sync_error`).
+- Historique complet jusqu'au curseur (plus de trou à 2000), 500 tx/passage (800 avec Helius), cron `sync-catchup` toutes les 3 min pour les wallets en retard (`sync_pending`).
+- Verrou par wallet (`try_lock_account`), même adresse liée deux fois lue une seule fois, RPC de secours pour les lectures simples (publicnode n'a pas l'historique : jamais pour signatures/transactions).
+- Position close à ≥97 % vendus ou s'il ne reste que de la poussière (< 0,05 $ ou 1 % de la mise).
+- Vérif d'adresse au 1er import (coin / programme / jamais utilisée) + vérif côté client (EVM 0x, adresse finissant par pump/bonk, caractères interdits, longueur).
+- Account : fenêtre de connexion (plus de prompt), bouton « ? » par fournisseur avec guide spécifique (Pump.fun, Fomo, Phantom/Solflare/Backpack/Axiom…), statut (rattrapage, cartes importées, erreur lisible), « RE-READ FROM START » (`{task:"resync", provider}`).

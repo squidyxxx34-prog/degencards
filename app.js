@@ -178,11 +178,12 @@ const store = {
     return true;
   },
   async getAccounts(){
-    const {data,error} = await sb.from('connected_accounts').select('provider,handle,last_synced_at,sync_error');
+    const {data,error} = await sb.from('connected_accounts').select('provider,handle,last_synced_at,sync_error,sync_pending,sync_imported');
     if(error){ console.error('accounts load failed'); return []; }
     return data.filter(a=>['pumpfun','fomo','wallet'].includes(a.provider)).map(a=>({
       provider:a.provider, handle:String(a.handle).slice(0,120),
-      syncedAt: a.last_synced_at ? Date.parse(a.last_synced_at) : 0, error: a.sync_error ? String(a.sync_error).slice(0,120) : ''
+      syncedAt: a.last_synced_at ? Date.parse(a.last_synced_at) : 0, error: a.sync_error ? String(a.sync_error).slice(0,200) : '',
+      pending: Number(a.sync_pending)||0, imported: Number(a.sync_imported)||0
     }));
   },
   async connectAccount(provider, handle){
@@ -787,22 +788,27 @@ function renderAccount(){
   document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
-    let status = p.sub;
+    let status = esc(p.sub);
     if(acc){
       const addr = acc.handle.length>20 ? acc.handle.slice(0,6)+'…'+acc.handle.slice(-4) : acc.handle;
-      const st = acc.error ? `<span class="sync-err">Sync issue — retrying</span>`
-        : acc.syncedAt ? `synced ${ago(acc.syncedAt)}` : 'first sync in progress…';
+      const st = acc.error ? `<span class="sync-err">${esc(friendlySyncError(acc.error))}</span>`
+        : !acc.syncedAt ? 'first import in progress…'
+        : acc.pending > 0 ? `catching up · ${acc.pending} transactions left`
+        : `synced ${ago(acc.syncedAt)}${acc.imported ? ` · ${acc.imported} cards imported` : ''}`;
       status = `${esc(addr)} · ${st}`;
     }
     return `<div class="provider-row">
-      <div><div class="provider-name">${p.name}</div><div class="provider-sub">${status}</div></div>
-      ${acc ? `<button class="btn-connect connected" data-sync="${p.key}">SYNC</button><button class="btn-unlink" data-unlink="${p.key}" aria-label="Disconnect">${icon('x',14)}</button>`
+      <div class="prov-main"><div class="provider-name">${p.name}
+        <button type="button" class="prov-help" data-help="${p.key}" aria-label="How to connect ${p.name}">?</button></div>
+        <div class="provider-sub">${status}</div></div>
+      ${acc ? `<button class="btn-connect connected" data-sync="${p.key}">SYNC</button><button class="btn-unlink" data-unlink="${p.key}" aria-label="Disconnect ${p.name}">${icon('x',14)}</button>`
             : `<button class="btn-connect" data-p="${p.key}">CONNECT</button>`}
     </div>`;
   }).join('');
   const list = document.getElementById('providerList');
   list.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click', ()=>connectProvider(b.dataset.p)));
   list.querySelectorAll('[data-sync]').forEach(b=>b.addEventListener('click', ()=>syncNow(true)));
+  list.querySelectorAll('[data-help]').forEach(b=>b.addEventListener('click', ()=>openProviderHelp(b.dataset.help)));
   list.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click', async ()=>{
     if(!confirm('Disconnect this wallet? Imported cards stay.')) return;
     await store.disconnectAccount(b.dataset.unlink); await reload();
@@ -961,22 +967,114 @@ function maybeAutoSync(){
   if(stale) syncNow(false);
 }
 
-let importing = false;
-async function connectProvider(key){
-  if(importing) return;
-  const p = PROVIDERS.find(x=>x.key===key);
-  const raw = prompt(`${p.name} — paste the PUBLIC address of your ${key==='wallet'?'Solana wallet':p.name+' wallet'}.\nNever your seed phrase or private key.`);
-  if(!raw) return;
-  const handle = raw.trim();
-  if(!B58.test(handle)){ showToast("That doesn't look like a Solana address"); return; }
-  importing = true;
-  try{
-    if(!await store.connectAccount(key, handle)){ showToast('Could not connect — try again'); return; }
-    await reload();
-    showToast('Connected — importing the last 30 days...');
-    await syncNow(false);
-  } finally { importing = false; }
+
+/* ---------- connect a wallet + provider guides ---------- */
+const PROVIDER_GUIDE = {
+  pumpfun: { title:'Connect Pump.fun', steps:[
+      'Open <b>pump.fun</b> and log in.',
+      'Tap your <b>profile picture</b> (top right), then <b>Profile</b>.',
+      'Under your username, tap the <b>copy icon</b> next to your short wallet address (like <code>CDJp…Sfah</code>).',
+      'Come back here and paste it.' ],
+    tips:[ 'Logged in with email or Google? pump.fun made a wallet for you: it\u2019s still the address on your profile.',
+      'Never paste a coin address: those often end with <code>pump</code>.' ] },
+  fomo: { title:'Connect Fomo', steps:[
+      'Open the <b>Fomo</b> app.',
+      'Go to <b>Wallet</b>, then <b>Deposit</b>.',
+      'Pick <b>Solana</b> (not Base or Ethereum: those start with <code>0x</code>).',
+      'Copy the address and paste it here.' ],
+    tips:[ 'Trades paid in USDC or SOL are both imported.', 'Only Solana trades are supported for now.' ] },
+  wallet: { title:'Connect another Solana wallet', steps:[
+      '<b>Phantom</b>: tap your account name at the top \u2192 copy the <b>Solana</b> address.',
+      '<b>Solflare</b>: tap the address under your balance to copy it.',
+      '<b>Backpack</b>: <b>Receive</b> \u2192 <b>Solana</b> \u2192 copy.',
+      '<b>Axiom, Photon, BullX, GMGN\u2026</b>: open their <b>Deposit</b> page and copy the Solana address of the wallet you trade with.' ],
+    tips:[ 'Use the wallet that actually makes the trades.' ] },
+};
+const IMPORT_FACTS = [
+  'Read-only: we only read public on-chain data. Nobody can move your funds with an address.',
+  'First import: your last 30 days. After that, new trades arrive by themselves every 10 minutes (or tap SYNC).',
+  'A card appears once a position is closed (sold, or only dust left). Open positions wait.',
+  'A sell of a bag bought before the import window, or tokens you received by transfer, can\u2019t be priced, so they\u2019re skipped.',
+];
+function friendlySyncError(e){
+  const m = String(e||'');
+  if(/coin \(token\) address|program address|No activity|Solana address/i.test(m)) return m;
+  if(/rate|429|limit/i.test(m)) return 'Solana is busy \u2014 retrying automatically';
+  if(/price/i.test(m)) return 'Price data unavailable \u2014 retrying automatically';
+  return 'Temporary problem \u2014 retrying automatically';
 }
+function checkAddress(raw){
+  const a = String(raw||'').replace(/\s+/g,'');
+  if(!a) return { ok:false, msg:'' };
+  if(/^0x[0-9a-fA-F]{6,}/.test(a)) return { ok:false, msg:'That\u2019s an EVM address (Base / Ethereum). In your app, pick Solana and copy that address.' };
+  if(/(pump|bonk)$/i.test(a) && B58.test(a)) return { ok:false, msg:'This looks like a coin address (it ends with \u201c' + a.slice(-4) + '\u201d). Paste your wallet\u2019s address instead.' };
+  if(/[0OIl]/.test(a) && /^[A-Za-z0-9]{32,44}$/.test(a)) return { ok:false, msg:'This contains 0, O, I or l, which a Solana address never has. Copy it again with the copy button.' };
+  if(!B58.test(a)) return { ok:false, msg: a.length < 32 ? 'Too short: a Solana address is 32 to 44 characters.' : a.length > 44 ? 'Too long: a Solana address is 32 to 44 characters.' : 'Not a Solana address.' };
+  if(connectedAccounts.some(x=>x.handle===a)) return { ok:true, msg:'Already connected on another line: it will only be read once.', warn:true };
+  return { ok:true, msg:'Looks good.' };
+}
+function guideHTML(key){
+  const g = PROVIDER_GUIDE[key];
+  return `<ol class="pg-steps">${g.steps.map(x=>`<li>${x}</li>`).join('')}</ol>
+    ${g.tips.length ? `<ul class="pg-tips">${g.tips.map(x=>`<li>${x}</li>`).join('')}</ul>` : ''}`;
+}
+function openProviderHelp(key){
+  const p = PROVIDERS.find(x=>x.key===key), acc = connectedAccounts.find(a=>a.provider===key);
+  document.getElementById('provBody').innerHTML = `
+    <h3 id="provTitle">${PROVIDER_GUIDE[key].title}</h3>
+    ${guideHTML(key)}
+    <h4 class="pg-h">How the import works</h4>
+    <ul class="pg-facts">${IMPORT_FACTS.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <h4 class="pg-h">Nothing showing up?</h4>
+    <ul class="pg-facts"><li>Check the address: open the steps above again and compare the first and last 4 characters.</li>
+      <li>Tap <b>SYNC</b>: the first import can take a few minutes on busy days.</li>
+      ${acc ? '<li>Still missing trades? Re-read this wallet from the start. Cards you already have are kept, never duplicated.</li>' : ''}</ul>
+    <div class="pg-actions">
+      ${acc ? `<button type="button" class="hbtn" id="provResync">RE-READ FROM START</button>` : `<button type="button" class="share-btn" id="provConnect">CONNECT ${esc(p.name.toUpperCase())}</button>`}
+    </div>`;
+  document.getElementById('provConnect')?.addEventListener('click', ()=>openConnect(key));
+  document.getElementById('provResync')?.addEventListener('click', async ()=>{
+    if(!confirm('Re-read this wallet from the start? Your cards stay.')) return;
+    closeProv(); showToast('Re-reading your wallet\u2026');
+    try{ await sb.functions.invoke('sync-trades', { body:{ task:'resync', provider:key } }); }catch(e){}
+    await reload(); showToast('Done \u2014 new cards (if any) are in your collection');
+  });
+  showProv();
+}
+function openConnect(key){
+  const p = PROVIDERS.find(x=>x.key===key);
+  document.getElementById('provBody').innerHTML = `
+    <h3 id="provTitle">${PROVIDER_GUIDE[key].title}</h3>
+    <details class="pg-how"><summary>Where do I find my address?</summary>${guideHTML(key)}</details>
+    <label class="pg-label" for="provAddr">Public wallet address (Solana)</label>
+    <div class="pg-input"><input id="provAddr" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="e.g. CDJp\u2026Sfah (32\u201344 characters)" aria-describedby="provMsg">
+      <button type="button" class="hbtn" id="provPaste">PASTE</button></div>
+    <p class="pg-msg" id="provMsg" role="status" aria-live="polite"></p>
+    <p class="pg-safe">\ud83d\udd12 Only your <b>public</b> address. Never your seed phrase or private key \u2014 no one should ever ask you for them.</p>
+    <div class="pg-actions"><button type="button" class="share-btn" id="provGo" disabled>CONNECT</button></div>`;
+  const inp = document.getElementById('provAddr'), msg = document.getElementById('provMsg'), go = document.getElementById('provGo');
+  const upd = () => { const r = checkAddress(inp.value); msg.textContent = r.msg; msg.className = 'pg-msg ' + (r.ok ? (r.warn ? 'warn' : 'ok') : r.msg ? 'bad' : ''); go.disabled = !r.ok; };
+  inp.addEventListener('input', upd);
+  document.getElementById('provPaste').addEventListener('click', async ()=>{ try{ inp.value = (await navigator.clipboard.readText()).trim(); upd(); }catch(e){ inp.focus(); showToast('Long-press the field and choose Paste'); } });
+  go.addEventListener('click', async ()=>{
+    const r = checkAddress(inp.value); if(!r.ok || importing) return;
+    const handle = inp.value.replace(/\s+/g,'');
+    importing = true; go.disabled = true; go.textContent = 'CONNECTING\u2026';
+    try{
+      if(!await store.connectAccount(key, handle)){ msg.textContent = 'Could not connect \u2014 try again.'; msg.className = 'pg-msg bad'; return; }
+      closeProv(); await reload();
+      showToast('Connected \u2014 importing your last 30 days\u2026');
+      await syncNow(false);
+    } finally { importing = false; go.textContent = 'CONNECT'; go.disabled = false; }
+  });
+  showProv(); setTimeout(()=>inp.focus(), 50);
+}
+function showProv(){ const o = document.getElementById('provOverlay'); o.classList.add('show'); o.querySelector('.modal').scrollTop = 0; }
+function closeProv(){ document.getElementById('provOverlay').classList.remove('show'); }
+document.getElementById('provOverlay').addEventListener('click', e=>{ if(e.target.id === 'provOverlay' || e.target.closest('[data-close]')) closeProv(); });
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && document.getElementById('provOverlay').classList.contains('show')) closeProv(); });
+let importing = false;
+function connectProvider(key){ openConnect(key); }
 
 document.getElementById('levelBar').addEventListener('click', ()=>{
   const d = document.getElementById('lvlDetail'), open = d.hidden;
