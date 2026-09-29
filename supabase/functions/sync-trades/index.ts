@@ -396,6 +396,101 @@ async function buildPumpCharts(deadline: number, userId: string | null) {
   return built;
 }
 
+/* ---------- coin images ----------
+   Found on pump.fun, DexScreener, the token's on-chain metadata (Token-2022 or Metaplex -> JSON -> image) or Helius,
+   then COPIED into our public storage bucket (fast, never disappears with an IPFS gateway, CORS-clean for the share image).
+   Only real raster images are kept (magic bytes checked), 3 MB max. */
+const IMG_BUCKET = "coin-images", IMG_MAX = 3 * 1024 * 1024;
+const ipfs = (u: string) => u.startsWith("ipfs://") ? "https://ipfs.io/ipfs/" + u.slice(7).replace(/^ipfs\//, "") : u;
+function mplUri(b: Uint8Array): string {
+  try {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength); let o = 65;
+    const str = () => { const n = dv.getUint32(o, true); if (n > 300) throw 0; o += 4; const s = new TextDecoder().decode(b.slice(o, o + n)); o += n; return s.replace(/\0/g, "").trim(); };
+    str(); str(); return str();
+  } catch (_) { return ""; }
+}
+const IPFS_GW = ["https://gateway.pinata.cloud/ipfs/", "https://ipfs.io/ipfs/", "https://dweb.link/ipfs/", "https://w3s.link/ipfs/", "https://nftstorage.link/ipfs/"];
+function variants(url: string): string[] {                          // IPFS gateways rate-limit a lot: try several
+  const m = url.match(/\/ipfs\/([A-Za-z0-9]+[^?#]*)/);
+  return m ? [...new Set([url, ...IPFS_GW.map((g) => g + m[1])])] : [url];
+}
+async function getJson(url: string, ms = 8000) {
+  for (const u of variants(url)) {
+    try { const r = await fetch(u, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(ms) }); if (r.ok) return await r.json(); } catch (_) {}
+  }
+  return null;
+}
+async function imageCandidates(mint: string): Promise<string[]> {
+  const out: string[] = [];
+  if (mint.endsWith("pump")) { try { const j = await getJson(`https://frontend-api-v3.pump.fun/coins-v2/${mint}`); if (j?.image_uri) out.push(j.image_uri); } catch (_) {} }
+  try {
+    const arr = await getJson(`https://api.dexscreener.com/tokens/v1/solana/${mint}`);
+    for (const p of Array.isArray(arr) ? arr : []) if (p?.baseToken?.address === mint && p?.info?.imageUrl) { out.push(p.info.imageUrl); break; }
+  } catch (_) {}
+  try {
+    const acc = await rpc("getAccountInfo", [mint, { encoding: "jsonParsed" }]);
+    const ext = acc?.value?.data?.parsed?.info?.extensions?.find((e: any) => e.extension === "tokenMetadata");
+    let uri = ext?.state?.uri || "";
+    if (!uri) {
+      const pda = PublicKey.findProgramAddressSync([new TextEncoder().encode("metadata"), MPL.toBytes(), new PublicKey(mint).toBytes()], MPL)[0].toBase58();
+      const a = await rpc("getAccountInfo", [pda, { encoding: "base64" }]);
+      if (a?.value?.data?.[0]) uri = mplUri(Uint8Array.from(atob(a.value.data[0]), (c) => c.charCodeAt(0)));
+    }
+    if (uri) { const j = await getJson(ipfs(uri)); if (j?.image) out.push(String(j.image)); }
+  } catch (_) {}
+  if (HELIUS) { try { const a = await rpcObj("getAsset", { id: mint }); const u = a?.content?.links?.image || a?.content?.files?.[0]?.uri; if (u) out.push(u); } catch (_) {} }
+  return [...new Set(out.map((u) => ipfs(String(u).trim())).filter((u) => /^https:\/\//i.test(u)))];
+}
+function sniff(b: Uint8Array): [string, string] | null {
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return ["image/png", "png"];
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return ["image/jpeg", "jpg"];
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ["image/gif", "gif"];
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return ["image/webp", "webp"];
+  return null;
+}
+async function download(url: string): Promise<[Uint8Array, string, string] | null> {
+  const r = await fetch(url, { signal: AbortSignal.timeout(12000), redirect: "follow" });
+  if (!r.ok || !r.body) return null;
+  if (Number(r.headers.get("content-length") || 0) > IMG_MAX) return null;
+  const reader = r.body.getReader(); const parts: Uint8Array[] = []; let size = 0;
+  while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > IMG_MAX) { try { reader.cancel(); } catch (_) {} return null; } parts.push(value); }
+  const buf = new Uint8Array(size); let o = 0; for (const p of parts) { buf.set(p, o); o += p.length; }
+  const kind = sniff(buf); return kind ? [buf, kind[0], kind[1]] : null;
+}
+async function fillCoinImages(deadline: number, userId: string | null) {
+  let q = db.from("trades").select("mint,image_tries").is("image", null).not("mint", "is", null).lt("image_tries", 3).order("timestamp_ms", { ascending: false }).limit(200);
+  if (userId) q = q.eq("user_id", userId);
+  const { data: rows } = await q;
+  const mints = [...new Set((rows || []).map((r: any) => r.mint))].slice(0, 30);
+  let done = 0;
+  for (const mint of mints) {
+    if (Date.now() > deadline - 8_000) break;
+    let url: string | null = null;
+    try {
+      // already stored for another trade / user? reuse it
+      const { data: have } = await db.from("trades").select("image").eq("mint", mint).not("image", "is", null).limit(1);
+      if (have?.[0]?.image) url = have[0].image;
+      else {
+        for (const src of await imageCandidates(mint)) {
+          let got: [Uint8Array, string, string] | null = null;
+          for (const v of variants(src)) { got = await download(v).catch(() => null); if (got) break; }
+          if (!got) continue;
+          const [bytes, type, ext] = got, path = `${mint}.${ext}`;
+          const { error } = await db.storage.from(IMG_BUCKET).upload(path, bytes, { contentType: type, upsert: true, cacheControl: "31536000" });
+          if (error) { console.error("img upload", error.message); continue; }
+          url = db.storage.from(IMG_BUCKET).getPublicUrl(path).data.publicUrl; break;
+        }
+      }
+    } catch (e) { console.error("img", (e as Error).message); }
+    if (url) { await db.from("trades").update({ image: url }).eq("mint", mint).is("image", null); done++; }
+    else {
+      const tries = Math.max(...(rows || []).filter((r: any) => r.mint === mint).map((r: any) => r.image_tries || 0)) + 1;
+      await db.from("trades").update({ image_tries: tries }).eq("mint", mint).is("image", null);
+    }
+  }
+  return done;
+}
+
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -403,6 +498,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: h });
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const deadline = Date.now() + TIME_BUDGET_MS;
+  const body: any = await req.json().catch(() => ({}));
+  const task = body?.task === "images" ? "images" : "all";            // cron can run a dedicated images pass
 
   let accounts: any[] = [];
   let userId: string | null = null;
@@ -410,6 +507,10 @@ Deno.serve(async (req) => {
   if (cronKey) {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
+    if (task === "images") {
+      let images = 0; try { images = await fillCoinImages(deadline, null); } catch (e) { console.error("images", (e as Error).message); }
+      return new Response(JSON.stringify({ images }), { headers: h });
+    }
     const { data } = await db.from("connected_accounts").select("*").order("last_synced_at", { ascending: true, nullsFirst: true }).limit(60);
     accounts = data || [];
   } else {
@@ -450,5 +551,7 @@ Deno.serve(async (req) => {
   }
   let charts = 0;
   if (Date.now() < deadline - 10_000) { try { charts = await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
-  return new Response(JSON.stringify({ synced, imported, pending, repaired, charts }), { headers: h });
+  let images = 0;
+  if (Date.now() < deadline - 10_000) { try { images = await fillCoinImages(deadline, userId); } catch (e) { console.error("images", (e as Error).message); } }
+  return new Response(JSON.stringify({ synced, imported, pending, repaired, charts, images }), { headers: h });
 });

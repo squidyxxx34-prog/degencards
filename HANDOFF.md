@@ -69,3 +69,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - 10 étapes, lancé automatiquement au 1er affichage de l'app (par utilisateur, `localStorage dc_guide_done_<uid>`), rejouable via le bouton « ? » du header ou Account > Getting started.
 - Accessibilité : vraie boîte de dialogue (role=dialog, aria-modal, labelledby/describedby), focus sur le titre à chaque étape, focus piégé, reste de la page `inert`, annonces aria-live, Esc = passer, ← → = naviguer, boutons ≥ 44 px, texte 16 px, prefers-reduced-motion et prefers-contrast respectés.
 - Téléphone : fiche en bas d'écran, la cible est amenée au-dessus (le scroll se fait sur le vrai conteneur, ici `body`). Tablette/ordi : bulle placée à côté de la cible.
+
+## Images des coins
+- `sync-trades` trouve l'image (pump.fun → DexScreener → métadonnées on-chain Token-2022/Metaplex → JSON → image, → Helius si clé), essaie plusieurs passerelles IPFS, vérifie que c'est bien une image (PNG/JPEG/GIF/WebP, 3 Mo max) puis la COPIE dans le bucket public `coin-images` (`<mint>.<ext>`). `trades.image` = URL publique (contrainte : uniquement notre bucket).
+- Cron dédié `coin-images` toutes les 5 min (body `{"task":"images"}`), + à chaque synchro. 3 essais max par coin (`image_tries`).
+- Front : logo tel quel (object-fit: contain) sur les cartes, le détail, l'historique et l'image/vidéo de partage (chargé en CORS, bucket = ACAO *). CSP img-src autorise seulement le domaine Supabase.

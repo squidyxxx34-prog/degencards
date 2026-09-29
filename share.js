@@ -18,6 +18,13 @@ const easeOutBack = x => { const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3
 const mcShort = v => v >= 1e9 ? '$'+(v/1e9).toFixed(2)+'B' : v >= 1e6 ? '$'+(v/1e6).toFixed(2)+'M' : v >= 1e3 ? '$'+(v/1e3).toFixed(1)+'K' : '$'+Math.round(v||0);
 const hexA = (hex, a) => { const n = parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; };
 
+const IMG_CACHE = new Map();
+function loadCoinImage(url){                                         // CORS-clean (our bucket sends ACAO *), so the canvas can still be exported
+  if(!url) return Promise.resolve(null);
+  if(IMG_CACHE.has(url)){ const im = IMG_CACHE.get(url); return im.complete ? Promise.resolve(im) : new Promise(r => { im.addEventListener('load', () => r(im)); im.addEventListener('error', () => r(null)); }); }
+  const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async'; IMG_CACHE.set(url, im);
+  return new Promise(r => { im.onload = () => r(im); im.onerror = () => { IMG_CACHE.delete(url); r(null); }; im.src = url; });
+}
 let grain = null;
 function grainPattern(ctx){
   if(grain) return ctx.createPattern(grain, 'repeat');
@@ -82,8 +89,27 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.fillStyle = rar; ctx.fillText(rt, gx - rw/2 - 18*u, gy + gs/2 + 9*u);
   ctx.globalAlpha = 1;
 
-  // ticker
-  y += story ? 230*u : 175*u;
+  // coin image (as-is, rounded square) + ticker; the space it takes is given back by the chart below
+  const img = t.image ? IMG_CACHE.get(t.image) : null;
+  const hasImg = !!(img && img.complete && img.naturalWidth);
+  let extra = 0;
+  if(hasImg){
+    const s = (story ? 170 : 128)*u, ix = midX - s/2, iy = y + 28*u;
+    const k = easeOutBack(seg(p, 0.1, 0.26));
+    ctx.save(); ctx.globalAlpha = clamp01(k);
+    ctx.translate(midX, iy + s/2); ctx.scale(k, k); ctx.translate(-midX, -(iy + s/2));
+    ctx.shadowColor = hexA(main, 0.5); ctx.shadowBlur = 40*u;
+    rrect(ctx, ix, iy, s, s, s*0.26); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.save(); rrect(ctx, ix, iy, s, s, s*0.26); ctx.clip();
+    const r = Math.min(s / img.naturalWidth, s / img.naturalHeight), dw = img.naturalWidth*r, dh = img.naturalHeight*r;   // contain: never cropped
+    ctx.drawImage(img, ix + (s-dw)/2, iy + (s-dh)/2, dw, dh);
+    ctx.restore();
+    rrect(ctx, ix, iy, s, s, s*0.26); ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.stroke();
+    ctx.restore();
+    const tickerY = iy + s + 104*u;
+    extra = tickerY - (y + (story ? 230 : 175)*u);
+    y = tickerY;
+  } else y += story ? 230*u : 175*u;
   const a2 = easeOut(seg(p, 0.12, 0.3));
   ctx.globalAlpha = a2; ctx.textAlign = 'center';
   const tick = tk(t.ticker);
@@ -110,7 +136,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
 
   // chart panel
   y += story ? 110*u : 70*u;
-  const chH = story ? 520*u : 330*u, chX = P, chW = R - P;
+  const chH = (story ? 520*u : 330*u) - extra, chX = P, chW = R - P;
   const a3 = easeOut(seg(p, 0.26, 0.36));
   ctx.globalAlpha = a3;
   rrect(ctx, chX, y, chW, chH, 26*u); ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
@@ -322,7 +348,7 @@ function syncButtons(){
 async function doStill(){
   if(state.busy) return; state.busy = true;
   try{
-    await fontsReady();
+    await fontsReady(); await loadCoinImage(state.t.image);
     const c = renderStill(state.t, state.meta, state.fmt, state);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if(!blob) throw new Error('png');
@@ -335,7 +361,7 @@ async function doVideo(){
   if(state.busy) return; state.busy = true;
   const btn = document.getElementById('shareVideo'), label = btn.textContent;
   try{
-    await fontsReady();
+    await fontsReady(); await loadCoinImage(state.t.image);
     const blob = await recordVideo(state.t, state.meta, state.fmt, state, pr => { btn.textContent = `RENDERING… ${Math.round(pr*100)}%`; });
     btn.textContent = label;
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
@@ -346,6 +372,7 @@ async function doVideo(){
 }
 const safeName = () => (String(state.t.ticker).replace(/[^A-Za-z0-9_-]/g,'') || 'card');
 
+window.__dcLoadImg = loadCoinImage;
 window.__dcShareFrame = (canvas, t, meta, fmtKey, opt, p) => { const F = FORMATS[fmtKey]; canvas.width = F.w; canvas.height = F.h; drawFrame(canvas.getContext('2d'), F.w, F.h, t, meta, p, opt); };   // used by the visual tests
 window.__dcShareRecord = (t, meta, fmtKey, opt) => recordVideo(t, meta, fmtKey, opt);
 window.shareCard = function(t, meta){
@@ -353,7 +380,7 @@ window.shareCard = function(t, meta){
   syncButtons();
   document.getElementById('detailOverlay')?.classList.remove('show');
   sheet().classList.add('show');
-  fontsReady().then(preview);
+  Promise.all([fontsReady(), loadCoinImage(t.image)]).then(preview);
 };
 let inited = false;
 document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 'loading') init();
