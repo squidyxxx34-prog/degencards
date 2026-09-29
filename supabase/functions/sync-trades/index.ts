@@ -346,11 +346,12 @@ async function pumpTrades(mint: string, t0: number, t1: number) {
   }
   return out;
 }
-async function buildPumpCharts(deadline: number, userId: string | null) {
+async function buildPumpCharts(deadline: number, userId: string | null, onlyId: string | null = null) {
   let q = db.from("trades").select("id,mint,ext_id,timestamp_ms,hold_time,legs,chart,chart_tries")
-    .like("mint", "%pump").is("deleted_at", null).lt("chart_tries", 3).lt("timestamp_ms", Date.now() - 150_000)
-    .or("chart.is.null,chart->>v.is.null").order("timestamp_ms", { ascending: false }).limit(15);
+    .like("mint", "%pump").is("deleted_at", null).lt("chart_tries", onlyId ? 6 : 3).lt("timestamp_ms", Date.now() - 150_000)
+    .or("chart.is.null,chart->>v.is.null,chart->>src.eq.gt").order("timestamp_ms", { ascending: false }).limit(onlyId ? 1 : 15);   // pump coins drawn in minutes get upgraded to seconds
   if (userId) q = q.eq("user_id", userId);
+  if (onlyId) q = q.eq("id", onlyId);
   const { data: rows, error } = await q;
   if (error) { console.error("charts query", error.message); return 0; }
   let built = 0, rateHits = 0; const supplyCache = new Map<string, number>();
@@ -503,7 +504,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const deadline = Date.now() + TIME_BUDGET_MS;
   const body: any = await req.json().catch(() => ({}));
-  const task = body?.task === "images" ? "images" : body?.task === "charts" ? "charts" : "all";   // cron runs dedicated passes
+  const task = ["images", "charts", "chart"].includes(body?.task) ? body.task : "all";   // cron: images / charts passes; user: one chart
 
   let accounts: any[] = [];
   let userId: string | null = null;
@@ -526,6 +527,12 @@ Deno.serve(async (req) => {
     const { data: u, error } = await db.auth.getUser(jwt);
     if (error || !u?.user) return new Response('{"error":"unauthorized"}', { status: 401, headers: h });
     userId = u.user.id;
+    if (task === "chart") {                                            // "open a card": build this one chart now
+      const id = String(body?.id || "");
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response('{"error":"id"}', { status: 400, headers: h });
+      let charts = 0; try { charts = await buildPumpCharts(Date.now() + 45_000, userId, id); } catch (e) { console.error("chart", (e as Error).message); }
+      return new Response(JSON.stringify({ charts }), { headers: h });
+    }
     const { data } = await db.from("connected_accounts").select("*").eq("user_id", u.user.id);
     accounts = (data || []).filter((a) => !a.last_synced_at || Date.now() - Date.parse(a.last_synced_at) > MANUAL_COOLDOWN_MS || !a.last_sig);
   }

@@ -472,3 +472,7 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
   .dt-badges{grid-column:1/-1;}
   .dt-fills li{grid-template-columns:auto 1fr auto;} .dt-f-what{display:none;}
 }
+.chartbox svg.cs{overflow:hidden;}
+.mk-dot{background:#fff !important;border:2.5px solid var(--dotc);box-shadow:0 0 0 2px rgba(0,0,0,.55);width:10px;height:10px;}
+.mk-dot.mk-b{--dotc:#18c964;} .mk-dot.mk-s{--dotc:#ff3b4e;}
+.chartbox.big .mk-dot{width:12px;height:12px;}

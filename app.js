@@ -338,14 +338,14 @@ function miniChart(t, big){
   const ch = t.chart;
   if(ch && ch.v === 2){
     const cs = ch.c, iv = ch.i;
-    let x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
+    let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
     if(x1 <= x0) x1 = x0 + iv;
     const ys = [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
-    const bw = Math.max(0.35, (iv/(x1-x0))*100*0.7);
+    const bw = Math.max(0.35, Math.min((iv/(x1-x0))*100*0.7, big ? 3.2 : 4.5));   // few candles: thin bodies, not blocks
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
@@ -356,7 +356,7 @@ function miniChart(t, big){
     const marks = ch.m.map(m=>[m[0], m[1], ch.src==='pump' && m[2] > 0 ? m[2] : at(m[0])]);   // pump: exact fill price
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
+      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
   }
   // no candles yet (manual trade / still loading): dashed entry -> exit
   const end = t.timestamp, start = end - (t.holdTime||0)*1000;
@@ -984,64 +984,93 @@ document.getElementById('levelBar').addEventListener('click', ()=>{
    Runs in the background, one request every 2.2 s (free tier: 30/min), newest trades first. */
 const GT = 'https://api.geckoterminal.com/api/v2/networks/solana';
 let chartQueueRunning = false, gtLast = 0;
-async function gtGet(path){
-  const wait = gtLast + 2200 - Date.now(); if(wait > 0) await new Promise(r=>setTimeout(r, wait));
-  gtLast = Date.now();
-  const r = await fetch(GT + path, { headers:{ Accept:'application/json' } });
-  if(r.status === 429){ gtLast = Date.now() + 20000; throw new Error('429'); }
-  return r.ok ? r.json() : null;
+let gtChain = Promise.resolve();
+function gtGet(path){                                                   // one request every 2.2 s, strictly serialized
+  const run = async () => {
+    const wait = gtLast + 2200 - Date.now(); if(wait > 0) await new Promise(r=>setTimeout(r, wait));
+    gtLast = Date.now();
+    const r = await fetch(GT + path, { headers:{ Accept:'application/json' } });
+    if(r.status === 429){ gtLast = Date.now() + 20000; throw new Error('429'); }
+    return r.ok ? r.json() : null;
+  };
+  const p = gtChain.then(run, run); gtChain = p.catch(()=>{}); return p;
 }
 function chartTries(id){ try{ return Number(localStorage.getItem('dc_ct_'+id)||0); }catch(e){ return 0; } }
 function bumpTries(id){ try{ localStorage.setItem('dc_ct_'+id, String(chartTries(id)+1)); }catch(e){} }
+const gtPools = new Map();
+async function buildOneInBrowser(t){
+  const end = t.timestamp, start = end - (t.holdTime||0)*1000;
+  const marks = (t.legs && t.legs.length ? t.legs : [[start,'b',t.entryMc],[end,'s',t.exitMc]])
+    .filter(m=>Array.isArray(m) && Number.isFinite(+m[0]) && (m[1]==='b'||m[1]==='s')).map(m=>[+m[0], m[1], +m[2]||0]);
+  const ts = marks.map(m=>m[0]);
+  const t0 = Math.min(...ts) - 120000, t1 = Math.max(...ts) + 120000;
+  if(!gtPools.has(t.mint)){
+    const j = await gtGet(`/tokens/${t.mint}/pools?page=1`);
+    gtPools.set(t.mint, (j?.data||[]).map(p=>{
+      const a = p.attributes||{}, price = +a.base_token_price_usd, fdv = +a.fdv_usd;
+      const baseIsMint = String(p.relationships?.base_token?.data?.id||'').endsWith(t.mint);
+      return { addr:a.address, created: Date.parse(a.pool_created_at||'')||0, supply: baseIsMint && price>0 && fdv>0 ? fdv/price : 0 };
+    }));
+  }
+  const list = gtPools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
+  const supply = (gtPools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
+  const spanMin = (t1-t0)/60000;
+  const [tf, agg, step] = spanMin <= 900 ? ['minute',1,60000] : spanMin <= 15000 ? ['minute',15,900000] : ['hour',4,14400000];
+  const limit = Math.min(1000, Math.ceil((t1-t0)/step) + 2);
+  let best = [];
+  for(const p of list){
+    if(!supply) break;
+    const j = await gtGet(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(t1/1000)+60}&limit=${limit}&currency=usd&token=${t.mint}`);
+    const c = (j?.data?.attributes?.ohlcv_list||[]).map(x=>x.map(Number))
+      .filter(x=>x[0]*1000 >= t0-step && x[0]*1000 <= t1).sort((a,b)=>a[0]-b[0]);
+    if(c.length > best.length) best = c;
+    if(best.length >= 3) break;
+  }
+  if(!best.length){ bumpTries(t.id); return false; }
+  const r2 = n => Math.round(n*supply*100)/100;
+  const cs = best.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
+  const chart = { v:2, src:'gt', i:step, w:[Math.min(t0, cs[0][0]), Math.max(t1, cs[cs.length-1][0]+step)], c:cs, m:marks.slice(0,20) };
+  const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
+  if(error){ bumpTries(t.id); return false; }
+  t.chart = parseChart(chart); return true;
+}
 async function buildChartsInBrowser(){
   if(chartQueueRunning || !session) return;
   chartQueueRunning = true;
-  const pools = new Map();
   try{
     const todo = trades.filter(t=>(!t.chart || t.chart.v!==2) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
       .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
     let dirty = 0;
     for(const t of todo){
       if(!session) break;
-      try{
-        const end = t.timestamp, start = end - (t.holdTime||0)*1000;
-        const marks = (t.legs && t.legs.length ? t.legs : [[start,'b',t.entryMc],[end,'s',t.exitMc]])
-          .filter(m=>Array.isArray(m) && Number.isFinite(+m[0]) && (m[1]==='b'||m[1]==='s')).map(m=>[+m[0], m[1], +m[2]||0]);
-        const ts = marks.map(m=>m[0]);
-        const t0 = Math.min(...ts) - 120000, t1 = Math.max(...ts) + 120000;
-        if(!pools.has(t.mint)){
-          const j = await gtGet(`/tokens/${t.mint}/pools?page=1`);
-          pools.set(t.mint, (j?.data||[]).map(p=>{
-            const a = p.attributes||{}, price = +a.base_token_price_usd, fdv = +a.fdv_usd;
-            const baseIsMint = String(p.relationships?.base_token?.data?.id||'').endsWith(t.mint);
-            return { addr:a.address, created: Date.parse(a.pool_created_at||'')||0, supply: baseIsMint && price>0 && fdv>0 ? fdv/price : 0 };
-          }));
-        }
-        const list = pools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
-        const supply = (pools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
-        const spanMin = (t1-t0)/60000;
-        const [tf, agg, step] = spanMin <= 900 ? ['minute',1,60000] : spanMin <= 15000 ? ['minute',15,900000] : ['hour',4,14400000];
-        const limit = Math.min(1000, Math.ceil((t1-t0)/step) + 2);
-        let best = [];
-        for(const p of list){
-          if(!supply) break;
-          const j = await gtGet(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(t1/1000)+60}&limit=${limit}&currency=usd&token=${t.mint}`);
-          const c = (j?.data?.attributes?.ohlcv_list||[]).map(x=>x.map(Number))
-            .filter(x=>x[0]*1000 >= t0-step && x[0]*1000 <= t1).sort((a,b)=>a[0]-b[0]);
-          if(c.length > best.length) best = c;
-          if(best.length >= 3) break;
-        }
-        if(!best.length){ bumpTries(t.id); continue; }
-        const r2 = n => Math.round(n*supply*100)/100;
-        const cs = best.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
-        const chart = { v:2, src:'gt', i:step, w:[Math.max(t0, cs[0][0]), t1], c:cs, m:marks.slice(0,20) };
-        const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
-        if(!error){ t.chart = parseChart(chart); dirty++; if(dirty % 4 === 0) renderAll(); }
-        else bumpTries(t.id);
-      }catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
+      if(t.chart && t.chart.v === 2) continue;                        // built meanwhile (card opened)
+      try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } }
+      catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
     }
     if(dirty) renderAll();
   } finally { chartQueueRunning = false; }
+}
+/* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
+const chartInFlight = new Set();
+async function ensureChart(t){
+  if(!t.mint || (t.chart && t.chart.v === 2) || chartInFlight.has(t.id)) return;
+  chartInFlight.add(t.id);
+  let ok = false;
+  try{
+    if(t.mint.endsWith('pump')){                                       // second-level candles: the server reads pump.fun for this one trade
+      const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
+      if(data?.charts){
+        const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle();
+        const c = parseChart(row?.chart); if(c){ t.chart = c; ok = true; }
+      }
+    }
+    if(!ok) ok = await buildOneInBrowser(t);                           // any coin: minute candles from GeckoTerminal
+  }catch(e){ /* keep the entry -> exit line */ }
+  finally{ chartInFlight.delete(t.id); }
+  if(ok){
+    renderAll();
+    if(detailOverlay.classList.contains('show') && detailOverlay.dataset.id === t.id) openDetail(t.id, true);
+  } else if(detailOverlay.classList.contains('show') && detailOverlay.dataset.id === t.id){ bumpTries(t.id); openDetail(t.id, true); }
 }
 
 /* ---------- nav ---------- */
@@ -1127,14 +1156,14 @@ const detailOverlay = document.getElementById('detailOverlay');
 function chartState(t){
   if(t.chart && t.chart.v === 2) return 'ready';
   if(!t.mint) return 'manual';
-  const serverTurn = t.mint.endsWith('pump') && (t.chartTries||0) < 3;           // pump.fun: second-level candles built by the server
-  if(serverTurn) return 'loading';
-  return chartTries(t.id) < 3 ? 'loading' : 'none';                               // others: minute candles built here
+  if(chartInFlight.has(t.id)) return 'loading';
+  return chartTries(t.id) < 3 ? 'loading' : 'none';
 }
 const fmtClock = ts => new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const fmtDelta = ms => { const s = Math.round(ms/1000); return s < 60 ? `+${s}s` : `+${Math.floor(s/60)}m ${s%60}s`; };
-function openDetail(id){
+function openDetail(id, refresh){
   const t = trades.find(x=>x.id===id); if(!t) return;
+  const keepScroll = refresh ? detailOverlay.querySelector('.modal').scrollTop : 0;
   const meta = generateTradeCard(t, trades);
   const win = t.pnl >= 0, cls = win ? 'pos' : 'neg';
   const all = computedTrades();
@@ -1154,7 +1183,7 @@ function openDetail(id){
   const f0 = fills.length ? fills[0][0] : opened;
   const st = chartState(t);
   const note = st === 'ready' ? `Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+' min' : (t.chart.i/1000)+' s'} candles · ${t.chart.src==='pump'?'every trade from pump.fun':'GeckoTerminal'}`
-    : st === 'loading' ? 'Fetching the real candles… they appear here automatically (usually within minutes).'
+    : st === 'loading' ? 'Loading the real candles…'
     : st === 'manual' ? 'Manual trade: entry and exit only, no market data.'
     : 'No market data found for this coin. Showing entry and exit only.';
   const links = t.mint ? [
@@ -1235,9 +1264,10 @@ function openDetail(id){
     if(await store.softDelete([t.id])){ detailOverlay.classList.remove('show'); await reload(); showToast('Trade deleted — recoverable in Account'); }
     else showToast('Could not delete — try again');
   });
+  detailOverlay.dataset.id = t.id;
   detailOverlay.classList.add('show');
-  detailOverlay.querySelector('.modal').scrollTop = 0;
-  if(st === 'loading' && !t.mint.endsWith('pump')) buildChartsInBrowser();
+  detailOverlay.querySelector('.modal').scrollTop = keepScroll;
+  if(st === 'loading') ensureChart(t);
 }
 
 /* ---------- share: see share.js (cinematic post / story, image or video) ---------- */
