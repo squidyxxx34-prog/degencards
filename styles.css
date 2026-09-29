@@ -526,3 +526,7 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .sw-neon{--swc:#3DFFA0;} .sw-purple{--swc:#C09EFF;} .sw-gold{--swc:#FFD35C;} .sw-ice{--swc:#6EC0FF;} .sw-mono{--swc:#FFFFFF;}
 .rc-chip:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
 .rc-reset{width:100%;margin-top:12px;min-height:40px;}
+.share-q{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--tx2);flex-wrap:wrap;}
+.share-q span{margin-right:4px;font-weight:700;}
+.share-q button{min-height:36px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--tx);font-size:12px;font-weight:700;}
+.share-q button.on{background:var(--tx);color:#000;border-color:var(--tx);}

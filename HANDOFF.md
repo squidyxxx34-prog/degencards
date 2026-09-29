@@ -113,3 +113,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 ## Trade Replay : options (replay.js + share.js)
 - Moteur paramétré (`configure(opt)` à chaque image / bande-son) : couleurs (Neon, Purple, Gold, Ice, Mono), intro (Hook, 3-2-1, Logo, None), texte d'accroche (Auto + 6 phrases), graphe (Bougies, Ligne, Aire), caméra (Suivi, Gros plan, Graphe entier), vitesse (lent ≈17,5 s / normal 12,5 s / rapide 8 s de replay), fond (Grille, Épuré, Halo, Étoiles), effets (Max, Doux, Aucun), effet de vente ($, confettis, 🔥, 💎, 🚀, aucun), son (Hype, Chill, Minimal, Coupé), fin (récap + logo, récap + logo court, logo court), langue (EN, FR), afficher Investi / Multiplicateur / Chrono (+ « Hide $ »).
 - 4 préréglages (Hype, Clean, Chill, Degen). Choix mémorisés sur l'appareil (`localStorage dc_replay_opts`), valeurs inconnues ignorées. Durée estimée affichée. `dcReplay.duration(opt)` remplace la constante.
+
+## Export vidéo 4K 60 i/s
+- Par défaut 4K (2160×3840 pour 9:16, 2160×2700 pour 4:5) à 60 i/s constants, encodage image par image (WebCodecs). Codec choisi selon taille × fréquence : H.264 High 5.2 (4K60) / 4.2 (1080p60), H.264 Main, HEVC (iPhone), VP9. Débit ≈ 50 Mb/s en 4K60 (H.264), ≈ 12 Mb/s en 1080p60. Keyframe chaque seconde.
+- Repli automatique si l'appareil refuse : 1080p60 puis 1080p30 ; la qualité obtenue s'affiche dans le toast. Choix « 1080p · 60 fps (faster) » mémorisé (`localStorage dc_video_q`).
+- Rendu plus long en 4K (progression + temps restant affichés). Test sur serveur sans GPU : 20 s de vidéo en ~6 min ; bien plus rapide sur téléphone (GPU + encodeur matériel).
+- Replay : textes centrés sur les glyphes réels (`fillCentered`), annonce de vente au centre de l'écran, échelle verticale lissée sur ±0,3 s (anticipe les nouveaux extrêmes), bruit de la bougie en cours ralenti.

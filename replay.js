@@ -109,7 +109,7 @@ function livePrice(c, f, sd){
   const [f0, v0] = pts[k], [f1, v1] = pts[k+1], x = clamp01((f - f0) / (f1 - f0));
   let v = v0 + (v1 - v0) * easeInOut(x);
   const range = Math.max(1e-9, hi - lo), R = rng(sd); const ph1 = R()*6.28, ph2 = R()*6.28;
-  v += range * 0.12 * (Math.sin(f * 37 + ph1) * 0.6 + Math.sin(f * 83 + ph2) * 0.4) * Math.sin(Math.PI * f);   // fades to 0 at open and close
+  v += range * 0.12 * (Math.sin(f * 19 + ph1) * 0.65 + Math.sin(f * 43 + ph2) * 0.35) * Math.sin(Math.PI * f);   // fades to 0 at open and close; slow enough to read as price action, not jitter
   return Math.min(hi, Math.max(lo, v));
 }
 
@@ -145,10 +145,17 @@ function footer(ctx, W, H, u, a){
 }
 
 /* hook: the result slams in first (what people stop scrolling for), glitch + shake, then the words pop on the beat */
+/* centers on the glyphs actually drawn (not the font's em box): digits and signs sit dead center */
+function fillCentered(ctx, txt, x, y){
+  const ta = ctx.textAlign, tb = ctx.textBaseline; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const m = ctx.measureText(txt), w = m.actualBoundingBoxLeft + m.actualBoundingBoxRight, h = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+  ctx.fillText(txt, x - w/2 + m.actualBoundingBoxLeft, y + h/2 - m.actualBoundingBoxDescent);
+  ctx.textAlign = ta; ctx.textBaseline = tb;
+}
 function glitchText(ctx, txt, x, y, u, col, amt){
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  if(amt > 0){ ctx.fillStyle = 'rgba(255,40,90,0.75)'; ctx.fillText(txt, x - amt*u, y); ctx.fillStyle = 'rgba(40,220,255,0.75)'; ctx.fillText(txt, x + amt*u, y); }
-  ctx.restore(); ctx.fillStyle = col; ctx.fillText(txt, x, y);
+  if(amt > 0){ ctx.fillStyle = 'rgba(255,40,90,0.75)'; fillCentered(ctx, txt, x - amt*u, y); ctx.fillStyle = 'rgba(40,220,255,0.75)'; fillCentered(ctx, txt, x + amt*u, y); }
+  ctx.restore(); ctx.fillStyle = col; fillCentered(ctx, txt, x, y);
 }
 function intro(ctx, W, H, u, t, img, ms, opt, seed){
   const win = t.pnl >= 0, col = win ? GREEN : RED, k = ms / T_INTRO, R = rng(seed + 3);
@@ -178,8 +185,8 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `900 ${(i === 2 ? 44 : 66) * u}px ${SANS}`;
     const tw = ctx.measureText(w).width + 56*u;
-    if(i === 2){ rrect(ctx, -tw/2, -38*u, tw, 76*u, 38*u); ctx.fillStyle = col; ctx.fill(); ctx.fillStyle = '#05070A'; ctx.fillText(w, 0, 3*u); }
-    else { ctx.fillStyle = i === 0 ? '#fff' : 'rgba(255,255,255,0.85)'; ctx.fillText(w, 0, 0); }
+    if(i === 2){ rrect(ctx, -tw/2, -38*u, tw, 76*u, 38*u); ctx.fillStyle = col; ctx.fill(); ctx.fillStyle = '#05070A'; fillCentered(ctx, w, 0, 0); }
+    else { ctx.fillStyle = i === 0 ? '#fff' : 'rgba(255,255,255,0.85)'; fillCentered(ctx, w, 0, 0); }
     ctx.restore();
   });
   ctx.restore();
@@ -205,17 +212,17 @@ function introLogo(ctx, W, H, u, t, img, ms){
 function introCountdown(ctx, W, H, u, t, img, ms, opt){
   const col = t.pnl >= 0 ? GREEN : RED;
   bg(ctx, W, H, u, col, ms);
-  const s = 640*u; ctx.save(); ctx.globalAlpha = 0.22; ctx.filter = `blur(${22*u}px)`; coinBadge(ctx, img, W/2 - s/2, H*0.43 - s/2, s, u); ctx.restore();
+  const CY = H*0.42, s = 640*u; ctx.save(); ctx.globalAlpha = 0.22; ctx.filter = `blur(${22*u}px)`; coinBadge(ctx, img, W/2 - s/2, CY - s/2, s, u); ctx.restore();
   const step = Math.floor(ms / 500), f = (ms % 500) / 500;
   const txt = step < 3 ? String(3 - step) : (opt.hideUsd ? pctS(t.roi) : money(t.pnl));
   const sc = step < 3 ? 1.6 - 0.6 * easeOut(f) : 0.8 + 0.2 * easeOutBack(clamp01(f * 2));
-  ctx.save(); ctx.translate(W/2, H*0.42); ctx.scale(sc, sc); ctx.globalAlpha = step < 3 ? 1 - f * 0.6 : 1;
+  ctx.save(); ctx.translate(W/2, CY); ctx.scale(sc, sc); ctx.globalAlpha = step < 3 ? 1 - f * 0.6 : 1;
   ctx.font = `900 ${(step < 3 ? 380 : 170) * u}px ${MONO}`;
-  ctx.fillStyle = step < 3 ? '#fff' : col; ctx.shadowColor = col; ctx.shadowBlur = 50*u*FX; ctx.fillText(txt, 0, 0); ctx.restore();
+  ctx.fillStyle = step < 3 ? '#fff' : col; ctx.shadowColor = col; ctx.shadowBlur = 50*u*FX; fillCentered(ctx, txt, 0, 0); ctx.restore();
   // ring pulse
-  ctx.save(); ctx.strokeStyle = hexA(col, (1 - f) * 0.7 * (FX || 0.4)); ctx.lineWidth = 8*u; ctx.beginPath(); ctx.arc(W/2, H*0.42, (260 + 220*f) * u, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.strokeStyle = hexA(col, (1 - f) * 0.7 * (FX || 0.4)); ctx.lineWidth = 8*u; ctx.beginPath(); ctx.arc(W/2, CY, (260 + 220*f) * u, 0, Math.PI*2); ctx.stroke(); ctx.restore();
   if(step >= 3){ ctx.textAlign = 'center'; ctx.font = `900 ${50*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.globalAlpha = clamp01(f * 3);
-    ctx.fillText(L.on + ' ' + tk(t.ticker), W/2, H*0.55); ctx.globalAlpha = 1; }
+    fillCentered(ctx, L.on + ' ' + tk(t.ticker), W/2, CY + 330*u); ctx.globalAlpha = 1; }
 }
 function warp(ctx, W, H, u, t, img, ms, seed){
   const k = ms / T_WARP, R = rng(seed);
@@ -281,11 +288,25 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     let h = c[1], l = c[1]; for(let q = 0; q <= 12; q++){ const v = livePrice(c, frac * q / 12, seed + i * 131); h = Math.max(h, v); l = Math.min(l, v); }
     return [c[0], c[1], h, l, px];
   };
-  let lo = Infinity, hi = -Infinity;
-  vis.forEach(i => { const c = cur(i); lo = Math.min(lo, c[3]); hi = Math.max(hi, c[2]); });
-  if(r > P.ib){ lo = Math.min(lo, P.buyMc); hi = Math.max(hi, P.buyMc); }
-  if(!isFinite(lo)){ lo = P.cs[0][3]; hi = P.cs[0][2]; }
-  if(hi - lo < hi * 0.02){ hi *= 1.01; lo *= 0.99; }
+  // vertical scale: range averaged over ±0.3 s (the replay is precomputed, so it anticipates new highs / lows) -> eases instead of jumping
+  const rangeAt = (m) => {
+    const rr = revealAt(P, Math.max(0, m)), ff = Math.floor(rr), fr = rr - ff, hd = Math.max(1, rr);
+    const st = O.camera === 'full' ? 0 : Math.max(0, hd - KK);
+    let a = Infinity, b = -Infinity;
+    for(let i = Math.max(0, Math.floor(st)); i < Math.min(P.n, Math.ceil(hd)); i++){
+      const c = P.cs[i];
+      if(i < ff){ a = Math.min(a, c[3]); b = Math.max(b, c[2]); }
+      else { const sd = seed + i * 131; for(let q = 0; q <= 8; q++){ const v = livePrice(c, fr * q / 8, sd); a = Math.min(a, v); b = Math.max(b, v); } }
+    }
+    if(rr > P.ib){ a = Math.min(a, P.buyMc); b = Math.max(b, P.buyMc); }
+    if(!isFinite(a)){ a = P.cs[0][3]; b = P.cs[0][2]; }
+    if(b - a < b * 0.02){ b *= 1.01; a *= 0.99; }
+    return [a, b];
+  };
+  let lo = 0, hi = 0, wsum = 0;
+  for(let k = -5; k <= 5; k++){ const w = 6 - Math.abs(k), [a, b] = rangeAt(ms + k * 60); lo += a * w; hi += b * w; wsum += w; }   // centered window: it also sees what's coming
+  lo /= wsum; hi /= wsum;
+  vis.forEach(i => { const c = cur(i); lo = Math.min(lo, c[3]); hi = Math.max(hi, c[2]); });   // never clip what is on screen
   const pad = (hi - lo) * 0.18; lo -= pad; hi += pad;
   const X = i => left + (i - start) * slot + slot/2, Y = v => top + (1 - (v - lo)/(hi - lo)) * ph;
   // speed lines at the start of the replay
@@ -368,7 +389,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   // SELL burst: $ particles + big result
   const kx = seg(ms, ts + 500, ts + 2300);
   if(kx > 0 && kx < 1){
-    const R = rng(seed + 11), cx = (W - SAFE_R*u + 40*u)/2, cy = H*0.45;
+    const R = rng(seed + 11), cx = W/2, cy = H*0.45;
     ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.45 * Math.sin(kx * Math.PI)})`; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const CONF = ['#3DFFA0', '#FFD35C', '#C09EFF', '#6EC0FF', '#FF5ADC', '#FFFFFF'];
@@ -385,8 +406,8 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const sc = 0.7 + 0.3 * easeOutBack(seg(kx, 0, 0.3));
     ctx.translate(cx, cy); ctx.scale(sc, sc);
     ctx.font = `900 ${150*u}px ${MONO}`; ctx.fillStyle = win ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 50*u*FX;
-    ctx.fillText(opt.hideUsd ? pctS(t.roi) : money(t.pnl), 0, 0);
-    if(!opt.hideUsd){ ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillText(pctS(t.roi), 0, 120*u); }
+    fillCentered(ctx, opt.hideUsd ? pctS(t.roi) : money(t.pnl), 0, 0);
+    if(!opt.hideUsd){ ctx.font = `900 ${64*u}px ${MONO}`; fillCentered(ctx, pctS(t.roi), 0, 125*u); }
     ctx.restore(); ctx.textBaseline = 'alphabetic';
   }
   footer(ctx, W, H, u, 1);

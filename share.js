@@ -308,15 +308,35 @@ function loadMuxer(){
     document.head.appendChild(sc);
   }));
 }
-async function encodeOffline(W, H, total, frameAt, onProgress, audioFn){
-  if(!('VideoEncoder' in window) || !('VideoFrame' in window) || !(await loadMuxer())) return null;
-  const FPS = 30, n = Math.round(total / 1000 * FPS) + 1;
-  let vcfg = null, vmux = 'avc';
-  for(const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42002a', 'vp09.00.40.08']){       // H.264 first (best for socials), VP9 if the browser has no H.264 encoder
-    const cfg = { codec, width:W, height:H, bitrate:12_000_000, framerate:FPS, ...(codec.startsWith('avc') ? { avc:{ format:'avc' } } : {}) };
-    try{ if((await VideoEncoder.isConfigSupported(cfg)).supported){ vcfg = cfg; vmux = codec.startsWith('avc') ? 'avc' : 'vp9'; break; } }catch(e){}
+/* codec candidates per output: the H.264 / HEVC level must match size x frame rate, or the encoder refuses (or makes a file players stutter on) */
+function codecCandidates(W, H, fps){
+  const px = W * H * fps, big = px > 1920 * 1080 * 60 * 1.01, mid = px > 1920 * 1080 * 30 * 1.01;
+  return [
+    [big ? 'avc1.640034' : mid ? 'avc1.64002a' : 'avc1.640028', 'avc'],    // H.264 High 5.2 / 4.2 / 4.0
+    [big ? 'avc1.4d0034' : mid ? 'avc1.4d002a' : 'avc1.4d0028', 'avc'],    // H.264 Main
+    [big ? 'hvc1.1.6.L156.B0' : 'hvc1.1.6.L123.B0', 'hevc'],               // HEVC (iPhone hardware encoder)
+    [big ? 'vp09.00.51.08' : 'vp09.00.41.08', 'vp9'],                     // VP9 when the browser has neither
+  ];
+}
+function bitrateFor(W, H, fps, mux){ const base = W * H * fps; return Math.round(Math.min(60e6, base * (mux === 'hevc' ? 0.07 : 0.1))); }   // 4K60 H.264 ~50 Mb/s, 1080p60 ~12 Mb/s
+async function pickVideoConfig(baseW, baseH, quality){
+  const tries = quality === '1080' ? [[1, 60], [1, 30]] : [[2, 60], [1, 60], [1, 30]];   // 4K60 first, then graceful fallbacks
+  for(const [k, fps] of tries){
+    const W = baseW * k, H = baseH * k;
+    for(const [codec, mux] of codecCandidates(W, H, fps)){
+      const cfg = { codec, width:W, height:H, bitrate: bitrateFor(W, H, fps, mux), framerate:fps, bitrateMode:'constant',
+        ...(mux === 'avc' ? { avc:{ format:'avc' } } : mux === 'hevc' ? { hevc:{ format:'hevc' } } : {}) };
+      try{ if((await VideoEncoder.isConfigSupported(cfg)).supported) return { cfg, mux, W, H, fps, k }; }catch(e){}
+      try{ const c2 = { ...cfg }; delete c2.bitrateMode; if((await VideoEncoder.isConfigSupported(c2)).supported) return { cfg:c2, mux, W, H, fps, k }; }catch(e){}
+    }
   }
-  if(!vcfg) return null;
+  return null;
+}
+async function encodeOffline(baseW, baseH, total, frameAt, onProgress, audioFn){
+  if(!('VideoEncoder' in window) || !('VideoFrame' in window) || !(await loadMuxer())) return null;
+  const pick = await pickVideoConfig(baseW, baseH, state.quality);
+  if(!pick) return null;
+  const { cfg: vcfg, mux: vmux, W, H, fps: FPS } = pick, n = Math.round(total / 1000 * FPS) + 1;
   // soundtrack rendered offline, sample-exact with the frames
   let abuf = null, acfg = null;
   if(audioFn && 'AudioEncoder' in window && 'AudioData' in window && window.OfflineAudioContext){
@@ -342,9 +362,9 @@ async function encodeOffline(W, H, total, frameAt, onProgress, audioFn){
     if(failed) throw failed;
     frameAt(ctx, W, H, Math.min(i * 1000 / FPS, total));
     const vf = new VideoFrame(c, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
-    venc.encode(vf, { keyFrame: i % 30 === 0 }); vf.close();                      // a keyframe every second: clean seeking & re-encode
+    venc.encode(vf, { keyFrame: i % FPS === 0 }); vf.close();                      // a keyframe every second: clean seeking & re-encode
     while(venc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 1));
-    if(i % 3 === 0){ onProgress && onProgress(i / n * (abuf ? 0.92 : 1)); await new Promise(r => setTimeout(r, 0)); }
+    if(i % 4 === 0){ onProgress && onProgress(i / n * (abuf ? 0.95 : 1)); await new Promise(r => setTimeout(r, 0)); }
   }
   await venc.flush(); venc.close();
   if(abuf && acfg){
@@ -361,6 +381,7 @@ async function encodeOffline(W, H, total, frameAt, onProgress, audioFn){
   }
   if(failed) throw failed;
   muxer.finalize(); onProgress && onProgress(1);
+  lastExport = `${pick.k === 2 ? '4K' : '1080p'} \u00B7 ${FPS} fps`;
   return new Blob([muxer.target.buffer], { type:'video/mp4' });
 }
 
@@ -368,7 +389,7 @@ async function encodeOffline(W, H, total, frameAt, onProgress, audioFn){
 function recordAnim(W, H, total, frameAt, onProgress, audio){
   return new Promise((resolve, reject) => {
     const mime = videoMime(); if(!mime) return reject(new Error('unsupported'));
-    const FPS = 30, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const FPS = 60, c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     // constant frame rate: we push exactly one frame every 1/30 s (a variable rate gets mangled by TikTok's re-encode)
     let vstream = c.captureStream(0), track = vstream.getVideoTracks()[0];
@@ -485,7 +506,8 @@ async function deliver(blob, name, caption){
 }
 
 /* ---------- share sheet ---------- */
-let state = { t:null, meta:null, fmt:'post', style:'card', hideUsd:false, anim:0, busy:false, sound:false, pac:null };
+let state = { t:null, meta:null, fmt:'post', style:'card', hideUsd:false, anim:0, busy:false, sound:false, pac:null, quality: (()=>{ try{ return localStorage.getItem('dc_video_q') || '4k'; }catch(e){ return '4k'; } })() };
+let lastExport = '';
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
   const cv = document.getElementById('sharePreview'), R = window.dcReplay;
@@ -522,6 +544,7 @@ function syncButtons(){
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
+  document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === state.quality; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
   v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
 }
@@ -545,12 +568,14 @@ async function doVideo(){
   const btn = document.getElementById('shareVideo'), label = btn.textContent;
   try{
     await fontsReady(); await loadCoinImage(state.t.image);
-    const prog = pr => { btn.textContent = `RENDERING… ${Math.round(pr*100)}%`; };
+    lastExport = '';
+    const tStart = performance.now();
+    const prog = pr => { const el = (performance.now() - tStart) / 1000, eta = pr > 0.04 ? Math.max(0, Math.round(el / pr - el)) : null; btn.textContent = `RENDERING\u2026 ${Math.round(pr*100)}%` + (eta != null ? ` \u00B7 ~${eta}s` : ''); };
     const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog, ac) : await recordVideo(state.t, state.meta, state.fmt, state, prog);
     btn.textContent = label;
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
     const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.${ext}`, captionFor(state.t, state));
-    if(r === 'downloaded') showToast('Video saved · caption copied');
+    showToast((r === 'downloaded' ? 'Video saved \u00B7 caption copied' : 'Video ready') + (lastExport ? ` \u00B7 ${lastExport}` : ''));
   }catch(e){ showToast("Video isn't supported here — share the image"); }
   finally{ btn.textContent = label; state.busy = false; }
 }
@@ -577,6 +602,7 @@ function init(){
   document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); if(state.style === 'replay') renderCustomize(); preview(); }));
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
+  document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);
   document.getElementById('shareCaption').addEventListener('click', async () => {
