@@ -69,6 +69,7 @@
       <button data-v="account">ACCOUNT</button>
     </nav>
     <div class="headerright">
+      <button type="button" class="guide-help" id="guideHelp" data-guide-start aria-label="Open the getting-started guide" title="Getting started guide">?</button>
       <div class="profile-chip" id="profileChip"><div class="av" id="avInitial">·</div>Lvl <b id="chipLvl">1</b></div>
     </div>
   </div>
@@ -181,6 +182,13 @@
   <div id="accountView" style="display:none;">
     <div class="sectionhead"><h2>MANAGE ACCOUNT</h2></div>
     <div class="acc-block">
+      <h4>GETTING STARTED</h4>
+      <div class="provider-row" style="border-top:none;">
+        <div><div class="provider-name">Guided tour</div><div class="provider-sub">A 1-minute walkthrough of DEGENCARDS. Skip anytime.</div></div>
+        <button type="button" class="btn-connect" data-guide-start>REPLAY GUIDE</button>
+      </div>
+    </div>
+    <div class="acc-block">
       <h4>SIGNED IN AS</h4>
       <div class="provider-row" style="border-top:none;">
         <div><div class="provider-name" id="accEmail">—</div><div class="provider-sub">Free plan</div></div>
@@ -292,5 +300,6 @@
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
 <script src="/app.js" defer></script>
 <script src="/share.js" defer></script>
+<script src="/guide.js" defer></script>
 </body>
 </html>

@@ -1266,6 +1266,8 @@ async function showApp(){
   await reload();
   maybeAutoSync();
   setTimeout(buildChartsInBrowser, 1500);
+  window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself
+  window.dcGuide?.maybeStart(window.__dcGuideUser);
   setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 5*60*1000);
 }
 function showLanding(){
