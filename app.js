@@ -272,7 +272,7 @@ function pnlColor(t){
 const fmt = {
   usd(n){ const s=n<0?"-":"+"; return s+"$"+Math.abs(n).toFixed(2); },
   pct(n){ const s=n<0?"":"+"; return s+n.toFixed(1)+"%"; },
-  mc(n){ if(n>=1000) return "$"+(n/1000).toFixed(1)+"K"; return "$"+n; },
+  mc(n){ n = Number(n)||0; if(n>=1e9) return "$"+(n/1e9).toFixed(2)+"B"; if(n>=1e6) return "$"+(n/1e6).toFixed(2)+"M"; if(n>=1e3) return "$"+(n/1e3).toFixed(1)+"K"; return "$"+Math.round(n); },
   hold(s){ if(s<60) return s+"s"; const m=Math.floor(s/60), r=s%60; if(m<60) return m+"m "+r+"s"; return Math.floor(m/60)+"h "+(m%60)+"m"; },
   date(ts){ return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) + " · " + new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
 };
@@ -1123,31 +1123,121 @@ document.getElementById('btnCreate').addEventListener('click', async ()=>{
 
 /* ---------- detail modal ---------- */
 const detailOverlay = document.getElementById('detailOverlay');
+/* ---------- trade detail ---------- */
+function chartState(t){
+  if(t.chart && t.chart.v === 2) return 'ready';
+  if(!t.mint) return 'manual';
+  const serverTurn = t.mint.endsWith('pump') && (t.chartTries||0) < 3;           // pump.fun: second-level candles built by the server
+  if(serverTurn) return 'loading';
+  return chartTries(t.id) < 3 ? 'loading' : 'none';                               // others: minute candles built here
+}
+const fmtClock = ts => new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const fmtDelta = ms => { const s = Math.round(ms/1000); return s < 60 ? `+${s}s` : `+${Math.floor(s/60)}m ${s%60}s`; };
 function openDetail(id){
   const t = trades.find(x=>x.id===id); if(!t) return;
   const meta = generateTradeCard(t, trades);
-  const win = t.pnl>=0;
+  const win = t.pnl >= 0, cls = win ? 'pos' : 'neg';
+  const all = computedTrades();
+  // size in / out (trade price) from pnl and roi
+  const size = t.roi ? Math.abs(t.pnl / (t.roi/100)) : null, out = size != null ? size + t.pnl : null;
+  const mult = t.entryMc > 0 && t.exitMc > 0 ? t.exitMc / t.entryMc : null;
+  const opened = t.timestamp - (t.holdTime||0)*1000;
+  // context
+  const byPnl = [...all].sort((a,b)=>b.pnl-a.pnl), rank = byPnl.findIndex(x=>x.id===t.id) + 1;
+  const beat = all.length > 1 ? Math.round((all.filter(x=>x.pnl < t.pnl).length / (all.length-1)) * 100) : null;
+  const same = all.filter(x=> t.mint ? x.mint === t.mint : x.ticker === t.ticker);
+  const sameTotal = same.reduce((s,x)=>s+x.pnl, 0);
+  // fills: exact ones from the chart when available
+  const fills = (t.chart?.src === 'pump' && t.chart.m?.length ? t.chart.m.map(m=>[m[0], m[1], m[2]])
+               : t.legs?.length ? t.legs.map(l=>[+l[0], l[1], +l[2]])
+               : [[opened,'b',t.entryMc],[t.timestamp,'s',t.exitMc]]).sort((a,b)=>a[0]-b[0]);
+  const f0 = fills.length ? fills[0][0] : opened;
+  const st = chartState(t);
+  const note = st === 'ready' ? `Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+' min' : (t.chart.i/1000)+' s'} candles · ${t.chart.src==='pump'?'every trade from pump.fun':'GeckoTerminal'}`
+    : st === 'loading' ? 'Fetching the real candles… they appear here automatically (usually within minutes).'
+    : st === 'manual' ? 'Manual trade: entry and exit only, no market data.'
+    : 'No market data found for this coin. Showing entry and exit only.';
+  const links = t.mint ? [
+    t.mint.endsWith('pump') ? ['pump.fun', `https://pump.fun/coin/${t.mint}`] : null,
+    ['DexScreener', `https://dexscreener.com/solana/${t.mint}`],
+    ['Solscan', `https://solscan.io/token/${t.mint}`],
+  ].filter(Boolean) : [];
+  const row = (l, v, c='') => `<div class="dt-row"><span>${l}</span><b class="${c}">${v}</b></div>`;
   document.getElementById('detailBody').innerHTML = `
-    <div style="font-family:var(--mono);font-size:11px;color:var(--tx2)">TRADE #${String(t.tradeId).padStart(4,'0')} · ${meta.rarity.toUpperCase()}</div>
-    <div class="detail-coin">${coinImg(t, 72, "big")}</div>
-    <div style="font-weight:800;font-size:22px;margin-top:6px">${esc(tk(t.ticker))}</div>
-    <div class="${win?'pos':'neg'}" style="font-size:30px;font-weight:900;font-family:var(--mono);margin-top:4px">${fmt.usd(t.pnl)}</div>
-    <div class="${win?'pos':'neg'}" style="font-weight:700;font-family:var(--mono)">${fmt.pct(t.roi)}</div>
-    <div style="margin:12px 0 4px">${miniChart(t, true)}</div>
-    ${t.chart?.v===2 ? `<div class="chart-note">Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+'m' : (t.chart.i/1000)+'s'} candles · up to 2 min before entry / after exit</div>` : `<div class="chart-note">Loading real candles…</div>`}
-    <div class="detail-stats">
-      <div><div class="l">Entry MC</div><div class="v">${fmt.mc(t.entryMc)}</div></div>
-      <div><div class="l">Exit MC</div><div class="v">${fmt.mc(t.exitMc)}</div></div>
-      <div><div class="l">Hold time</div><div class="v">${fmt.hold(t.holdTime)}</div></div>
-      <div><div class="l">Date</div><div class="v" style="font-size:11px">${fmt.date(t.timestamp)}</div></div>
-      ${t.pnlNet!=null ? `<div><div class="l">Fees &amp; costs</div><div class="v">${fmt.usd(-Math.abs(t.fees||0))}</div></div>
-      <div><div class="l">Net PnL (wallet)</div><div class="v ${t.pnlNet>=0?'pos':'neg'}">${fmt.usd(t.pnlNet)}</div></div>` : ''}
+  <article class="dt" aria-labelledby="dtTitle">
+    <div class="dt-head">
+      ${coinImg(t, 64, 'big')}
+      <div class="dt-id">
+        <h2 id="dtTitle">${esc(tk(t.ticker))}</h2>
+        <div class="dt-sub">#${String(t.tradeId).padStart(4,'0')} · ${t.source==='wallet'?'On-chain':'Manual'} · ${fmt.date(t.timestamp)}</div>
+      </div>
+      <div class="dt-badges"><span class="dt-rar r-${meta.rarity}">${meta.rarity.toUpperCase()}</span><span class="dt-grade r-${meta.rarity}" title="Grade">${meta.grade}</span></div>
     </div>
-    ${meta.achievements.length?`<div class="preview-label">ACHIEVEMENTS</div><div class="achlist">${meta.achievements.map(a=>`<div class="achitem"><span style="color:var(--purple)">${icon(a.icon,18)}</span><div><b>${a.name}</b><br><span>${a.desc}</span></div></div>`).join('')}</div>`:''}
-    <button class="share-btn" id="btnShare">SHARE CARD</button>
-  `;
+
+    <section class="dt-hero ${cls}">
+      <div class="dt-pnl">${fmt.usd(t.pnl)}</div>
+      <div class="dt-hero-sub">
+        <span class="dt-pill">${fmt.pct(t.roi)}</span>
+        ${mult ? `<span class="dt-pill ghost">×${mult.toFixed(mult>=10?1:2)} market cap</span>` : ''}
+        <span class="dt-pill ghost">${fmt.hold(t.holdTime)} hold</span>
+      </div>
+      ${t.pnlNet!=null ? `<div class="dt-net">After fees: <b class="${t.pnlNet>=0?'pos':'neg'}">${fmt.usd(t.pnlNet)}</b> in your wallet · fees $${Math.abs(t.fees||0).toFixed(2)}</div>` : ''}
+    </section>
+
+    <div class="dt-grid">
+      <section class="dt-main" aria-label="Price chart and fills">
+        <div class="dt-chart ${st==='loading'?'is-loading':''}">${miniChart(t, true)}</div>
+        <p class="chart-note">${note}</p>
+        <h3 class="dt-h">Fills</h3>
+        <ol class="dt-fills">${fills.map(([ts,k,mc])=>`
+          <li><span class="mk-chip mk-${k}">${k==='b'?'B':'S'}</span>
+            <span class="dt-f-what">${k==='b'?'Buy':'Sell'}</span>
+            <span class="dt-f-time">${fmtClock(ts)} <em>${ts===f0?'start':fmtDelta(ts-f0)}</em></span>
+            <span class="dt-f-mc">${mc>0?fmt.mc(mc)+' MC':'—'}</span></li>`).join('')}</ol>
+      </section>
+
+      <section class="dt-side">
+        <h3 class="dt-h">Trade</h3>
+        <div class="dt-rows">
+          ${size!=null ? row('Size in', '$'+size.toFixed(2)) : ''}
+          ${out!=null ? row('Got back', '$'+out.toFixed(2), cls) : ''}
+          ${row('Entry MC', fmt.mc(t.entryMc))}
+          ${row('Exit MC', fmt.mc(t.exitMc), t.exitMc>=t.entryMc?'pos':'neg')}
+          ${row('Opened', fmtClock(opened))}
+          ${row('Closed', fmtClock(t.timestamp))}
+          ${t.pnlNet!=null ? row('Fees & costs', fmt.usd(-Math.abs(t.fees||0)), 'neg') + row('Net PnL (wallet)', fmt.usd(t.pnlNet), t.pnlNet>=0?'pos':'neg') : ''}
+        </div>
+
+        <h3 class="dt-h">Context</h3>
+        <div class="dt-rows">
+          ${row('Rank', `#${rank} of ${all.length}`)}
+          ${beat!=null ? row('Better than', `${beat}% of your trades`) : ''}
+          ${row(`Your ${esc(tk(t.ticker))} trades`, `${same.length} · ${fmt.usd(sameTotal)}`, sameTotal>=0?'pos':'neg')}
+        </div>
+
+        ${meta.achievements.length ? `<h3 class="dt-h">Badges</h3><div class="dt-badgelist">${meta.achievements.map(a=>`<span class="dt-badge" title="${esc(a.desc)}">${icon(a.icon,14)} ${a.name}</span>`).join('')}</div>` : ''}
+
+        ${t.mint ? `<h3 class="dt-h">Coin</h3>
+          <div class="dt-mint"><code>${t.mint.slice(0,6)}…${t.mint.slice(-6)}</code><button type="button" class="hbtn" id="dtCopy" aria-label="Copy the coin address">COPY</button></div>
+          <div class="dt-links">${links.map(([l,u])=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${l} ↗</a>`).join('')}</div>` : ''}
+      </section>
+    </div>
+
+    <div class="dt-actions">
+      <button class="share-btn" id="btnShare">SHARE CARD</button>
+      <button type="button" class="hbtn danger" id="dtDelete">DELETE</button>
+    </div>
+  </article>`;
   document.getElementById('btnShare').addEventListener('click', ()=>shareCard(t, meta));
+  document.getElementById('dtCopy')?.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(t.mint); showToast('Address copied'); }catch(e){ showToast("Couldn't copy"); } });
+  document.getElementById('dtDelete').addEventListener('click', async ()=>{
+    if(!confirm('Delete this trade? You can recover it from Account for 30 days.')) return;
+    if(await store.softDelete([t.id])){ detailOverlay.classList.remove('show'); await reload(); showToast('Trade deleted — recoverable in Account'); }
+    else showToast('Could not delete — try again');
+  });
   detailOverlay.classList.add('show');
+  detailOverlay.querySelector('.modal').scrollTop = 0;
+  if(st === 'loading' && !t.mint.endsWith('pump')) buildChartsInBrowser();
 }
 
 /* ---------- share: see share.js (cinematic post / story, image or video) ---------- */

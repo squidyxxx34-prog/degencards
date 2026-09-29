@@ -329,7 +329,7 @@ async function pumpTrades(mint: string, t0: number, t1: number) {
   for (let page = 0; page < 40; page++) {
     let r: Response | null = null;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const wait = pumpLast + 1300 - Date.now(); if (wait > 0) await sleep(wait);          // stay under pump.fun's rate limit
+      const wait = pumpLast + 2500 - Date.now(); if (wait > 0) await sleep(wait);          // stay under pump.fun's rate limit
       pumpLast = Date.now();
       r = await fetch(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}&minSolAmount=0`,
         { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
@@ -353,7 +353,7 @@ async function buildPumpCharts(deadline: number, userId: string | null) {
   if (userId) q = q.eq("user_id", userId);
   const { data: rows, error } = await q;
   if (error) { console.error("charts query", error.message); return 0; }
-  let built = 0; const supplyCache = new Map<string, number>();
+  let built = 0, rateHits = 0; const supplyCache = new Map<string, number>();
   for (const t of rows || []) {
     if (Date.now() > deadline - 6_000) break;
     try {
@@ -388,7 +388,11 @@ async function buildPumpCharts(deadline: number, userId: string | null) {
       built++;
     } catch (e) {
       const msg = (e as Error).message;
-      if (msg === "RATE") { console.error("pump chart rate limited, retry next run"); break; }   // not the trade's fault
+      if (msg === "RATE") {                                      // pump.fun is throttling us: stop this run
+        console.error("pump chart rate limited, retry next run");
+        rateHits++; if (rateHits === 1) await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);   // after 3 blocked runs the browser builds minute candles instead
+        break;
+      }
       console.error("pump chart", msg);
       await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
     }
@@ -499,7 +503,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const deadline = Date.now() + TIME_BUDGET_MS;
   const body: any = await req.json().catch(() => ({}));
-  const task = body?.task === "images" ? "images" : "all";            // cron can run a dedicated images pass
+  const task = body?.task === "images" ? "images" : body?.task === "charts" ? "charts" : "all";   // cron runs dedicated passes
 
   let accounts: any[] = [];
   let userId: string | null = null;
@@ -507,6 +511,10 @@ Deno.serve(async (req) => {
   if (cronKey) {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
+    if (task === "charts") {
+      let charts = 0; try { charts = await buildPumpCharts(deadline, null); } catch (e) { console.error("charts", (e as Error).message); }
+      return new Response(JSON.stringify({ charts }), { headers: h });
+    }
     if (task === "images") {
       let images = 0; try { images = await fillCoinImages(deadline, null); } catch (e) { console.error("images", (e as Error).message); }
       return new Response(JSON.stringify({ images }), { headers: h });
@@ -550,8 +558,8 @@ Deno.serve(async (req) => {
     } catch (e) { console.error("repair", (e as Error).message); }
   }
   let charts = 0;
-  if (Date.now() < deadline - 10_000) { try { charts = await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
+  if (userId && Date.now() < deadline - 10_000) { try { charts = await buildPumpCharts(deadline, userId); } catch (e) { console.error("charts", (e as Error).message); } }
   let images = 0;
-  if (Date.now() < deadline - 10_000) { try { images = await fillCoinImages(deadline, userId); } catch (e) { console.error("images", (e as Error).message); } }
+  if (userId && Date.now() < deadline - 10_000) { try { images = await fillCoinImages(deadline, userId); } catch (e) { console.error("images", (e as Error).message); } }
   return new Response(JSON.stringify({ synced, imported, pending, repaired, charts, images }), { headers: h });
 });

@@ -74,3 +74,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - `sync-trades` trouve l'image (pump.fun → DexScreener → métadonnées on-chain Token-2022/Metaplex → JSON → image, → Helius si clé), essaie plusieurs passerelles IPFS, vérifie que c'est bien une image (PNG/JPEG/GIF/WebP, 3 Mo max) puis la COPIE dans le bucket public `coin-images` (`<mint>.<ext>`). `trades.image` = URL publique (contrainte : uniquement notre bucket).
 - Cron dédié `coin-images` toutes les 5 min (body `{"task":"images"}`), + à chaque synchro. 3 essais max par coin (`image_tries`).
 - Front : logo tel quel (object-fit: contain) sur les cartes, le détail, l'historique et l'image/vidéo de partage (chargé en CORS, bucket = ACAO *). CSP img-src autorise seulement le domaine Supabase.
+
+## Détail d'une carte (refonte)
+- En-tête (logo, ticker, n°, source, date, rareté, grade), bloc résultat (PnL, ROI, ×MC, durée, net après frais), graphe + état réel (prêt / en cours / pas de données / manuel), liste des fills (heure, +Δ, MC), bloc Trade (mise, récupéré, MC entrée/sortie, ouverture/fermeture, frais, net), Contexte (rang, % battu, historique sur ce coin), badges, adresse du coin + copier + liens pump.fun / DexScreener / Solscan, actions collées en bas (Share, Delete).
+- 2 colonnes à partir de 760 px (iPad), 1 colonne sur téléphone.
+- `fmt.mc` gère K / M / B.
+- Crons décalés pour ne jamais frapper pump.fun en même temps : sync */10, images 2-59/5, graphes 4-59/4 (tâche `charts`). Si pump.fun bloque 3 passages de suite pour un trade, le navigateur prend le relais en bougies minute.
