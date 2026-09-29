@@ -403,17 +403,69 @@ async function recordVideo(t, meta, fmtKey, opt, onProgress){
   return recordAnim(F.w, F.h, VIDEO_MS, frame, onProgress);
 }
 async function recordReplay(t, meta, opt, onProgress, ac){
-  const R = window.dcReplay;
+  const R = window.dcReplay; opt = { ...replayOpts(), ...opt };
   if(ac && ac.state !== 'running'){ try{ await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 400))]); }catch(e){} }
   const frame = (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt);
   try{
-    const b = await encodeOffline(R.W, R.H, R.DURATION, frame, onProgress, (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt));
+    const b = await encodeOffline(R.W, R.H, R.duration(opt), frame, onProgress, opt.sound === 'off' ? null : (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt));
     if(b){ if(ac) ac.close().catch(()=>{}); return b; }
   }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
-  const audio = ac ? { ac, schedule: (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt) } : null;
-  return recordAnim(R.W, R.H, R.DURATION, frame, onProgress, audio);
+  const audio = ac && opt.sound !== 'off' ? { ac, schedule: (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt) } : null;
+  return recordAnim(R.W, R.H, R.duration(opt), frame, onProgress, audio);
 }
 const newAudio = () => { try{ const A = window.AudioContext || window.webkitAudioContext; if(!A) return null; const ac = new A(); ac.resume && ac.resume(); return ac; }catch(e){ return null; } };
+/* ---------- Trade Replay customization: every option is a predefined choice, saved on this device ---------- */
+const RO_KEY = 'dc_replay_opts';
+const RO_GROUPS = [
+  ['theme',  'Colors',      [['neon','Neon'],['purple','Purple'],['gold','Gold'],['ice','Ice'],['mono','Mono']]],
+  ['intro',  'Intro',       [['hook','Hook'],['countdown','3-2-1'],['logo','Logo'],['none','None']]],
+  ['hook',   'Hook text',   [['auto','Auto'],['printed','How I printed'],['scalp','Scalp of the day'],['copy','Would you copy?'],['sniped','Sniped it'],['lesson','Lesson learned'],['go','Let\u2019s go']]],
+  ['chart',  'Chart',       [['candles','Candles'],['line','Line'],['area','Area']]],
+  ['camera', 'Camera',      [['follow','Follow'],['zoom','Close-up'],['full','Full chart']]],
+  ['speed',  'Speed',       [['slow','Slow'],['normal','Normal'],['fast','Fast']]],
+  ['bg',     'Background',  [['grid','Grid'],['clean','Clean'],['glow','Glow'],['stars','Stars']]],
+  ['fx',     'Effects',     [['max','Max'],['soft','Soft'],['off','Off']]],
+  ['burst',  'Sell effect', [['dollars','$ burst'],['confetti','Confetti'],['fire','\u{1F525} Fire'],['diamonds','\u{1F48E} Diamonds'],['rockets','\u{1F680} Rockets'],['none','None']]],
+  ['sound',  'Sound',       [['hype','Hype'],['chill','Chill'],['minimal','Minimal'],['off','Off']]],
+  ['outro',  'Ending',      [['full','Recap + logo'],['recap','Recap + short logo'],['quick','Short logo only']]],
+  ['lang',   'Language',    [['en','English'],['fr','Fran\u00E7ais']]],
+];
+const RO_SHOW = [['showInvested','Invested'],['showMult','Multiplier'],['showTime','Timer']];
+const RO_PRESETS = {
+  hype:  { name:'\u{1F525} Hype',  o:{ theme:'neon', intro:'hook', hook:'auto', chart:'candles', camera:'follow', speed:'normal', bg:'grid', fx:'max', burst:'dollars', sound:'hype', outro:'full' } },
+  clean: { name:'\u2728 Clean',    o:{ theme:'purple', intro:'logo', hook:'auto', chart:'candles', camera:'follow', speed:'normal', bg:'clean', fx:'soft', burst:'none', sound:'minimal', outro:'recap' } },
+  chill: { name:'\u{1F30A} Chill', o:{ theme:'ice', intro:'logo', hook:'auto', chart:'area', camera:'full', speed:'slow', bg:'stars', fx:'soft', burst:'confetti', sound:'chill', outro:'full' } },
+  degen: { name:'\u{1F680} Degen', o:{ theme:'gold', intro:'countdown', hook:'go', chart:'candles', camera:'zoom', speed:'fast', bg:'glow', fx:'max', burst:'rockets', sound:'hype', outro:'quick' } },
+};
+function replayOpts(){
+  const d = (window.dcReplay && window.dcReplay.DEFAULTS) || {};
+  let saved = {}; try{ saved = JSON.parse(localStorage.getItem(RO_KEY) || '{}') || {}; }catch(e){}
+  const o = { ...d };
+  for(const [k, , opts] of RO_GROUPS) if(opts.some(x => x[0] === saved[k])) o[k] = saved[k];   // only known values: a stale / edited entry can't break a render
+  for(const [k] of RO_SHOW) if(typeof saved[k] === 'boolean') o[k] = saved[k];
+  delete o.hideUsd; return o;
+}
+function saveReplayOpts(o){ try{ localStorage.setItem(RO_KEY, JSON.stringify(o)); }catch(e){} }
+function renderCustomize(){
+  const box = document.getElementById('shareCustom'); if(!box) return;
+  const o = replayOpts(), R = window.dcReplay;
+  const secs = R ? Math.round(R.duration({ ...o }) / 1000) : 0;
+  const preset = Object.entries(RO_PRESETS).find(([, p]) => Object.entries(p.o).every(([k, v]) => o[k] === v));
+  box.innerHTML = `
+    <div class="rc-head"><span>Customize</span><em>\u2248 ${secs} s</em></div>
+    <div class="rc-row" role="group" aria-label="Presets">${Object.entries(RO_PRESETS).map(([k, p]) => `<button type="button" class="rc-chip preset ${preset && preset[0] === k ? 'on' : ''}" data-rp="${k}" aria-pressed="${preset && preset[0] === k}">${p.name}</button>`).join('')}</div>
+    ${RO_GROUPS.map(([k, label, opts]) => `
+      <div class="rc-group"><div class="rc-label" id="rcl-${k}">${label}</div>
+        <div class="rc-row" role="radiogroup" aria-labelledby="rcl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'theme' ? ' sw sw-' + v : ''}" role="radio" aria-checked="${o[k] === v}" data-rk="${k}" data-rv="${v}">${l}</button>`).join('')}</div></div>`).join('')}
+    <div class="rc-group"><div class="rc-label">Show</div>
+      <div class="rc-row">${RO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-rs="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
+    <button type="button" class="hbtn rc-reset" id="rcReset">RESET TO DEFAULT</button>`;
+  const changed = next => { saveReplayOpts(next); renderCustomize(); syncButtons(); preview(); };
+  box.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => changed({ ...replayOpts(), [b.dataset.rk]: b.dataset.rv })));
+  box.querySelectorAll('[data-rs]').forEach(b => b.addEventListener('click', () => { const c = replayOpts(); changed({ ...c, [b.dataset.rs]: !c[b.dataset.rs] }); }));
+  box.querySelectorAll('[data-rp]').forEach(b => b.addEventListener('click', () => changed({ ...replayOpts(), ...RO_PRESETS[b.dataset.rp].o })));
+  document.getElementById('rcReset').addEventListener('click', () => { try{ localStorage.removeItem(RO_KEY); }catch(e){} renderCustomize(); syncButtons(); preview(); });
+}
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
 function captionFor(t, opt){
   const res = opt.hideUsd ? fmt.pct(t.roi) : `${fmt.usd(t.pnl)} (${fmt.pct(t.roi)})`;
@@ -446,9 +498,9 @@ function preview(){
   const t0 = performance.now(), loop = () => {                    // live animated preview, loops
     ctx.setTransform(k,0,0,k,0,0);
     if(isReplay()){
-      const tot = R.DURATION + 900, raw = performance.now() - t0, el = raw % tot, c = Math.floor(raw / tot);
+      const ro = { ...replayOpts(), hideUsd: state.hideUsd }, D = R.duration(ro), tot = D + 900, raw = performance.now() - t0, el = raw % tot, c = Math.floor(raw / tot);
       if(c !== cycle){ cycle = c; if(state.sound) playPreviewSound(); }       // soundtrack restarts with each loop
-      R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, R.DURATION), state);
+      R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, D), ro);
     }
     else { const el = (performance.now() - t0) % (VIDEO_MS + 900), p = Math.min(1, el / (VIDEO_MS - 1200)); drawFrame(ctx, F.w, F.h, state.t, state.meta, p, state); }
     if(sheet().classList.contains('show')) state.anim = requestAnimationFrame(loop);
@@ -458,7 +510,7 @@ function preview(){
 function stopPreviewSound(){ if(state.pac){ try{ state.pac.close(); }catch(e){} state.pac = null; } }
 function playPreviewSound(){
   stopPreviewSound(); const ac = newAudio(); if(!ac || !window.dcReplay) return; state.pac = ac;
-  try{ window.dcReplay.soundtrack(ac, ac.destination, ac.currentTime + 0.02, state.t, state); }catch(e){}
+  try{ window.dcReplay.soundtrack(ac, ac.destination, ac.currentTime + 0.02, state.t, { ...replayOpts(), hideUsd: state.hideUsd }); }catch(e){}
 }
 function syncButtons(){
   const canReplay = !!(window.dcReplay && window.dcReplay.available(state.t));
@@ -466,6 +518,7 @@ function syncButtons(){
   document.querySelectorAll('[data-share-style]').forEach(b => { b.classList.toggle('on', b.dataset.shareStyle === state.style); if(b.dataset.shareStyle === 'replay'){ b.disabled = !canReplay; b.title = canReplay ? '' : 'Needs the real candles of this trade'; } });
   document.getElementById('shareFmts').hidden = state.style === 'replay';
   document.getElementById('shareReplayNote').hidden = canReplay;
+  const cb = document.getElementById('shareCustom'); if(cb){ cb.hidden = state.style !== 'replay' || !canReplay; if(!cb.hidden && !cb.childElementCount) renderCustomize(); }
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
@@ -477,7 +530,7 @@ async function doStill(){
   try{
     await fontsReady(); await loadCoinImage(state.t.image);
     let c;
-    if(isReplay()){ const R = window.dcReplay; c = document.createElement('canvas'); c.width = R.W; c.height = R.H; R.draw(c.getContext('2d'), R.W, R.H, state.t, state.meta, R.DURATION, state); }
+    if(isReplay()){ const R = window.dcReplay; c = document.createElement('canvas'); c.width = R.W; c.height = R.H; const ro = { ...replayOpts(), hideUsd: state.hideUsd }; R.draw(c.getContext('2d'), R.W, R.H, state.t, state.meta, R.duration(ro), ro); }
     else c = renderStill(state.t, state.meta, state.fmt, state);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if(!blob) throw new Error('png');
@@ -521,7 +574,7 @@ document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 
 function init(){
   if(inited || !sheet()) return; inited = true;
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.addEventListener('click', () => { state.fmt = b.dataset.shareFmt; syncButtons(); preview(); }));
-  document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); preview(); }));
+  document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); if(state.style === 'replay') renderCustomize(); preview(); }));
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
   document.getElementById('shareImage').addEventListener('click', doStill);

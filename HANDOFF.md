@@ -109,3 +109,7 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Position close à ≥97 % vendus ou s'il ne reste que de la poussière (< 0,05 $ ou 1 % de la mise).
 - Vérif d'adresse au 1er import (coin / programme / jamais utilisée) + vérif côté client (EVM 0x, adresse finissant par pump/bonk, caractères interdits, longueur).
 - Account : fenêtre de connexion (plus de prompt), bouton « ? » par fournisseur avec guide spécifique (Pump.fun, Fomo, Phantom/Solflare/Backpack/Axiom…), statut (rattrapage, cartes importées, erreur lisible), « RE-READ FROM START » (`{task:"resync", provider}`).
+
+## Trade Replay : options (replay.js + share.js)
+- Moteur paramétré (`configure(opt)` à chaque image / bande-son) : couleurs (Neon, Purple, Gold, Ice, Mono), intro (Hook, 3-2-1, Logo, None), texte d'accroche (Auto + 6 phrases), graphe (Bougies, Ligne, Aire), caméra (Suivi, Gros plan, Graphe entier), vitesse (lent ≈17,5 s / normal 12,5 s / rapide 8 s de replay), fond (Grille, Épuré, Halo, Étoiles), effets (Max, Doux, Aucun), effet de vente ($, confettis, 🔥, 💎, 🚀, aucun), son (Hype, Chill, Minimal, Coupé), fin (récap + logo, récap + logo court, logo court), langue (EN, FR), afficher Investi / Multiplicateur / Chrono (+ « Hide $ »).
+- 4 préréglages (Hype, Clean, Chill, Degen). Choix mémorisés sur l'appareil (`localStorage dc_replay_opts`), valeurs inconnues ignorées. Durée estimée affichée. `dcReplay.duration(opt)` remplace la constante.

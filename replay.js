@@ -7,13 +7,43 @@
    ============================================================================ */
 (function(){
 const W0 = 1080, H0 = 1920;
-const T_INTRO = 1700, T_WARP = 850, T_REPLAY = 12500, T_OUTRO = 3200, T_BRAND = 2700;
-const DURATION = T_INTRO + T_WARP + T_REPLAY + T_OUTRO + T_BRAND;     // about 21 s
-const O_WARP = T_INTRO, O_REPLAY = O_WARP + T_WARP, O_OUTRO = O_REPLAY + T_REPLAY, O_BRAND = O_OUTRO + T_OUTRO;
 const GEM = 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z';   // the DEGENCARDS jewel (same path as the site logo)
-const GREEN = '#3DFFA0', UP = '#18C964', DN = '#FF3B4E', RED = '#FF5C6C';
+/* ---------- options (all predefined choices) ---------- */
+const THEMES = {
+  neon:   { name:'Neon',   win:'#3DFFA0', loss:'#FF5C6C', up:'#18C964', dn:'#FF3B4E' },
+  purple: { name:'Purple', win:'#C09EFF', loss:'#FF5C9D', up:'#A87BFF', dn:'#FF4D8D' },
+  gold:   { name:'Gold',   win:'#FFD35C', loss:'#FF6B5C', up:'#F5C542', dn:'#FF5A4E' },
+  ice:    { name:'Ice',    win:'#6EC0FF', loss:'#FF6B8B', up:'#4FB0FF', dn:'#FF5C7A' },
+  mono:   { name:'Mono',   win:'#FFFFFF', loss:'#9A9AA6', up:'#F2F2F2', dn:'#6B6B78' },
+};
+const DEFAULTS = { theme:'neon', intro:'hook', hook:'auto', chart:'candles', speed:'normal', bg:'grid', camera:'follow', fx:'max',
+  burst:'dollars', sound:'hype', lang:'en', outro:'full', showInvested:true, showMult:true, showTime:true, hideUsd:false };
+const STR = {
+  en:{ replay:'TRADE REPLAY', watch:'WATCH THE TRADE', watchLoss:'WATCH IT PLAY OUT', in:'IN', on:'ON', live:'LIVE PNL', pnl:'PNL', invested:'INVESTED',
+       held:'held', secured:'BAG SECURED', closed:'TRADE CLOSED', profit:'PROFIT', result:'RESULT', inv:'Invested', entry:'Entry MC', exit:'Exit MC', tag:'Your trades. Turned into cards.',
+       hooks:{ printed:'HOW I PRINTED', scalp:'SCALP OF THE DAY', copy:'WOULD YOU COPY THIS?', sniped:'SNIPED IT', lesson:'LESSON LEARNED', go:'LET\u2019S GO' } },
+  fr:{ replay:'REPLAY DU TRADE', watch:'REGARDE LE TRADE', watchLoss:'REGARDE COMMENT \u00C7A TOURNE', in:'EN', on:'SUR', live:'PNL LIVE', pnl:'PNL', invested:'INVESTI',
+       held:'tenu', secured:'SAC S\u00C9CURIS\u00C9', closed:'TRADE CL\u00D4TUR\u00C9', profit:'PROFIT', result:'R\u00C9SULTAT', inv:'Investi', entry:'MC entr\u00E9e', exit:'MC sortie', tag:'Tes trades. En cartes.',
+       hooks:{ printed:'COMMENT J\u2019AI PRINT', scalp:'SCALP DU JOUR', copy:'TU L\u2019AURAIS PRIS ?', sniped:'SNIP\u00C9', lesson:'LE\u00C7ON APPRISE', go:'C\u2019EST PARTI' } },
+};
+let GREEN, UP, DN, RED, L, O, K, FX;
+let T_INTRO, T_WARP, T_REPLAY, T_OUTRO, T_BRAND, DURATION, O_WARP, O_REPLAY, O_OUTRO, O_BRAND;
+function configure(opt){
+  O = { ...DEFAULTS, ...(opt || {}) };
+  const th = THEMES[O.theme] || THEMES.neon; GREEN = th.win; RED = th.loss; UP = th.up; DN = th.dn;
+  L = STR[O.lang] || STR.en;
+  FX = O.fx === 'off' ? 0 : O.fx === 'soft' ? 0.45 : 1;
+  K = O.camera === 'zoom' ? 12 : O.camera === 'full' ? 1e9 : 22;
+  T_INTRO = O.intro === 'none' ? 0 : O.intro === 'countdown' ? 2100 : O.intro === 'logo' ? 1300 : 1700;
+  T_WARP  = O.intro === 'none' || FX === 0 ? 0 : 850;
+  T_REPLAY = O.speed === 'slow' ? 17500 : O.speed === 'fast' ? 8000 : 12500;
+  T_OUTRO = O.outro === 'quick' ? 0 : 3200;
+  T_BRAND = O.outro === 'full' ? 2700 : 1500;
+  O_WARP = T_INTRO; O_REPLAY = O_WARP + T_WARP; O_OUTRO = O_REPLAY + T_REPLAY; O_BRAND = O_OUTRO + T_OUTRO;
+  DURATION = O_BRAND + T_BRAND;
+}
+configure({});
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
-const K = 22;                                                          // candles visible at once
 // TikTok / Reels / Shorts cover the top (search), the right column (like, comment…) and the bottom (caption)
 const SAFE_T = 250, SAFE_B = 480, SAFE_R = 170;
 
@@ -84,12 +114,17 @@ function livePrice(c, f, sd){
 }
 
 /* ---------- scenes ---------- */
-function bg(ctx, W, H, u, glow){
+function bg(ctx, W, H, u, glow, ms = 0){
   ctx.fillStyle = '#05070A'; ctx.fillRect(0,0,W,H);
-  const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, H*0.7);
-  g.addColorStop(0, hexA(glow, 0.10)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';                            // dotted grid
-  for(let y = 40*u; y < H; y += 48*u) for(let x = 24*u; x < W; x += 48*u) ctx.fillRect(x, y, 2.4*u, 2.4*u);
+  const strong = O.bg === 'glow';
+  const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, H*(strong ? 0.85 : 0.7));
+  g.addColorStop(0, hexA(glow, strong ? 0.26 : 0.10)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  if(strong){ const g2 = ctx.createRadialGradient(W*0.1, H*0.9, 0, W*0.1, H*0.9, H*0.6); g2.addColorStop(0, 'rgba(192,158,255,0.16)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g2; ctx.fillRect(0,0,W,H); }
+  if(O.bg === 'grid'){ ctx.fillStyle = 'rgba(255,255,255,0.07)';        // dotted grid
+    for(let y = 40*u; y < H; y += 48*u) for(let x = 24*u; x < W; x += 48*u) ctx.fillRect(x, y, 2.4*u, 2.4*u); }
+  if(O.bg === 'stars'){ const R = rng(4242);                           // slow-drifting star field
+    for(let i = 0; i < 140; i++){ const x = R()*W, y = (R()*H + ms * 0.012 * (0.3 + R())) % H, r = (0.8 + R()*2.2) * u;
+      ctx.fillStyle = `rgba(255,255,255,${0.15 + R()*0.5})`; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); } }
 }
 function coinBadge(ctx, img, x, y, s, u){
   rrect(ctx, x, y, s, s, s*0.26); ctx.fillStyle = '#0B0B10'; ctx.fill();
@@ -119,9 +154,9 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
   const win = t.pnl >= 0, col = win ? GREEN : RED, k = ms / T_INTRO, R = rng(seed + 3);
   bg(ctx, W, H, u, col);
   // beat flashes (every 400 ms, matching the kick)
-  const beat = (ms % 400) / 400, flash = Math.max(0, 1 - beat * 5) * (ms < 1300 ? 1 : 0);
+  const beat = (ms % 400) / 400, flash = Math.max(0, 1 - beat * 5) * (ms < 1300 ? 1 : 0) * FX;
   // camera shake on the slam
-  const shake = Math.max(0, 1 - seg(ms, 90, 520)) * 26 * u;
+  const shake = Math.max(0, 1 - seg(ms, 90, 520)) * 26 * u * (FX === 1 ? 1 : 0);
   ctx.save(); ctx.translate((R()-.5)*shake, (R()-.5)*shake);
   // blurred coin behind
   const s = 760*u*(1 + 0.08*k);
@@ -133,10 +168,10 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
   ctx.save(); ctx.translate(W/2, H*0.40); ctx.scale(sc, sc); ctx.globalAlpha = clamp01(seg(ms, 90, 200));
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `900 ${190*u}px ${MONO}`;
   ctx.shadowColor = col; ctx.shadowBlur = 60*u;
-  const g = (ms < 700 && (Math.floor(ms / 70) % 3 === 0)) ? 10 : 3;  // glitch jitter while it lands
+  const g = FX === 1 ? ((ms < 700 && (Math.floor(ms / 70) % 3 === 0)) ? 10 : 3) : 0;  // glitch jitter while it lands
   glitchText(ctx, res, 0, 0, u, col, g); ctx.shadowBlur = 0; ctx.restore();
   // words pop one by one
-  const words = [ (opt.hideUsd ? '' : pctS(t.roi) + ' ') + 'IN ' + holdS(t.holdTime).toUpperCase(), 'ON ' + tk(t.ticker), win ? 'WATCH THE TRADE' : 'WATCH IT PLAY OUT' ];
+  const words = [ (opt.hideUsd ? '' : pctS(t.roi) + ' ') + L.in + ' ' + holdS(t.holdTime).toUpperCase(), L.on + ' ' + tk(t.ticker), hookText(win) ];
   words.forEach((w, i) => {
     const wk = easeOutBack(seg(ms, 420 + i*300, 640 + i*300)); if(wk <= 0) return;
     ctx.save(); ctx.globalAlpha = clamp01(wk); ctx.translate(W/2, H*0.55 + i*96*u); ctx.scale(wk, wk);
@@ -150,14 +185,44 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
   ctx.restore();
   // scanlines + beat flash
   if(flash > 0){ ctx.fillStyle = hexA(col, 0.18 * flash); ctx.fillRect(0,0,W,H); }
-  if(ms < 90){ ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H); }
+  if(ms < 90 && FX > 0){ ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H); }
+}
+function hookText(win){ return O.hook === 'auto' ? (win ? L.watch : L.watchLoss) : (L.hooks[O.hook] || L.watch); }
+/* intro variant: coin + ticker, clean */
+function introLogo(ctx, W, H, u, t, img, ms){
+  const k = ms / T_INTRO, col = t.pnl >= 0 ? GREEN : RED;
+  bg(ctx, W, H, u, col, ms);
+  const s = (420 + 140 * easeOut(k)) * u;
+  ctx.save(); ctx.globalAlpha = easeOut(seg(k, 0, 0.3));
+  ctx.shadowColor = hexA(col, 0.55); ctx.shadowBlur = 80*u*FX;
+  coinBadge(ctx, img, W/2 - s/2, H*0.42 - s/2, s, u); ctx.shadowBlur = 0;
+  ctx.textAlign = 'center'; ctx.font = `900 ${96*u}px ${SANS}`; ctx.fillStyle = '#fff';
+  ctx.fillText(tk(t.ticker), W/2, H*0.42 + s/2 + 130*u);
+  ctx.font = `700 ${30*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(L.replay, W/2, H*0.42 + s/2 + 190*u);
+  ctx.restore();
+}
+/* intro variant: 3-2-1 countdown on the beat, then the result */
+function introCountdown(ctx, W, H, u, t, img, ms, opt){
+  const col = t.pnl >= 0 ? GREEN : RED;
+  bg(ctx, W, H, u, col, ms);
+  const s = 640*u; ctx.save(); ctx.globalAlpha = 0.22; ctx.filter = `blur(${22*u}px)`; coinBadge(ctx, img, W/2 - s/2, H*0.43 - s/2, s, u); ctx.restore();
+  const step = Math.floor(ms / 500), f = (ms % 500) / 500;
+  const txt = step < 3 ? String(3 - step) : (opt.hideUsd ? pctS(t.roi) : money(t.pnl));
+  const sc = step < 3 ? 1.6 - 0.6 * easeOut(f) : 0.8 + 0.2 * easeOutBack(clamp01(f * 2));
+  ctx.save(); ctx.translate(W/2, H*0.42); ctx.scale(sc, sc); ctx.globalAlpha = step < 3 ? 1 - f * 0.6 : 1;
+  ctx.font = `900 ${(step < 3 ? 380 : 170) * u}px ${MONO}`;
+  ctx.fillStyle = step < 3 ? '#fff' : col; ctx.shadowColor = col; ctx.shadowBlur = 50*u*FX; ctx.fillText(txt, 0, 0); ctx.restore();
+  // ring pulse
+  ctx.save(); ctx.strokeStyle = hexA(col, (1 - f) * 0.7 * (FX || 0.4)); ctx.lineWidth = 8*u; ctx.beginPath(); ctx.arc(W/2, H*0.42, (260 + 220*f) * u, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+  if(step >= 3){ ctx.textAlign = 'center'; ctx.font = `900 ${50*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.globalAlpha = clamp01(f * 3);
+    ctx.fillText(L.on + ' ' + tk(t.ticker), W/2, H*0.55); ctx.globalAlpha = 1; }
 }
 function warp(ctx, W, H, u, t, img, ms, seed){
   const k = ms / T_WARP, R = rng(seed);
-  bg(ctx, W, H, u, t.pnl >= 0 ? GREEN : RED);
+  bg(ctx, W, H, u, t.pnl >= 0 ? GREEN : RED, ms);
   const cx = W/2, cy = H*0.45;
   ctx.save(); ctx.lineCap = 'round';
-  for(let i = 0; i < 140; i++){                                       // speed lines rushing out of the center
+  for(let i = 0; i < Math.round(140 * FX); i++){                      // speed lines rushing out of the center
     const ang = R() * Math.PI * 2, sp = 0.4 + R() * 0.9, len = (0.12 + R()*0.35) * H;
     const d0 = ((k * sp * 1.6 + R()) % 1) * H * 0.9, d1 = d0 + len * easeOut(k);
     ctx.strokeStyle = R() < 0.7 ? `rgba(255,255,255,${0.25 + 0.5*R()})` : hexA(GREEN, 0.6);
@@ -199,12 +264,13 @@ function reticle(ctx, x, y, u, col, k, label, amount){
 function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const P = prep(t), win = t.pnl >= 0, col = win ? GREEN : RED;
   const r = revealAt(P, ms), full = Math.floor(r), frac = r - full;
-  bg(ctx, W, H, u, col);
+  bg(ctx, W, H, u, col, ms);
   // plot area
   const top = (SAFE_T + 230)*u, bottom = H - (SAFE_B + 120)*u, left = 64*u, right = W - (SAFE_R + 70)*u, pw = right - left, ph = bottom - top;
   // visible window: the last K candles, the camera slides smoothly
-  const head = Math.max(1, r), start = Math.max(0, head - K);
-  const slot = pw / K;
+  const KK = Math.min(K, P.n);                                        // 'full' camera: the whole chart, drawn in place
+  const head = Math.max(1, r), start = O.camera === 'full' ? 0 : Math.max(0, head - KK);
+  const slot = pw / KK;
   const vis = []; for(let i = Math.max(0, Math.floor(start) - 1); i < Math.min(P.n, Math.ceil(head)); i++) vis.push(i);
   // y range over the visible candles (current one partially formed), padded
   const cur = (i) => {                                                 // candle i as drawn at this instant
@@ -223,7 +289,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const pad = (hi - lo) * 0.18; lo -= pad; hi += pad;
   const X = i => left + (i - start) * slot + slot/2, Y = v => top + (1 - (v - lo)/(hi - lo)) * ph;
   // speed lines at the start of the replay
-  const sl = 1 - seg(ms, 0, 1400);
+  const sl = (1 - seg(ms, 0, 1400)) * FX;
   if(sl > 0){ const R = rng(seed + 7); ctx.save(); ctx.globalAlpha = sl * 0.5; ctx.strokeStyle = hexA(col, 0.5); ctx.lineWidth = 2*u;
     for(let i = 0; i < 40; i++){ const a = R()*Math.PI*2, d = (0.2 + R()*0.8) * H * 0.6; ctx.beginPath(); ctx.moveTo(W/2, H*0.5); ctx.lineTo(W/2 + Math.cos(a)*d, H*0.5 + Math.sin(a)*d); ctx.stroke(); } ctx.restore(); }
   // buy price guide
@@ -232,14 +298,25 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   // candles
   const bw = Math.max(8*u, slot * 0.62);
   ctx.save(); ctx.beginPath(); ctx.rect(left - bw, top - 40*u, pw + bw*2, ph + 80*u); ctx.clip();
-  vis.forEach(i => {
-    const c = cur(i), x = X(i), upc = c[4] >= c[1], cc = upc ? UP : DN;
-    ctx.strokeStyle = cc; ctx.lineWidth = Math.max(3*u, bw * 0.12);
-    ctx.beginPath(); ctx.moveTo(x, Y(c[2])); ctx.lineTo(x, Y(c[3])); ctx.stroke();
-    const y1 = Y(Math.max(c[1], c[4])), y2 = Y(Math.min(c[1], c[4]));
-    ctx.fillStyle = cc; if(i === full){ ctx.shadowColor = cc; ctx.shadowBlur = 22*u; }
-    ctx.fillRect(x - bw/2, y1, bw, Math.max(3*u, y2 - y1)); ctx.shadowBlur = 0;
-  });
+  if(O.chart === 'candles'){
+    vis.forEach(i => {
+      const c = cur(i), x = X(i), upc = c[4] >= c[1], cc = upc ? UP : DN;
+      ctx.strokeStyle = cc; ctx.lineWidth = Math.max(3*u, bw * 0.12);
+      ctx.beginPath(); ctx.moveTo(x, Y(c[2])); ctx.lineTo(x, Y(c[3])); ctx.stroke();
+      const y1 = Y(Math.max(c[1], c[4])), y2 = Y(Math.min(c[1], c[4]));
+      ctx.fillStyle = cc; if(i === full){ ctx.shadowColor = cc; ctx.shadowBlur = 22*u*FX; }
+      ctx.fillRect(x - bw/2, y1, bw, Math.max(3*u, y2 - y1)); ctx.shadowBlur = 0;
+    });
+  } else {                                                              // line / area: through the closes (live price for the one forming)
+    const pts = vis.map(i => [X(i), Y(cur(i)[4])]);
+    if(pts.length){
+      if(O.chart === 'area'){ const gr = ctx.createLinearGradient(0, top, 0, bottom); gr.addColorStop(0, hexA(col, 0.32)); gr.addColorStop(1, hexA(col, 0));
+        ctx.beginPath(); ctx.moveTo(pts[0][0], bottom); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.lineTo(pts[pts.length-1][0], bottom); ctx.closePath(); ctx.fillStyle = gr; ctx.fill(); }
+      ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+      ctx.strokeStyle = col; ctx.lineWidth = 7*u; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.shadowColor = col; ctx.shadowBlur = 24*u*FX; ctx.stroke(); ctx.shadowBlur = 0;
+      const lp = pts[pts.length-1]; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(lp[0], lp[1], 10*u, 0, Math.PI*2); ctx.fill();
+    }
+  }
   // fills that already happened: small ringed dots
   P.marks.forEach(m => {
     const i = P.cs.findIndex(c => m[0] < c[0] + P.iv); const ii = i < 0 ? P.n - 1 : i;
@@ -252,7 +329,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   ctx.restore();
   // live price line + multiplier vs buy
   const last = cur(Math.min(P.n - 1, full)), nowMc = last[4];
-  if(r > P.ib + 0.5){
+  if(r > P.ib + 0.5 && O.showMult){
     const y = Y(nowMc), mult = nowMc / P.buyMc;
     ctx.save(); ctx.setLineDash([6*u, 8*u]); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2*u;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right + 10*u, y); ctx.stroke(); ctx.restore();
@@ -269,23 +346,23 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   if(closed) live = t.pnl;
   if(r > P.ib + 0.5){
     ctx.textAlign = 'right'; ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText(closed ? 'PNL' : 'LIVE PNL', W - 64*u, (SAFE_T + 18)*u);
-    ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillStyle = live >= 0 ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20*u;
+    ctx.fillText(closed ? L.pnl : L.live, W - 64*u, (SAFE_T + 18)*u);
+    ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillStyle = live >= 0 ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20*u*FX;
     ctx.fillText(opt.hideUsd ? pctS(P.size ? live / P.size * 100 : 0) : money(live), W - 64*u, (SAFE_T + 80)*u); ctx.shadowBlur = 0;
-    if(!opt.hideUsd){ ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('INVESTED', W - 64*u, (SAFE_T + 124)*u);
+    if(!opt.hideUsd && O.showInvested){ ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(L.invested, W - 64*u, (SAFE_T + 124)*u);
       ctx.font = `800 ${34*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(plain(P.size), W - 64*u, (SAFE_T + 164)*u); }
   }
   // elapsed since the buy
-  if(r > P.ib + 0.5){
+  if(r > P.ib + 0.5 && O.showTime){
     const lastTs = P.cs[Math.min(P.n-1, full)][0] + P.iv * frac;
     const el = Math.max(0, Math.round((Math.min(lastTs, closed ? P.sm[0] : lastTs) - P.bm[0]) / 1000));
     ctx.textAlign = 'center'; ctx.font = `700 ${30*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText((closed ? 'held ' : '+') + holdS(closed ? t.holdTime : el), (left + right)/2, bottom + 70*u);
+    ctx.fillText((closed ? L.held + ' ' : '+') + holdS(closed ? t.holdTime : el), (left + right)/2, bottom + 70*u);
   }
   // BUY / SELL reticles
   const tb = revealTimeOf(P, P.ib), ts = revealTimeOf(P, P.is);
   const kb = seg(ms, tb - 250, tb + 900);
-  if(kb > 0 && kb < 1){ const x = X(P.ib), y = Y(P.buyMc); reticle(ctx, x, y, u, UP, kb, 'BUY', opt.hideUsd ? '' : plain(P.size)); }
+  if(kb > 0 && kb < 1){ const x = X(P.ib), y = Y(P.buyMc); reticle(ctx, x, y, u, UP, kb, 'BUY', opt.hideUsd || !O.showInvested ? '' : plain(P.size)); }
   const ks = seg(ms, ts - 250, ts + 900);
   if(ks > 0 && ks < 1){ const x = X(P.is), y = Y(P.sellMc); reticle(ctx, x, y, u, win ? UP : DN, ks, 'SELL', ''); }
   // SELL burst: $ particles + big result
@@ -294,16 +371,20 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const R = rng(seed + 11), cx = (W - SAFE_R*u + 40*u)/2, cy = H*0.45;
     ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.45 * Math.sin(kx * Math.PI)})`; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for(let i = 0; i < 90; i++){
-      const a = R() * Math.PI*2, sp = 0.35 + R()*0.9, d = easeOut(kx) * sp * H * 0.55, sz = (28 + R()*44) * u;
+    const CONF = ['#3DFFA0', '#FFD35C', '#C09EFF', '#6EC0FF', '#FF5ADC', '#FFFFFF'];
+    const glyph = O.burst === 'fire' ? '\u{1F525}' : O.burst === 'diamonds' ? '\u{1F48E}' : O.burst === 'rockets' ? '\u{1F680}' : (win ? '$' : '\u00D7');
+    for(let i = 0; i < (O.burst === 'none' ? 0 : Math.round(90 * Math.max(0.35, FX))); i++){
+      const a = R() * Math.PI*2, sp = 0.35 + R()*0.9, d = easeOut(kx) * sp * H * 0.55, sz = (28 + R()*44) * u, spin = (R() - 0.5) * 8 * kx;
+      const px = cx + Math.cos(a)*d, py = cy + Math.sin(a)*d + (O.burst === 'confetti' ? kx * kx * 260*u : 0);
       ctx.globalAlpha = (1 - kx) * (0.6 + R()*0.4);
+      if(O.burst === 'confetti'){ ctx.save(); ctx.translate(px, py); ctx.rotate(spin); ctx.fillStyle = CONF[Math.floor(R()*CONF.length)]; ctx.fillRect(-sz*0.18, -sz*0.32, sz*0.36, sz*0.64); ctx.restore(); continue; }
       ctx.font = `900 ${sz}px ${MONO}`; ctx.fillStyle = win ? (R() < 0.8 ? GREEN : '#fff') : (R() < 0.8 ? RED : '#fff');
-      ctx.fillText(win ? '$' : '\u00D7', cx + Math.cos(a)*d, cy + Math.sin(a)*d);
+      ctx.fillText(glyph, px, py);
     }
     ctx.globalAlpha = Math.min(1, kx * 6) * (1 - seg(kx, 0.8, 1));
     const sc = 0.7 + 0.3 * easeOutBack(seg(kx, 0, 0.3));
     ctx.translate(cx, cy); ctx.scale(sc, sc);
-    ctx.font = `900 ${150*u}px ${MONO}`; ctx.fillStyle = win ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 50*u;
+    ctx.font = `900 ${150*u}px ${MONO}`; ctx.fillStyle = win ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 50*u*FX;
     ctx.fillText(opt.hideUsd ? pctS(t.roi) : money(t.pnl), 0, 0);
     if(!opt.hideUsd){ ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillText(pctS(t.roi), 0, 120*u); }
     ctx.restore(); ctx.textBaseline = 'alphabetic';
@@ -313,14 +394,14 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
 
 function outro(ctx, W, H, u, t, img, ms, opt){
   const P = prep(t), win = t.pnl >= 0, col = win ? GREEN : RED, k = ms / T_OUTRO;
-  bg(ctx, W, H, u, col);
+  bg(ctx, W, H, u, col, ms);
   const a = easeOut(seg(k, 0, 0.2));
   ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'left';
-  ctx.font = `900 ${76*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(win ? 'BAG SECURED' : 'TRADE CLOSED', 56*u, (SAFE_T + 60)*u);
+  ctx.font = `900 ${76*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(win ? L.secured : L.closed, 56*u, (SAFE_T + 60)*u);
   coinBadge(ctx, img, 56*u, (SAFE_T + 100)*u, 96*u, u);
   ctx.font = `900 ${46*u}px ${SANS}`; ctx.fillText(tk(t.ticker), 176*u, (SAFE_T + 148)*u);
-  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('held ' + holdS(t.holdTime), 176*u, (SAFE_T + 186)*u);
-  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillText(win ? 'PROFIT' : 'RESULT', 56*u, (SAFE_T + 290)*u);
+  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(L.held + ' ' + holdS(t.holdTime), 176*u, (SAFE_T + 186)*u);
+  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillText(win ? L.profit : L.result, 56*u, (SAFE_T + 290)*u);
   const kb = easeOutBack(seg(k, 0.08, 0.3));
   ctx.save(); ctx.translate(56*u, (SAFE_T + 390)*u); ctx.scale(kb, kb);
   ctx.font = `900 ${118*u}px ${MONO}`; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 40*u;
@@ -351,7 +432,7 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   // stats
   const sa = easeOut(seg(k, 0.45, 0.65));
   ctx.save(); ctx.globalAlpha = sa; ctx.textAlign = 'left';
-  const stats = [[opt.hideUsd ? '\u2014' : plain(P.size), 'Invested'], [mcS(P.buyMc), 'Entry MC'], [mcS(P.sellMc), 'Exit MC']];
+  const stats = [[opt.hideUsd || !O.showInvested ? '\u2014' : plain(P.size), L.inv], [mcS(P.buyMc), L.entry], [mcS(P.sellMc), L.exit]];
   stats.forEach(([v, l], i) => { const x = 56*u + i * 290*u;
     ctx.font = `900 ${50*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(v, x, H - (SAFE_B + 125)*u);
     ctx.font = `600 ${26*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(l, x, H - (SAFE_B + 82)*u); });
@@ -360,7 +441,8 @@ function outro(ctx, W, H, u, t, img, ms, opt){
 }
 
 function brand(ctx, W, H, u, ms, seed){
-  const k = ms / T_BRAND, cx = W/2, cy = H*0.42, R = rng(seed + 21);
+  ms = ms * (2700 / T_BRAND);                                         // short outro = the same animation, faster
+  const k = ms / 2700, cx = W/2, cy = H*0.42, R = rng(seed + 21);
   ctx.fillStyle = '#05050A'; ctx.fillRect(0,0,W,H);
   const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, W*0.7);
   halo.addColorStop(0, `rgba(192,158,255,${0.28*easeOut(seg(ms, 400, 1100))})`); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = halo; ctx.fillRect(0,0,W,H);
@@ -394,7 +476,7 @@ function brand(ctx, W, H, u, ms, seed){
     ctx.save(); ctx.globalAlpha = clamp01(lk); ctx.translate(x + cw/2, by + (1 - lk) * 60*u); ctx.fillStyle = i < 5 ? '#FFFFFF' : '#C09EFF'; ctx.textAlign = 'center'; ctx.fillText(ch, 0, 0); ctx.restore(); x += cw; });
   const ta = easeOut(seg(ms, 1600, 2000));
   ctx.save(); ctx.globalAlpha = ta; ctx.textAlign = 'center';
-  ctx.font = `700 ${40*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('Your trades. Turned into cards.', cx, by + 90*u);
+  ctx.font = `700 ${40*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(L.tag, cx, by + 90*u);
   ctx.font = `800 ${32*u}px ${MONO}`; const url = 'degencards.vercel.app', uw = ctx.measureText(url).width + 60*u;
   rrect(ctx, cx - uw/2, by + 150*u, uw, 70*u, 35*u); ctx.fillStyle = 'rgba(192,158,255,0.16)'; ctx.fill(); ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(192,158,255,0.6)'; ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(url, cx, by + 186*u); ctx.restore(); ctx.textBaseline = 'alphabetic';
@@ -403,7 +485,10 @@ function brand(ctx, W, H, u, ms, seed){
 
 /* ---------- sound: synthesized, scheduled on the same timeline as the frames ---------- */
 function soundtrack(ac, out, t0, t, opt){
-  if(!available(t)) return;
+  configure(opt);
+  if(!available(t) || O.sound === 'off') return;
+  const hype = O.sound === 'hype', chill = O.sound === 'chill', minimal = O.sound === 'minimal';
+  const KV = hype ? 1 : chill ? 0 : 0, IV = hype ? 1 : chill ? 0.35 : 0;   // kick / impact levels per sound style
   const P = prep(t), win = t.pnl >= 0, S = ms => t0 + ms / 1000;
   const master = ac.createGain(); master.gain.value = 0.9;
   const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
@@ -413,48 +498,60 @@ function soundtrack(ac, out, t0, t, opt){
   const tone = (at, f0, f1, dur, type, vol) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f0, at); if(f1) o.frequency.exponentialRampToValueAtTime(f1, at + dur); env(g, at, 0.004, dur, vol); o.connect(g); g.connect(master); o.start(at); o.stop(at + dur + 0.05); };
   const noise = (at, dur, fA, fB, vol, q = 1) => { const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); n.buffer = noiseBuf; n.loop = true; f.type = 'bandpass'; f.Q.value = q;
     f.frequency.setValueAtTime(fA, at); f.frequency.exponentialRampToValueAtTime(fB, at + dur); env(g, at, dur * 0.8, dur * 0.2 + 0.05, vol); n.connect(f); f.connect(g); g.connect(master); n.start(at); n.stop(at + dur + 0.1); };
-  const kick = (at, vol) => tone(at, 150, 42, 0.28, 'sine', vol);
-  const impact = (at, vol) => { tone(at, 110, 30, 0.7, 'sine', vol); noise(at, 0.25, 3000, 400, vol * 0.5, 0.6); };
+  const kick = (at, vol) => { if(KV * vol > 0.001) tone(at, 150, 42, 0.28, 'sine', vol * KV); };
+  const impact = (at, vol) => { if(IV * vol < 0.001) return; tone(at, 110, 30, 0.7, 'sine', vol * IV); noise(at, 0.25, 3000, 400, vol * IV * 0.5, 0.6); };
+  const pad = (at, dur, f, vol) => { [f, f * 1.5, f * 2].forEach(x => tone(at, x, 0, dur, 'sine', vol)); };   // soft chord for the chill style
   // intro: white hit + slam, word blips, kick on the beat
-  impact(S(90), 0.9);
-  [420, 720, 1020].forEach((m, i) => tone(S(m), 660 + i*220, 0, 0.09, 'square', 0.08));
+  if(O.intro === 'hook'){ impact(S(90), 0.9); if(!minimal) [420, 720, 1020].forEach((m, i) => tone(S(m), 660 + i*220, 0, 0.09, 'square', chill ? 0.04 : 0.08)); }
+  if(O.intro === 'countdown'){ [0, 500, 1000].forEach(m => tone(S(m), 880, 0, 0.12, 'square', 0.1)); tone(S(1500), 1760, 0, 0.3, 'square', 0.1); impact(S(1500), 0.9); }
+  if(O.intro === 'logo' && !minimal) pad(S(100), 1.1, 330, 0.05);
   for(let m = 0; m < O_WARP; m += 400) kick(S(m), 0.55);
+  if(chill && T_INTRO > 0) pad(S(0), T_INTRO / 1000, 262, 0.04);
   // warp: riser + impact on the flash
-  noise(S(O_WARP - 250), 1.0, 300, 7000, 0.35, 0.8); impact(S(O_WARP + T_WARP * 0.82), 0.8);
+  if(T_WARP > 0 && !minimal){ noise(S(O_WARP - 250), 1.0, 300, 7000, chill ? 0.12 : 0.35, 0.8); impact(S(O_WARP + T_WARP * 0.82), 0.8); }
   // replay: soft pulse + one tick per finished candle (higher when it closes up, lower when down)
   for(let m = O_REPLAY; m < O_OUTRO; m += 500) kick(S(m), 0.22);
+  if(chill) for(let m = O_REPLAY; m < O_OUTRO; m += 2000) pad(S(m), 1.9, [220, 247, 196, 262][(m / 2000 | 0) % 4], 0.025);
   let last = -1;
   for(let i = 0; i < P.n; i++){ const m = O_REPLAY + revealTimeOf(P, i); if(m - last < 70) continue; last = m;
     const upc = P.cs[i][4] >= P.cs[i][1]; tone(S(m), upc ? 1320 : 740, upc ? 1500 : 620, 0.05, 'triangle', 0.07); }
   // BUY: lock-on beeps + bass
   const tb = O_REPLAY + revealTimeOf(P, P.ib), ts = O_REPLAY + revealTimeOf(P, P.is);
-  [0, 110, 220].forEach((d, i) => tone(S(tb - 200 + d), 880 + i*220, 0, 0.07, 'square', 0.09)); impact(S(tb + 80), 0.6); tone(S(tb + 80), 220, 440, 0.35, 'sawtooth', 0.05);
+  const bv = chill ? 0.05 : 0.09;
+  [0, 110, 220].forEach((d, i) => tone(S(tb - 200 + d), 880 + i*220, 0, 0.07, chill ? 'sine' : 'square', bv)); impact(S(tb + 80), 0.6); if(hype) tone(S(tb + 80), 220, 440, 0.35, 'sawtooth', 0.05);
   // SELL: lock-on, then cash chime (win) or down-sweep (loss) + boom
-  [0, 110, 220].forEach((d, i) => tone(S(ts - 200 + d), 1100 + i*220, 0, 0.07, 'square', 0.09));
+  [0, 110, 220].forEach((d, i) => tone(S(ts - 200 + d), 1100 + i*220, 0, 0.07, chill ? 'sine' : 'square', bv));
   const burst = ts + 500;
   impact(S(burst), 0.9);
   if(win){ [1318, 1760, 2637, 3520].forEach((f, i) => tone(S(burst + 40 + i*60), f, 0, 0.6, 'sine', 0.12)); noise(S(burst), 0.6, 6000, 9000, 0.12, 2); }
   else tone(S(burst), 600, 90, 0.9, 'sawtooth', 0.08);
   // recap: kick back in; brand: shimmer arpeggio on the jewel + soft hit on the wordmark
   for(let m = O_OUTRO; m < O_BRAND; m += 400) kick(S(m), 0.4);
-  [880, 1108, 1318, 1760, 2217].forEach((f, i) => tone(S(O_BRAND + 650 + i*70), f, 0, 0.9, 'sine', 0.07));
-  impact(S(O_BRAND + 900), 0.45);
+  const bk = T_BRAND / 2700;                                            // the short outro plays the same cues, faster
+  [880, 1108, 1318, 1760, 2217].forEach((f, i) => tone(S(O_BRAND + (650 + i*70) * bk), f, 0, 0.9, 'sine', 0.07));
+  impact(S(O_BRAND + 900 * bk), 0.45);
 }
 
 /* ---------- public ---------- */
 function available(t){ return !!(t && t.chart && t.chart.v === 2 && Array.isArray(t.chart.c) && t.chart.c.length >= 3); }
 function draw(ctx, W, H, t, meta, ms, opt){
+  configure(opt);
   const u = W / W0, img = t.image && window.__dcImgCache ? window.__dcImgCache.get(t.image) : null, seed = (t.tradeId || 1) * 9973;
   ctx.save(); ctx.clearRect(0,0,W,H); ctx.textBaseline = 'alphabetic';
-  if(ms < O_WARP) intro(ctx, W, H, u, t, img, ms, opt, seed);
+  if(ms < O_WARP){
+    if(O.intro === 'countdown') introCountdown(ctx, W, H, u, t, img, ms, O);
+    else if(O.intro === 'logo') introLogo(ctx, W, H, u, t, img, ms);
+    else intro(ctx, W, H, u, t, img, ms, O, seed);
+  }
   else if(ms < O_REPLAY) warp(ctx, W, H, u, t, img, ms - O_WARP, seed);
-  else if(ms < O_OUTRO) replay(ctx, W, H, u, t, img, ms - O_REPLAY, opt, seed);
-  else if(ms < O_BRAND) outro(ctx, W, H, u, t, img, ms - O_OUTRO, opt);
+  else if(ms < O_OUTRO) replay(ctx, W, H, u, t, img, ms - O_REPLAY, O, seed);
+  else if(ms < O_BRAND) outro(ctx, W, H, u, t, img, ms - O_OUTRO, O);
   else brand(ctx, W, H, u, Math.min(T_BRAND, ms - O_BRAND), seed);
   // soft vignette on every frame
   const v = ctx.createRadialGradient(W/2, H/2, W*0.5, W/2, H/2, H*0.78); v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,0.5)');
   ctx.fillStyle = v; ctx.fillRect(0,0,W,H);
   ctx.restore();
 }
-window.dcReplay = { draw, available, soundtrack, DURATION, W: W0, H: H0 };
+function duration(opt){ configure(opt); return DURATION; }
+window.dcReplay = { draw, available, soundtrack, duration, DEFAULTS, THEMES, W: W0, H: H0, get DURATION(){ return DURATION; } };
 })();
