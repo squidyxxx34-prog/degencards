@@ -94,3 +94,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - v2 (≈21 s) : intro « hook » (résultat qui claque en glitch + shake, flashs sur le beat, « +X% IN Ns / ON $TICKER / WATCH THE TRADE »), bougie en formation vivante (bruit seedé qui reste dans le vrai high/low et finit sur le vrai close), outro DEGENCARDS avec le joyau ✧ du logo (tracé, remplissage violet→or, reflet, étincelles, lettres qui tombent).
 - Bande-son synthétisée (Web Audio, aucun fichier) calée sur la même timeline : slam, kick, whoosh du warp, tick par bougie (aigu si verte, grave si rouge), lock-on + basse au BUY, lock-on + cha-ching (ou descente si perte) + boom au SELL, arpège sur le joyau. Mixée dans le MP4 ; bouton son dans l'aperçu (coupé par défaut). L'AudioContext est créé dans le tap (iOS).
 - Nécessite le graphe v2 du trade ; sinon le bouton est désactivé avec une note. Option « Hide $ » respectée. SHARE IMAGE en mode replay = écran final.
+
+## Vidéos : TikTok / Reels / Shorts
+- Zone sûre 9:16 (1080×1920) : haut 240 px (recherche), bas 470 px (légende), droite 150 px (boutons). En Story, la carte 4:5 est dessinée à l'échelle dans cette zone, fond plein écran. Le Trade Replay place en-tête, graphe, pied de page, récap dans la zone.
+- Pas de grain ni de lignes de balayage dans les vidéos (ils se transforment en blocs après la recompression TikTok).
+- Export image par image : WebCodecs (H.264 High 12 Mb/s, keyframe chaque seconde, VP9 si pas d'encodeur H.264) + son rendu hors-ligne (AAC, sinon Opus) + `vendor/mp4-muxer.js` (MIT, chargé à la demande avec SRI). 30 i/s parfaitement constants quelle que soit la vitesse du téléphone. Repli : MediaRecorder temps réel (1 image par créneau de 1/30 s ; export muet si le son ne peut pas démarrer).
+- Si mp4-muxer est mis à jour : recalculer `MUXER_SRI` dans share.js.

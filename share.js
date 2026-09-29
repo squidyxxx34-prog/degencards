@@ -38,19 +38,46 @@ function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcT
 function fitFont(ctx, text, weight, family, maxSize, maxW){ let s = maxSize; do { ctx.font = `${weight} ${s}px ${family}`; s -= 4; } while(ctx.measureText(text).width > maxW && s > 20); return s + 4; }
 
 /* ---------- one frame; p = animation progress 0..1 (1 = final still) ---------- */
+/* 9:16 outputs (TikTok / Reels / Shorts): the app UI covers the top (search), the right column (like, comment…)
+   and the bottom (caption). Everything that matters is drawn inside this safe box; only the backdrop is full-bleed. */
+const SAFE = { top:240, bottom:470, left:64, right:150 };
+function drawBackdrop(ctx, W, H, t, meta){
+  const main = t.pnl >= 0 ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8', u = W / 1080;
+  ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H);
+  let g = ctx.createRadialGradient(W*0.2, H*0.15, 0, W*0.2, H*0.15, W*1.1); g.addColorStop(0, hexA(rar, 0.26)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  g = ctx.createRadialGradient(W*0.8, H*0.6, 0, W*0.8, H*0.6, W); g.addColorStop(0, hexA(main, 0.18)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
+  for(let x=0; x<W; x+=60*u){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0; y<H; y+=60*u){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
 function drawFrame(ctx, W, H, t, meta, p, opt){
+  if(H / W > 1.5){                                                    // 9:16: the 4:5 card, scaled into the safe box
+    const u = W / 1080, bx = SAFE.left*u, by = SAFE.top*u, bw = W - (SAFE.left + SAFE.right)*u, bh = H - (SAFE.top + SAFE.bottom)*u;
+    ctx.save(); ctx.clearRect(0,0,W,H); drawBackdrop(ctx, W, H, t, meta);
+    const k = Math.min(bw / 1080, bh / 1350), cw = 1080*k, ch = 1350*k;
+    ctx.translate(bx + (bw - cw)/2, by + (bh - ch)/2); ctx.scale(k, k);
+    drawFrame(ctx, 1080, 1350, t, meta, p, { ...opt, inner:true });
+    ctx.restore();
+    const a = easeOut(seg(p, 0.7, 0.85));                             // small tagline just under the card, still above the caption
+    ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.font = `700 ${30*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText('Your trades. Turned into cards.', W/2, by + (bh + ch)/2 + 50*u); ctx.restore();
+    const intro = easeOut(seg(p, 0, 0.14)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1-intro})`; ctx.fillRect(0,0,W,H); }
+    if(!opt.video){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
+    return;
+  }
   const win = t.pnl >= 0, main = win ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8';
-  const story = H / W > 1.5, u = W / 1080;                            // u = unit scale
+  const story = false, u = W / 1080, inner = !!opt.inner;             // u = unit scale
   ctx.save();
-  ctx.clearRect(0,0,W,H);
+  if(!inner) ctx.clearRect(0,0,W,H);
 
   // cinematic intro: fade from black + slow push-in
   const intro = easeOut(seg(p, 0, 0.14));
   const zoom = 1.06 - 0.06 * easeOut(seg(p, 0, 0.5));
-  ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H);
+  if(!inner){ ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H); }
   ctx.translate(W/2, H/2); ctx.scale(zoom, zoom); ctx.translate(-W/2, -H/2);
 
   // background glows (rarity + result)
+  if(!inner){
   let g = ctx.createRadialGradient(W*0.2, H*0.12, 0, W*0.2, H*0.12, W*1.0);
   g.addColorStop(0, hexA(rar, 0.30)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   g = ctx.createRadialGradient(W*0.85, H*0.62, 0, W*0.85, H*0.62, W*0.95);
@@ -59,6 +86,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
   for(let x=0; x<W; x+=60*u){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
   for(let y=0; y<H; y+=60*u){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  }
 
   // card frame
   const M = 56*u, cx = M, cy = story ? 150*u : M, cw = W - 2*M, chh = H - cy - (story ? 190*u : M);
@@ -201,13 +229,14 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
     const sx = cx - cw*0.5 + (cw*2) * easeOut(sw);
     const lg = ctx.createLinearGradient(sx - 160*u, 0, sx + 160*u, 0);
     lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.12)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = lg; ctx.setTransform(1,0,-0.35,1,0,0); ctx.fillRect(sx - 400*u, 0, 800*u, H);
+    ctx.fillStyle = lg; ctx.transform(1,0,-0.35,1,0,0); ctx.fillRect(sx - 400*u, 0, 800*u, H);
     ctx.restore();
   }
 
   // grain + vignette + fade
+  if(inner){ ctx.restore(); return; }
   ctx.setTransform(1,0,0,1,0,0);
-  ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H);
+  if(!opt.video){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
   const v = ctx.createRadialGradient(W/2, H/2, W*0.45, W/2, H/2, H*0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)'); ctx.fillStyle = v; ctx.fillRect(0,0,W,H);
   if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1-intro})`; ctx.fillRect(0,0,W,H); }
@@ -287,41 +316,128 @@ function renderStill(t, meta, fmtKey, opt){
 }
 function videoMime(){
   if(typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
-  return ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => { try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } }) || null;
+  // H.264 + AAC first: what TikTok / Instagram / X re-encode best
+  return ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.4d002a,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => { try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } }) || null;
 }
-/* records any animation: frameAt(ctx, W, H, ms) drawn for `total` ms at 30 fps */
+/* ---------- frame-exact export (WebCodecs + MP4 muxer) ----------
+   Every frame is rendered at its exact timestamp and encoded to H.264, the soundtrack is rendered offline to AAC:
+   perfect constant 30 fps whatever the phone's speed, and a file TikTok / Reels / X re-encode cleanly.
+   Falls back to the real-time MediaRecorder path when WebCodecs isn't available. */
+const MUXER_SRC = '/vendor/mp4-muxer.js', MUXER_SRI = 'sha384-wr0AQH9RBAKio/g7bHM5245MBCU5B/b0Y9u42cTxRYQQJXKEijZvWEJKL9JG26hs';
+let muxerLoading = null;
+function loadMuxer(){
+  if(window.Mp4Muxer) return Promise.resolve(true);
+  if(!('VideoEncoder' in window)) return Promise.resolve(false);
+  return muxerLoading || (muxerLoading = new Promise(res => {
+    const sc = document.createElement('script'); sc.src = MUXER_SRC; sc.integrity = MUXER_SRI; sc.async = true;
+    sc.onload = () => res(!!window.Mp4Muxer); sc.onerror = () => { muxerLoading = null; res(false); };
+    document.head.appendChild(sc);
+  }));
+}
+async function encodeOffline(W, H, total, frameAt, onProgress, audioFn){
+  if(!('VideoEncoder' in window) || !('VideoFrame' in window) || !(await loadMuxer())) return null;
+  const FPS = 30, n = Math.round(total / 1000 * FPS) + 1;
+  let vcfg = null, vmux = 'avc';
+  for(const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42002a', 'vp09.00.40.08']){       // H.264 first (best for socials), VP9 if the browser has no H.264 encoder
+    const cfg = { codec, width:W, height:H, bitrate:12_000_000, framerate:FPS, ...(codec.startsWith('avc') ? { avc:{ format:'avc' } } : {}) };
+    try{ if((await VideoEncoder.isConfigSupported(cfg)).supported){ vcfg = cfg; vmux = codec.startsWith('avc') ? 'avc' : 'vp9'; break; } }catch(e){}
+  }
+  if(!vcfg) return null;
+  // soundtrack rendered offline, sample-exact with the frames
+  let abuf = null, acfg = null;
+  if(audioFn && 'AudioEncoder' in window && 'AudioData' in window && window.OfflineAudioContext){
+    try{
+      const sr = 48000, oac = new OfflineAudioContext(2, Math.ceil(sr * total / 1000), sr);
+      audioFn(oac, oac.destination, 0); abuf = await oac.startRendering();
+      acfg = null;
+      for(const [codec, mux] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]){
+        const cfg = { codec, sampleRate:sr, numberOfChannels:2, bitrate:192_000 };
+        try{ if((await AudioEncoder.isConfigSupported(cfg)).supported){ acfg = { ...cfg, mux }; break; } }catch(e){}
+      }
+      if(!acfg) abuf = null;
+    }catch(e){ acfg = null; abuf = null; }
+  }
+  const M = window.Mp4Muxer;
+  const muxer = new M.Muxer({ target: new M.ArrayBufferTarget(), fastStart:'in-memory', firstTimestampBehavior:'offset',
+    video:{ codec:vmux, width:W, height:H, frameRate:FPS }, ...(acfg ? { audio:{ codec:acfg.mux, sampleRate:acfg.sampleRate, numberOfChannels:2 } } : {}) });
+  let failed = null;
+  const venc = new VideoEncoder({ output:(chunk, meta) => muxer.addVideoChunk(chunk, meta), error:e => { failed = e; } });
+  venc.configure(vcfg);
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+  for(let i = 0; i < n; i++){
+    if(failed) throw failed;
+    frameAt(ctx, W, H, Math.min(i * 1000 / FPS, total));
+    const vf = new VideoFrame(c, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+    venc.encode(vf, { keyFrame: i % 30 === 0 }); vf.close();                      // a keyframe every second: clean seeking & re-encode
+    while(venc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 1));
+    if(i % 3 === 0){ onProgress && onProgress(i / n * (abuf ? 0.92 : 1)); await new Promise(r => setTimeout(r, 0)); }
+  }
+  await venc.flush(); venc.close();
+  if(abuf && acfg){
+    const aenc = new AudioEncoder({ output:(chunk, meta) => muxer.addAudioChunk(chunk, meta), error:e => { failed = e; } });
+    const { mux: _m, ...aconf } = acfg; aenc.configure(aconf);
+    const L = abuf.getChannelData(0), Rr = abuf.getChannelData(1), BLOCK = 4096;
+    for(let off = 0; off < abuf.length; off += BLOCK){
+      const len = Math.min(BLOCK, abuf.length - off), data = new Float32Array(len * 2);
+      data.set(L.subarray(off, off + len), 0); data.set(Rr.subarray(off, off + len), len);
+      const ad = new AudioData({ format:'f32-planar', sampleRate:acfg.sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp: Math.round(off / acfg.sampleRate * 1e6), data });
+      aenc.encode(ad); ad.close();
+    }
+    await aenc.flush(); aenc.close();
+  }
+  if(failed) throw failed;
+  muxer.finalize(); onProgress && onProgress(1);
+  return new Blob([muxer.target.buffer], { type:'video/mp4' });
+}
+
+/* real-time fallback: records any animation: frameAt(ctx, W, H, ms) drawn for `total` ms at 30 fps */
 function recordAnim(W, H, total, frameAt, onProgress, audio){
   return new Promise((resolve, reject) => {
     const mime = videoMime(); if(!mime) return reject(new Error('unsupported'));
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const ctx = c.getContext('2d'), vstream = c.captureStream(30);
+    const FPS = 30, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    // constant frame rate: we push exactly one frame every 1/30 s (a variable rate gets mangled by TikTok's re-encode)
+    let vstream = c.captureStream(0), track = vstream.getVideoTracks()[0];
+    const manual = !!(track && typeof track.requestFrame === 'function');
+    if(!manual){ vstream = c.captureStream(FPS); track = vstream.getVideoTracks()[0]; }
     let stream = vstream, dest = null;
+    if(audio && audio.ac && audio.ac.state !== 'running'){ try{ audio.ac.close(); }catch(e){} audio = null; }   // blocked audio would break the file's timeline: export silent instead
     if(audio && audio.ac){                                              // mix the synthesized soundtrack into the file
       try{ dest = audio.ac.createMediaStreamDestination(); stream = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]); }catch(e){ dest = null; stream = vstream; }
     }
-    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9_000_000, audioBitsPerSecond: 160_000 }); }catch(e){ return reject(e); }
+    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 14_000_000, audioBitsPerSecond: 192_000 }); }catch(e){ return reject(e); }
     const chunks = []; rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = () => resolve(new Blob(chunks, { type: mime.split(';')[0] }));
     rec.onerror = e => reject(e.error || e);
-    frameAt(ctx, W, H, 0); rec.start(250);
+    frameAt(ctx, W, H, 0); rec.start(250); if(manual) track.requestFrame();
     if(dest){ try{ audio.schedule(audio.ac, dest, audio.ac.currentTime + 0.02); }catch(e){} }
-    const t0 = performance.now();
+    const t0 = performance.now(), step = 1000 / FPS; let next = step;
     const tick = () => {
       const el = performance.now() - t0;
-      frameAt(ctx, W, H, Math.min(el, total)); onProgress && onProgress(Math.min(1, el / total));
-      if(el < total) requestAnimationFrame(tick); else { vstream.getTracks().forEach(tr => tr.requestFrame ? tr.requestFrame() : 0); setTimeout(() => { rec.stop(); if(audio && audio.ac) setTimeout(() => audio.ac.close().catch(()=>{}), 300); }, 150); }
+      if(manual){ if(el >= next){ frameAt(ctx, W, H, Math.min(el, total)); track.requestFrame(); next = (Math.floor(el / step) + 1) * step; } }   // one frame per 1/30 s slot, never a burst
+      else frameAt(ctx, W, H, Math.min(el, total));
+      onProgress && onProgress(Math.min(1, el / total));
+      if(el < total + 60) requestAnimationFrame(tick);
+      else setTimeout(() => { rec.stop(); if(audio && audio.ac) setTimeout(() => audio.ac.close().catch(()=>{}), 300); }, 150);
     };
     requestAnimationFrame(tick);
   });
 }
-function recordVideo(t, meta, fmtKey, opt, onProgress){
-  const F = FORMATS[fmtKey];
-  return recordAnim(F.w, F.h, VIDEO_MS, (ctx, W, H, el) => drawFrame(ctx, W, H, t, meta, Math.min(1, el / (VIDEO_MS - 1200)), opt), onProgress);   // last 1.2 s = hold
+async function recordVideo(t, meta, fmtKey, opt, onProgress){
+  const F = FORMATS[fmtKey], frame = (ctx, W, H, el) => drawFrame(ctx, W, H, t, meta, Math.min(1, el / (VIDEO_MS - 1200)), { ...opt, video:true });   // last 1.2 s = hold
+  try{ const b = await encodeOffline(F.w, F.h, VIDEO_MS, frame, onProgress, null); if(b) return b; }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
+  return recordAnim(F.w, F.h, VIDEO_MS, frame, onProgress);
 }
-function recordReplay(t, meta, opt, onProgress, ac){
+async function recordReplay(t, meta, opt, onProgress, ac){
   const R = window.dcReplay;
+  if(ac && ac.state !== 'running'){ try{ await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 400))]); }catch(e){} }
+  const frame = (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt);
+  try{
+    const b = await encodeOffline(R.W, R.H, R.DURATION, frame, onProgress, (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt));
+    if(b){ if(ac) ac.close().catch(()=>{}); return b; }
+  }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
   const audio = ac ? { ac, schedule: (a, dest, t0) => R.soundtrack(a, dest, t0, t, opt) } : null;
-  return recordAnim(R.W, R.H, R.DURATION, (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt), onProgress, audio);
+  return recordAnim(R.W, R.H, R.DURATION, frame, onProgress, audio);
 }
 const newAudio = () => { try{ const A = window.AudioContext || window.webkitAudioContext; if(!A) return null; const ac = new A(); ac.resume && ac.resume(); return ac; }catch(e){ return null; } };
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
@@ -379,7 +495,7 @@ function syncButtons(){
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
-  const v = document.getElementById('shareVideo'), mime = videoMime();
+  const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
   v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
 }
 async function doStill(){
@@ -424,6 +540,7 @@ window.shareCard = function(t, meta){
   document.getElementById('detailOverlay')?.classList.remove('show');
   sheet().classList.add('show');
   Promise.all([fontsReady(), loadCoinImage(t.image)]).then(preview);
+  loadMuxer();
 };
 let inited = false;
 document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 'loading') init();

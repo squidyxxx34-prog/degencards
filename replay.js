@@ -14,6 +14,8 @@ const GEM = 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z';   //
 const GREEN = '#3DFFA0', UP = '#18C964', DN = '#FF3B4E', RED = '#FF5C6C';
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
 const K = 22;                                                          // candles visible at once
+// TikTok / Reels / Shorts cover the top (search), the right column (like, comment…) and the bottom (caption)
+const SAFE_T = 250, SAFE_B = 480, SAFE_R = 170;
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const seg = (x, a, b) => clamp01((x - a) / (b - a));
@@ -101,9 +103,9 @@ function coinBadge(ctx, img, x, y, s, u){
 function footer(ctx, W, H, u, a){
   ctx.save(); ctx.globalAlpha = a;
   ctx.font = `900 ${34*u}px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#fff'; ctx.fillText('DEGEN', 56*u, H - 70*u); const dw = ctx.measureText('DEGEN').width;
-  ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', 56*u + dw, H - 70*u);
-  ctx.textAlign = 'right'; ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText('degencards.vercel.app', W - 56*u, H - 72*u);
+  ctx.fillStyle = '#fff'; ctx.fillText('DEGEN', 64*u, H - SAFE_B*u); const dw = ctx.measureText('DEGEN').width;
+  ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', 64*u + dw, H - SAFE_B*u);
+  ctx.textAlign = 'right'; ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText('degencards.vercel.app', W - SAFE_R*u, H - SAFE_B*u);
   ctx.restore();
 }
 
@@ -147,7 +149,6 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
   });
   ctx.restore();
   // scanlines + beat flash
-  ctx.fillStyle = 'rgba(0,0,0,0.18)'; for(let y = 0; y < H; y += 6*u) ctx.fillRect(0, y, W, 2*u);
   if(flash > 0){ ctx.fillStyle = hexA(col, 0.18 * flash); ctx.fillRect(0,0,W,H); }
   if(ms < 90){ ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H); }
 }
@@ -200,7 +201,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const r = revealAt(P, ms), full = Math.floor(r), frac = r - full;
   bg(ctx, W, H, u, col);
   // plot area
-  const top = 330*u, bottom = H - 300*u, left = 40*u, right = W - 150*u, pw = right - left, ph = bottom - top;
+  const top = (SAFE_T + 230)*u, bottom = H - (SAFE_B + 120)*u, left = 64*u, right = W - (SAFE_R + 70)*u, pw = right - left, ph = bottom - top;
   // visible window: the last K candles, the camera slides smoothly
   const head = Math.max(1, r), start = Math.max(0, head - K);
   const slot = pw / K;
@@ -259,8 +260,8 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.fillStyle = mult >= 1 ? GREEN : RED; ctx.fillText(mult.toFixed(2)+'x', right + 18*u, y); ctx.textBaseline = 'alphabetic';
   }
   // header: coin + ticker (left), LIVE PNL + INVESTED (right)
-  coinBadge(ctx, img, 56*u, 90*u, 84*u, u);
-  ctx.textAlign = 'left'; ctx.font = `900 ${44*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(tk(t.ticker), 160*u, 146*u);
+  coinBadge(ctx, img, 64*u, SAFE_T*u, 84*u, u);
+  ctx.textAlign = 'left'; ctx.font = `900 ${44*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(tk(t.ticker), 168*u, (SAFE_T + 56)*u);
   const holding = r > P.ib + 0.5 && r < P.is + 0.99;
   const closed = r >= P.is + 0.99;
   let live = 0;
@@ -268,18 +269,18 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   if(closed) live = t.pnl;
   if(r > P.ib + 0.5){
     ctx.textAlign = 'right'; ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText(closed ? 'PNL' : 'LIVE PNL', W - 56*u, 108*u);
+    ctx.fillText(closed ? 'PNL' : 'LIVE PNL', W - 64*u, (SAFE_T + 18)*u);
     ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillStyle = live >= 0 ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20*u;
-    ctx.fillText(opt.hideUsd ? pctS(P.size ? live / P.size * 100 : 0) : money(live), W - 56*u, 170*u); ctx.shadowBlur = 0;
-    if(!opt.hideUsd){ ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('INVESTED', W - 56*u, 214*u);
-      ctx.font = `800 ${34*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(plain(P.size), W - 56*u, 254*u); }
+    ctx.fillText(opt.hideUsd ? pctS(P.size ? live / P.size * 100 : 0) : money(live), W - 64*u, (SAFE_T + 80)*u); ctx.shadowBlur = 0;
+    if(!opt.hideUsd){ ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('INVESTED', W - 64*u, (SAFE_T + 124)*u);
+      ctx.font = `800 ${34*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(plain(P.size), W - 64*u, (SAFE_T + 164)*u); }
   }
   // elapsed since the buy
   if(r > P.ib + 0.5){
     const lastTs = P.cs[Math.min(P.n-1, full)][0] + P.iv * frac;
     const el = Math.max(0, Math.round((Math.min(lastTs, closed ? P.sm[0] : lastTs) - P.bm[0]) / 1000));
     ctx.textAlign = 'center'; ctx.font = `700 ${30*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText((closed ? 'held ' : '+') + holdS(closed ? t.holdTime : el), W/2, bottom + 80*u);
+    ctx.fillText((closed ? 'held ' : '+') + holdS(closed ? t.holdTime : el), (left + right)/2, bottom + 70*u);
   }
   // BUY / SELL reticles
   const tb = revealTimeOf(P, P.ib), ts = revealTimeOf(P, P.is);
@@ -290,7 +291,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   // SELL burst: $ particles + big result
   const kx = seg(ms, ts + 500, ts + 2300);
   if(kx > 0 && kx < 1){
-    const R = rng(seed + 11), cx = W/2, cy = H*0.47;
+    const R = rng(seed + 11), cx = (W - SAFE_R*u + 40*u)/2, cy = H*0.45;
     ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.45 * Math.sin(kx * Math.PI)})`; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for(let i = 0; i < 90; i++){
@@ -315,20 +316,20 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   bg(ctx, W, H, u, col);
   const a = easeOut(seg(k, 0, 0.2));
   ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'left';
-  ctx.font = `900 ${76*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(win ? 'BAG SECURED' : 'TRADE CLOSED', 56*u, 170*u);
-  coinBadge(ctx, img, 56*u, 220*u, 96*u, u);
-  ctx.font = `900 ${46*u}px ${SANS}`; ctx.fillText(tk(t.ticker), 176*u, 268*u);
-  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('held ' + holdS(t.holdTime), 176*u, 306*u);
-  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillText(win ? 'PROFIT' : 'RESULT', 56*u, 420*u);
+  ctx.font = `900 ${76*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(win ? 'BAG SECURED' : 'TRADE CLOSED', 56*u, (SAFE_T + 60)*u);
+  coinBadge(ctx, img, 56*u, (SAFE_T + 100)*u, 96*u, u);
+  ctx.font = `900 ${46*u}px ${SANS}`; ctx.fillText(tk(t.ticker), 176*u, (SAFE_T + 148)*u);
+  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('held ' + holdS(t.holdTime), 176*u, (SAFE_T + 186)*u);
+  ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillText(win ? 'PROFIT' : 'RESULT', 56*u, (SAFE_T + 290)*u);
   const kb = easeOutBack(seg(k, 0.08, 0.3));
-  ctx.save(); ctx.translate(56*u, 520*u); ctx.scale(kb, kb);
+  ctx.save(); ctx.translate(56*u, (SAFE_T + 390)*u); ctx.scale(kb, kb);
   ctx.font = `900 ${118*u}px ${MONO}`; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 40*u;
   const big = opt.hideUsd ? pctS(t.roi) : money(t.pnl); ctx.fillText(big, 0, 0); const bwid = ctx.measureText(big).width; ctx.shadowBlur = 0;
   if(!opt.hideUsd){ ctx.font = `800 ${38*u}px ${MONO}`; const rt = (t.roi >= 0 ? '\u25B2 ' : '\u25BC ') + pctS(t.roi).replace('+',''), rw = ctx.measureText(rt).width + 40*u;
     rrect(ctx, bwid + 26*u, -58*u, rw, 64*u, 32*u); ctx.fillStyle = hexA(col, 0.16); ctx.fill(); ctx.fillStyle = col; ctx.fillText(rt, bwid + 46*u, -14*u); }
   ctx.restore(); ctx.restore();
   // price line of the whole window with BUY / SELL
-  const top = 680*u, bottom = 1360*u, left = 56*u, right = W - 56*u;
+  const top = (SAFE_T + 500)*u, bottom = H - (SAFE_B + 250)*u, left = 56*u, right = W - (SAFE_R + 20)*u;
   const closes = P.cs.map(c => c[4]); let lo = Math.min(...P.cs.map(c=>c[3])), hi = Math.max(...P.cs.map(c=>c[2])); const pd = (hi-lo)*0.15 || hi*0.05; lo -= pd; hi += pd;
   const X = i => left + (i / Math.max(1, P.n - 1)) * (right - left), Y = v => top + (1 - (v - lo)/(hi - lo)) * (bottom - top);
   const draw = easeInOut(seg(k, 0.12, 0.6)), upto = Math.max(1, Math.floor(draw * (P.n - 1)));
@@ -351,9 +352,9 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   const sa = easeOut(seg(k, 0.45, 0.65));
   ctx.save(); ctx.globalAlpha = sa; ctx.textAlign = 'left';
   const stats = [[opt.hideUsd ? '\u2014' : plain(P.size), 'Invested'], [mcS(P.buyMc), 'Entry MC'], [mcS(P.sellMc), 'Exit MC']];
-  stats.forEach(([v, l], i) => { const x = 56*u + i * 330*u;
-    ctx.font = `900 ${50*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(v, x, 1500*u);
-    ctx.font = `600 ${26*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(l, x, 1545*u); });
+  stats.forEach(([v, l], i) => { const x = 56*u + i * 290*u;
+    ctx.font = `900 ${50*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(v, x, H - (SAFE_B + 125)*u);
+    ctx.font = `600 ${26*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(l, x, H - (SAFE_B + 82)*u); });
   ctx.restore();
   footer(ctx, W, H, u, a);
 }
@@ -387,7 +388,7 @@ function brand(ctx, W, H, u, ms, seed){
     ctx.save(); ctx.translate(cx + Math.cos(a)*d, cy + Math.sin(a)*d); ctx.rotate(a); ctx.fillStyle = R() < 0.5 ? '#FFD35C' : '#C09EFF'; ctx.globalAlpha = 1 - sp;
     ctx.beginPath(); ctx.moveTo(0, -s2); ctx.lineTo(s2*0.3, 0); ctx.lineTo(0, s2); ctx.lineTo(-s2*0.3, 0); ctx.closePath(); ctx.fill(); ctx.restore(); } }
   // wordmark: letters drop in one by one
-  const word = 'DEGENCARDS'; ctx.font = `900 ${118*u}px ${SANS}`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  const word = 'DEGENCARDS'; ctx.font = `900 ${100*u}px ${SANS}`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
   const total = ctx.measureText(word).width; let x = cx - total/2; const by = cy + 360*u;
   [...word].forEach((ch, i) => { const lk = easeOutBack(seg(ms, 900 + i*55, 1200 + i*55)), cw = ctx.measureText(ch).width;
     ctx.save(); ctx.globalAlpha = clamp01(lk); ctx.translate(x + cw/2, by + (1 - lk) * 60*u); ctx.fillStyle = i < 5 ? '#FFFFFF' : '#C09EFF'; ctx.textAlign = 'center'; ctx.fillText(ch, 0, 0); ctx.restore(); x += cw; });
