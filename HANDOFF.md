@@ -87,3 +87,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Les trades pump.fun importés par la synchro reçoivent leur graphe dans le même passage (`freshPump`).
 - Pools GeckoTerminal mis en cache 7 jours (localStorage) : 1 requête de moins par coin.
 - Pendant le chargement : squelette de bougies animé (plus de fausse ligne).
+
+## Vidéo « Trade replay » (replay.js)
+- 2e style dans la feuille de partage (CARD / TRADE REPLAY), toujours en 9:16 1080×1920, environ 18 s : intro logo, warp, replay des vraies bougies (caméra qui suit, LIVE PNL + INVESTED, multiplicateur vs achat, temps écoulé), viseur BUY avec la mise, viseur SELL, explosion de $ + résultat, écran final (BAG SECURED / TRADE CLOSED, profit, courbe avec BUY/SELL, investi, MC entrée/sortie).
+- Uniquement achats et ventes (pas de callouts). Dessin déterministe (image = f(temps)) : l'aperçu et l'export sont identiques. Rythme : plus lent pendant le trade, pause sur BUY et SELL.
+- Nécessite le graphe v2 du trade ; sinon le bouton est désactivé avec une note. Option « Hide $ » respectée. SHARE IMAGE en mode replay = écran final.

@@ -289,24 +289,34 @@ function videoMime(){
   if(typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
   return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => { try{ return MediaRecorder.isTypeSupported(m); }catch(e){ return false; } }) || null;
 }
-function recordVideo(t, meta, fmtKey, opt, onProgress){
+/* records any animation: frameAt(ctx, W, H, ms) drawn for `total` ms at 30 fps */
+function recordAnim(W, H, total, frameAt, onProgress){
   return new Promise((resolve, reject) => {
     const mime = videoMime(); if(!mime) return reject(new Error('unsupported'));
-    const F = FORMATS[fmtKey], c = document.createElement('canvas'); c.width = F.w; c.height = F.h;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d'), stream = c.captureStream(30);
-    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 }); }catch(e){ return reject(e); }
+    let rec; try{ rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9_000_000 }); }catch(e){ return reject(e); }
     const chunks = []; rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = () => resolve(new Blob(chunks, { type: mime.split(';')[0] }));
     rec.onerror = e => reject(e.error || e);
-    const t0 = performance.now(); drawFrame(ctx, F.w, F.h, t, meta, 0, opt); rec.start(250);
+    const t0 = performance.now(); frameAt(ctx, W, H, 0); rec.start(250);
     const tick = () => {
-      const el = performance.now() - t0, p = Math.min(1, el / (VIDEO_MS - 1200));   // last 1.2 s = hold on the final frame
-      drawFrame(ctx, F.w, F.h, t, meta, p, opt); onProgress && onProgress(Math.min(1, el / VIDEO_MS));
-      if(el < VIDEO_MS) requestAnimationFrame(tick); else { stream.getTracks().forEach(tr => tr.requestFrame ? tr.requestFrame() : 0); setTimeout(() => rec.stop(), 120); }
+      const el = performance.now() - t0;
+      frameAt(ctx, W, H, Math.min(el, total)); onProgress && onProgress(Math.min(1, el / total));
+      if(el < total) requestAnimationFrame(tick); else { stream.getTracks().forEach(tr => tr.requestFrame ? tr.requestFrame() : 0); setTimeout(() => rec.stop(), 150); }
     };
     requestAnimationFrame(tick);
   });
 }
+function recordVideo(t, meta, fmtKey, opt, onProgress){
+  const F = FORMATS[fmtKey];
+  return recordAnim(F.w, F.h, VIDEO_MS, (ctx, W, H, el) => drawFrame(ctx, W, H, t, meta, Math.min(1, el / (VIDEO_MS - 1200)), opt), onProgress);   // last 1.2 s = hold
+}
+function recordReplay(t, meta, opt, onProgress){
+  const R = window.dcReplay;
+  return recordAnim(R.W, R.H, R.DURATION, (ctx, W, H, el) => R.draw(ctx, W, H, t, meta, el, opt), onProgress);
+}
+const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
 function captionFor(t, opt){
   const res = opt.hideUsd ? fmt.pct(t.roi) : `${fmt.usd(t.pnl)} (${fmt.pct(t.roi)})`;
   return `${tk(t.ticker)} ${res} in ${fmt.hold(t.holdTime)} ${t.pnl >= 0 ? '🟢' : '🔴'}\nMy trades, as collectible cards → degencards.vercel.app #DEGENCARDS`;
@@ -325,34 +335,43 @@ async function deliver(blob, name, caption){
 }
 
 /* ---------- share sheet ---------- */
-let state = { t:null, meta:null, fmt:'post', hideUsd:false, anim:0, busy:false };
+let state = { t:null, meta:null, fmt:'post', style:'card', hideUsd:false, anim:0, busy:false };
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
-  const cv = document.getElementById('sharePreview'), F = FORMATS[state.fmt];
+  const cv = document.getElementById('sharePreview'), R = window.dcReplay;
+  const F = isReplay() ? { w:R.W, h:R.H } : FORMATS[state.fmt];
   const scale = Math.min(1, 360 / F.w); cv.width = F.w * scale * (window.devicePixelRatio > 1 ? 2 : 1) | 0; cv.height = F.h * (cv.width / F.w) | 0;
   const ctx = cv.getContext('2d'), k = cv.width / F.w;
   cancelAnimationFrame(state.anim);
   const t0 = performance.now(), loop = () => {                    // live animated preview, loops
-    const el = (performance.now() - t0) % (VIDEO_MS + 900), p = Math.min(1, el / (VIDEO_MS - 1200));
-    ctx.setTransform(k,0,0,k,0,0); drawFrame(ctx, F.w, F.h, state.t, state.meta, p, state);
+    ctx.setTransform(k,0,0,k,0,0);
+    if(isReplay()){ const el = (performance.now() - t0) % (R.DURATION + 900); R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, R.DURATION), state); }
+    else { const el = (performance.now() - t0) % (VIDEO_MS + 900), p = Math.min(1, el / (VIDEO_MS - 1200)); drawFrame(ctx, F.w, F.h, state.t, state.meta, p, state); }
     if(sheet().classList.contains('show')) state.anim = requestAnimationFrame(loop);
   };
   loop();
 }
 function syncButtons(){
+  const canReplay = !!(window.dcReplay && window.dcReplay.available(state.t));
+  if(!canReplay && state.style === 'replay') state.style = 'card';
+  document.querySelectorAll('[data-share-style]').forEach(b => { b.classList.toggle('on', b.dataset.shareStyle === state.style); if(b.dataset.shareStyle === 'replay'){ b.disabled = !canReplay; b.title = canReplay ? '' : 'Needs the real candles of this trade'; } });
+  document.getElementById('shareFmts').hidden = state.style === 'replay';
+  document.getElementById('shareReplayNote').hidden = canReplay;
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   const v = document.getElementById('shareVideo'), mime = videoMime();
-  v.hidden = !mime; v.textContent = mime && mime.includes('mp4') ? 'SHARE VIDEO (MP4)' : 'SHARE VIDEO';
+  v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
 }
 async function doStill(){
   if(state.busy) return; state.busy = true;
   try{
     await fontsReady(); await loadCoinImage(state.t.image);
-    const c = renderStill(state.t, state.meta, state.fmt, state);
+    let c;
+    if(isReplay()){ const R = window.dcReplay; c = document.createElement('canvas'); c.width = R.W; c.height = R.H; R.draw(c.getContext('2d'), R.W, R.H, state.t, state.meta, R.DURATION, state); }
+    else c = renderStill(state.t, state.meta, state.fmt, state);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if(!blob) throw new Error('png');
-    const r = await deliver(blob, `degencards-${safeName()}-${state.fmt}.png`, captionFor(state.t, state));
+    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.png`, captionFor(state.t, state));
     if(r === 'downloaded') showToast('Image saved · caption copied');
   }catch(e){ showToast("Couldn't build the image"); }
   finally{ state.busy = false; }
@@ -362,10 +381,11 @@ async function doVideo(){
   const btn = document.getElementById('shareVideo'), label = btn.textContent;
   try{
     await fontsReady(); await loadCoinImage(state.t.image);
-    const blob = await recordVideo(state.t, state.meta, state.fmt, state, pr => { btn.textContent = `RENDERING… ${Math.round(pr*100)}%`; });
+    const prog = pr => { btn.textContent = `RENDERING… ${Math.round(pr*100)}%`; };
+    const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog) : await recordVideo(state.t, state.meta, state.fmt, state, prog);
     btn.textContent = label;
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-    const r = await deliver(blob, `degencards-${safeName()}-${state.fmt}.${ext}`, captionFor(state.t, state));
+    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.${ext}`, captionFor(state.t, state));
     if(r === 'downloaded') showToast('Video saved · caption copied');
   }catch(e){ showToast("Video isn't supported here — share the image"); }
   finally{ btn.textContent = label; state.busy = false; }
@@ -373,6 +393,8 @@ async function doVideo(){
 const safeName = () => (String(state.t.ticker).replace(/[^A-Za-z0-9_-]/g,'') || 'card');
 
 window.__dcLoadImg = loadCoinImage;
+window.__dcImgCache = IMG_CACHE;
+window.__dcShareReplay = (t, meta, opt) => recordReplay(t, meta, opt);
 window.__dcShareFrame = (canvas, t, meta, fmtKey, opt, p) => { const F = FORMATS[fmtKey]; canvas.width = F.w; canvas.height = F.h; drawFrame(canvas.getContext('2d'), F.w, F.h, t, meta, p, opt); };   // used by the visual tests
 window.__dcShareRecord = (t, meta, fmtKey, opt) => recordVideo(t, meta, fmtKey, opt);
 window.shareCard = function(t, meta){
@@ -387,6 +409,7 @@ document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 
 function init(){
   if(inited || !sheet()) return; inited = true;
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.addEventListener('click', () => { state.fmt = b.dataset.shareFmt; syncButtons(); preview(); }));
+  document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); preview(); }));
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);

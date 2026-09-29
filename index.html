@@ -261,7 +261,9 @@
   <div class="modal share-modal">
     <button class="closebtn" data-close>×</button>
     <h3>SHARE CARD</h3>
-    <div class="share-fmts"><button data-share-fmt="post" class="on">POST 4:5</button><button data-share-fmt="story">STORY 9:16</button></div>
+    <div class="share-fmts share-styles" role="group" aria-label="Video style"><button data-share-style="card" class="on">CARD</button><button data-share-style="replay">TRADE REPLAY</button></div>
+    <div class="share-fmts" id="shareFmts" role="group" aria-label="Format"><button data-share-fmt="post" class="on">POST 4:5</button><button data-share-fmt="story">STORY 9:16</button></div>
+    <p class="share-note" id="shareReplayNote" hidden>Trade replay needs this trade's real candles. They're loading — try again in a moment.</p>
     <div class="share-stage"><canvas id="sharePreview"></canvas></div>
     <label class="share-opt"><input type="checkbox" id="shareHideUsd"> Hide $ amount (show % only)</label>
     <button class="share-btn" id="shareVideo">SHARE VIDEO</button>
@@ -300,6 +302,7 @@
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
 <script src="/app.js" defer></script>
 <script src="/share.js" defer></script>
+<script src="/replay.js" defer></script>
 <script src="/guide.js" defer></script>
 </body>
 </html>
