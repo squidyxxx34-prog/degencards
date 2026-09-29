@@ -38,40 +38,14 @@ function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcT
 function fitFont(ctx, text, weight, family, maxSize, maxW){ let s = maxSize; do { ctx.font = `${weight} ${s}px ${family}`; s -= 4; } while(ctx.measureText(text).width > maxW && s > 20); return s + 4; }
 
 /* ---------- one frame; p = animation progress 0..1 (1 = final still) ---------- */
-/* 9:16 outputs (TikTok / Reels / Shorts): the app UI covers the top (search), the right column (like, comment…)
-   and the bottom (caption). Everything that matters is drawn inside this safe box; only the backdrop is full-bleed. */
-const SAFE = { top:240, bottom:470, left:64, right:150 };
-function drawBackdrop(ctx, W, H, t, meta){
-  const main = t.pnl >= 0 ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8', u = W / 1080;
-  ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H);
-  let g = ctx.createRadialGradient(W*0.2, H*0.15, 0, W*0.2, H*0.15, W*1.1); g.addColorStop(0, hexA(rar, 0.26)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  g = ctx.createRadialGradient(W*0.8, H*0.6, 0, W*0.8, H*0.6, W); g.addColorStop(0, hexA(main, 0.18)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
-  for(let x=0; x<W; x+=60*u){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for(let y=0; y<H; y+=60*u){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-}
 function drawFrame(ctx, W, H, t, meta, p, opt){
-  if(H / W > 1.5){                                                    // 9:16: the 4:5 card, scaled into the safe box
-    const u = W / 1080, bx = SAFE.left*u, by = SAFE.top*u, bw = W - (SAFE.left + SAFE.right)*u, bh = H - (SAFE.top + SAFE.bottom)*u;
-    ctx.save(); ctx.clearRect(0,0,W,H); drawBackdrop(ctx, W, H, t, meta);
-    const k = Math.min(bw / 1080, bh / 1350), cw = 1080*k, ch = 1350*k;
-    ctx.translate(bx + (bw - cw)/2, by + (bh - ch)/2); ctx.scale(k, k);
-    drawFrame(ctx, 1080, 1350, t, meta, p, { ...opt, inner:true });
-    ctx.restore();
-    const a = easeOut(seg(p, 0.7, 0.85));                             // small tagline just under the card, still above the caption
-    ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.font = `700 ${30*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('Your trades. Turned into cards.', W/2, by + (bh + ch)/2 + 50*u); ctx.restore();
-    const intro = easeOut(seg(p, 0, 0.14)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1-intro})`; ctx.fillRect(0,0,W,H); }
-    if(!opt.video){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
-    return;
-  }
   const win = t.pnl >= 0, main = win ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8';
-  const story = false, u = W / 1080, inner = !!opt.inner;             // u = unit scale
+  const story = H / W > 1.5, u = W / 1080, inner = !!opt.inner;      // u = unit scale; 9:16 = full-size card, as before
   ctx.save();
   if(!inner) ctx.clearRect(0,0,W,H);
 
   // cinematic intro: fade from black + slow push-in
-  const intro = easeOut(seg(p, 0, 0.14));
+  const intro = easeOut(seg(p, 0, 0.05));
   const zoom = 1.06 - 0.06 * easeOut(seg(p, 0, 0.5));
   if(!inner){ ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H); }
   ctx.translate(W/2, H/2); ctx.scale(zoom, zoom); ctx.translate(-W/2, -H/2);
@@ -100,7 +74,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   let y = cy + 96*u;
 
   // header: brand + rarity / grade
-  const a1 = easeOut(seg(p, 0.06, 0.22));
+  const a1 = easeOut(seg(p, 0.02, 0.1));
   ctx.globalAlpha = a1;
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.font = `900 ${40*u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', P, y);
@@ -123,7 +97,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   let extra = 0;
   if(hasImg){
     const s = (story ? 170 : 128)*u, ix = midX - s/2, iy = y + 28*u;
-    const k = easeOutBack(seg(p, 0.1, 0.26));
+    const k = easeOutBack(seg(p, 0.02, 0.14));
     ctx.save(); ctx.globalAlpha = clamp01(k);
     ctx.translate(midX, iy + s/2); ctx.scale(k, k); ctx.translate(-midX, -(iy + s/2));
     ctx.shadowColor = hexA(main, 0.5); ctx.shadowBlur = 40*u;
@@ -138,7 +112,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
     extra = tickerY - (y + (story ? 230 : 175)*u);
     y = tickerY;
   } else y += story ? 230*u : 175*u;
-  const a2 = easeOut(seg(p, 0.12, 0.3));
+  const a2 = easeOut(seg(p, 0.03, 0.13));
   ctx.globalAlpha = a2; ctx.textAlign = 'center';
   const tick = tk(t.ticker);
   fitFont(ctx, tick, 900, SANS, 110*u, cw - 120*u);
@@ -147,10 +121,10 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
 
   // PnL (count-up) + ROI
   y += story ? 200*u : 165*u;
-  const cnt = easeOut(seg(p, 0.18, 0.55));
+  const cnt = easeOut(seg(p, 0.06, 0.5));
   const pnlNow = t.pnl * cnt, roiNow = t.roi * cnt;
   const big = opt.hideUsd ? fmt.pct(roiNow) : fmt.usd(pnlNow);
-  ctx.globalAlpha = clamp01(seg(p, 0.16, 0.24));
+  ctx.globalAlpha = clamp01(seg(p, 0.05, 0.1));
   fitFont(ctx, opt.hideUsd ? fmt.pct(t.roi) : fmt.usd(t.pnl), 800, MONO, (story ? 190 : 170)*u, cw - 120*u);
   ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.75); ctx.shadowBlur = 60*u;
   ctx.fillText(big, midX, y); ctx.shadowBlur = 0;
@@ -165,7 +139,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   // chart panel
   y += story ? 110*u : 70*u;
   const chH = (story ? 520*u : 330*u) - extra, chX = P, chW = R - P;
-  const a3 = easeOut(seg(p, 0.26, 0.36));
+  const a3 = easeOut(seg(p, 0.12, 0.24));
   ctx.globalAlpha = a3;
   rrect(ctx, chX, y, chW, chH, 26*u); ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
   ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke();
@@ -247,7 +221,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
 function drawChart(ctx, t, x, y, w, h, p, u, opt){
   const ch = t.chart && t.chart.v === 2 ? t.chart : null;
   const topZone = 70*u;                                              // markers row lives above the chart area (y - 70u)
-  const drawP = easeOut(seg(p, 0.3, 0.72));
+  const drawP = easeOut(seg(p, 0.16, 0.66));
   let X, Y, marks;
   if(ch){
     const cs = ch.c, iv = ch.i;
