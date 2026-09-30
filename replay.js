@@ -244,6 +244,15 @@ function warp(ctx, W, H, u, t, img, ms, seed){
   if(flash > 0){ ctx.fillStyle = `rgba(255,255,255,${0.85*flash})`; ctx.fillRect(0,0,W,H); }
 }
 
+/* a fill on the chart: small filled round, green B = buy, red S = sell */
+function tradeDot(ctx, x, y, u, kind, r = 16){
+  const col = kind === 'b' ? UP : DN;
+  ctx.save(); ctx.shadowBlur = 0;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r*u, 0, Math.PI*2); ctx.fill();
+  ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = `900 ${r*1.15*u}px ${MONO}`; fillCentered(ctx, kind === 'b' ? 'B' : 'S', x, y);
+  ctx.restore();
+}
 function reticle(ctx, x, y, u, col, k, label, amount){
   const r = (230 - 150 * easeOut(k)) * u, a = clamp01(k * 3);
   ctx.save(); ctx.globalAlpha = a;
@@ -254,8 +263,7 @@ function reticle(ctx, x, y, u, col, k, label, amount){
     const ang = Math.PI/4 + i * Math.PI/2, r0 = r * 0.55, r1 = r * 0.85;
     ctx.beginPath(); ctx.moveTo(x + Math.cos(ang)*r0, y + Math.sin(ang)*r0); ctx.lineTo(x + Math.cos(ang)*r1, y + Math.sin(ang)*r1); ctx.stroke();
   }
-  ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 10*u, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 5*u, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0; tradeDot(ctx, x, y, u, label === 'BUY' ? 'b' : 's', 14);
   // label pill under, amount above
   const pk = easeOutBack(seg(k, 0.25, 0.7));
   ctx.globalAlpha = clamp01(pk);
@@ -343,9 +351,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const i = P.cs.findIndex(c => m[0] < c[0] + P.iv); const ii = i < 0 ? P.n - 1 : i;
     if(r < ii + 0.99) return;
     const mc = (t.chart.src === 'pump' && m[2] > 0) ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
-    const x = X(ii), y = Y(mc), cc = m[1] === 'b' ? UP : DN;
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 11*u, 0, Math.PI*2); ctx.fill();
-    ctx.lineWidth = 5*u; ctx.strokeStyle = cc; ctx.stroke();
+    tradeDot(ctx, X(ii), Y(mc), u, m[1], 15);
   });
   ctx.restore();
   // live price line + multiplier vs buy
@@ -385,7 +391,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const kb = seg(ms, tb - 250, tb + 900);
   if(kb > 0 && kb < 1){ const x = X(P.ib), y = Y(P.buyMc); reticle(ctx, x, y, u, UP, kb, 'BUY', opt.hideUsd || !O.showInvested ? '' : plain(P.size)); }
   const ks = seg(ms, ts - 250, ts + 900);
-  if(ks > 0 && ks < 1){ const x = X(P.is), y = Y(P.sellMc); reticle(ctx, x, y, u, win ? UP : DN, ks, 'SELL', ''); }
+  if(ks > 0 && ks < 1){ const x = X(P.is), y = Y(P.sellMc); reticle(ctx, x, y, u, DN, ks, 'SELL', ''); }
   // SELL burst: $ particles + big result
   const kx = seg(ms, ts + 500, ts + 2300);
   if(kx > 0 && kx < 1){
@@ -441,14 +447,7 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   ctx.lineTo(X(upto), bottom); ctx.lineTo(X(0), bottom); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
   ctx.beginPath(); ctx.moveTo(X(0), Y(closes[0])); for(let i = 1; i <= upto; i++) ctx.lineTo(X(i), Y(closes[i]));
   ctx.strokeStyle = col; ctx.lineWidth = 6*u; ctx.lineJoin = 'round'; ctx.shadowColor = col; ctx.shadowBlur = 24*u; ctx.stroke(); ctx.shadowBlur = 0;
-  [[P.ib, P.buyMc, 'BUY', UP], [P.is, P.sellMc, 'SELL', win ? UP : DN]].forEach(([i, mc, lab, cc]) => {
-    if(i > upto) return;
-    const x = X(i), y = Y(mc);
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 12*u, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 6*u; ctx.strokeStyle = cc; ctx.stroke();
-    ctx.font = `800 ${26*u}px ${MONO}`; const lw = ctx.measureText(lab).width + 28*u, ly = lab === 'BUY' ? y + 50*u : y - 50*u;
-    rrect(ctx, x - lw/2, ly - 22*u, lw, 44*u, 22*u); ctx.fillStyle = 'rgba(5,7,10,0.9)'; ctx.fill(); ctx.lineWidth = 2*u; ctx.strokeStyle = hexA(cc, 0.8); ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(lab, x, ly + 1*u); ctx.textBaseline = 'alphabetic';
-  });
+  [[P.ib, P.buyMc, 'b'], [P.is, P.sellMc, 's']].forEach(([i, mc, kind]) => { if(i <= upto) tradeDot(ctx, X(i), Y(mc), u, kind, 18); });
   ctx.restore();
   // stats
   const sa = easeOut(seg(k, 0.45, 0.65));
