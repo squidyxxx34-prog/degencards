@@ -329,7 +329,7 @@ function markersHtml(marks, X, Y, big){
   const mkPx = big ? 20 : 16, hPx = big ? 170 : 66, mb = (mkPx / hPx) * 100;          // marker bottom, in % of height
   const lines = pos.map(m=>`<line x1="${m.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${m.x.toFixed(2)}" y2="${m.y.toFixed(2)}" stroke="${m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
   return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>` + pos.map(m=>`
-    <span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%"></span>
+    <span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true">${m.kind==='b'?'B':'S'}</span>
     <span class="mk mk-top mk-${m.kind}" style="left:${m.mx.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).

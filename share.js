@@ -268,7 +268,8 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     ctx.strokeStyle = col; ctx.lineWidth = 3*u; ctx.setLineDash([10*u, 9*u]);
     ctx.beginPath(); ctx.moveTo(m.mx, my + mr); ctx.lineTo(m.mx + (m.x - m.mx)*clamp01(k), my + mr + (m.y - my - mr)*clamp01(k)); ctx.stroke(); ctx.setLineDash([]);
     // fill dot
-    if(k >= 1){ ctx.fillStyle = col; ctx.beginPath(); ctx.arc(m.x, m.y, 11*u, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 4*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke(); }
+    if(k >= 1){ ctx.fillStyle = col; ctx.beginPath(); ctx.arc(m.x, m.y, 17*u, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${19*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.k === 'b' ? 'B' : 'S', m.x, m.y + 1*u); ctx.textBaseline = 'alphabetic'; }
     // marker
     ctx.translate(m.mx, my); ctx.scale(k, k);
     ctx.shadowColor = hexA(col === CANDLE_UP ? '#18C964' : '#FF3B4E', 0.8); ctx.shadowBlur = 24*u;

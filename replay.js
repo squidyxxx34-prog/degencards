@@ -343,7 +343,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
         ctx.beginPath(); ctx.moveTo(pts[0][0], bottom); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.lineTo(pts[pts.length-1][0], bottom); ctx.closePath(); ctx.fillStyle = gr; ctx.fill(); }
       ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
       ctx.strokeStyle = col; ctx.lineWidth = 7*u; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.shadowColor = col; ctx.shadowBlur = 24*u*FX; ctx.stroke(); ctx.shadowBlur = 0;
-      const lp = pts[pts.length-1]; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(lp[0], lp[1], 10*u, 0, Math.PI*2); ctx.fill();
+      const lp = pts[pts.length-1]; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(lp[0], lp[1], 8*u, 0, Math.PI*2); ctx.fill();   // live price (not a fill)
     }
   }
   // fills that already happened: small ringed dots
