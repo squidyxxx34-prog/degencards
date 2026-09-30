@@ -310,7 +310,7 @@ function parseChart(c){
   const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
   if(c.v === 2){
     const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
-    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : 'gt' } : null;
+    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : 0 } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -1137,22 +1137,65 @@ async function buildOneInBrowser(t){
   }
   const list = gtPools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
   const supply = (gtPools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
-  const spanMin = (t1-t0)/60000;
+  // 1) recent trade: rebuild second-level candles from the pool's real trades (GeckoTerminal keeps the last 300)
+  if(supply && Date.now() - t1 < 864e5){
+    for(const p of list){
+      const j = await gtGet(`/pools/${p.addr}/trades`);
+      const tr = (j?.data||[]).map(x=>{ const a = x.attributes||{}, buy = String(a.to_token_address) === t.mint;
+          return { ts: Date.parse(a.block_timestamp), px: +(buy ? a.price_to_in_usd : a.price_from_in_usd) }; })
+        .filter(x=>x.ts && x.px > 0).sort((a,b)=>a.ts-b.ts);
+      if(!tr.length || tr[0].ts > t0 + 60000) continue;               // feed doesn't reach back far enough: minute candles below
+      const win = tr.filter(x=>x.ts >= t0 && x.ts <= t1);
+      if(win.length < 4) continue;
+      const a0 = win[0].ts, b0 = Math.max(win[win.length-1].ts, t1 - 60000), span = Math.max(1, (b0 - a0)/1000);
+      const bucket = [1,2,3,5,10,15,30,60].find(x=>span/x <= 60) || 60, bms = bucket*1000;
+      const cs = []; let prev = null;
+      for(let k = a0; k <= b0; k += bms){                             // every bucket gets a candle (flat when nobody traded)
+        const inB = win.filter(x=>x.ts >= k && x.ts < k + bms);
+        const o = prev ?? (inB[0] ? inB[0].px : win[0].px);
+        if(inB.length){ const ps = inB.map(x=>x.px); cs.push([k, o, Math.max(o, ...ps), Math.min(o, ...ps), ps[ps.length-1]]); prev = ps[ps.length-1]; }
+        else cs.push([k, o, o, o, o]);
+        if(cs.length > 400) break;
+      }
+      const r2 = n => Math.round(n*supply*100)/100;
+      const chart = { v:2, src:'gt', q:2, i:bms, w:[a0, b0 + bms], c:cs.map(c=>[c[0], r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]), m:marks.slice(0,20) };
+      const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
+      if(!error){ t.chart = parseChart(chart); return true; }
+    }
+  }
+  // 2) older trade: minute candles over a wider window (±15 min) with empty minutes filled, so the chart stays regular
+  const pad = Math.max(900000, (t1 - t0));
+  const w0 = Math.min(...ts) - pad, w1 = Math.max(...ts) + pad;
+  const spanMin = (w1-w0)/60000;
   const [tf, agg, step] = spanMin <= 900 ? ['minute',1,60000] : spanMin <= 15000 ? ['minute',15,900000] : ['hour',4,14400000];
-  const limit = Math.min(1000, Math.ceil((t1-t0)/step) + 2);
-  let best = [];
+  const limit = Math.min(1000, Math.ceil((w1-w0)/step) + 2);
+  // every pool of the coin (launch pool + the one it migrated to): candles merged by time, so the chart runs through a migration
+  const byTs = new Map(); const perPool = [];
   for(const p of list){
     if(!supply) break;
-    const j = await gtGet(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(t1/1000)+60}&limit=${limit}&currency=usd&token=${t.mint}`);
-    const c = (j?.data?.attributes?.ohlcv_list||[]).map(x=>x.map(Number))
-      .filter(x=>x[0]*1000 >= t0-step && x[0]*1000 <= t1).sort((a,b)=>a[0]-b[0]);
-    if(c.length > best.length) best = c;
-    if(best.length >= 3) break;
+    const j = await gtGet(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(w1/1000)+60}&limit=${limit}&currency=usd&token=${t.mint}`);
+    const c = (j?.data?.attributes?.ohlcv_list||[]).map(x=>x.map(Number)).filter(x=>x[0]*1000 >= w0-step && x[0]*1000 <= w1);
+    perPool.push(c);
   }
+  perPool.sort((a,b)=>b.length-a.length);                             // the busiest pool wins when both have the same minute
+  for(const c of perPool) for(const x of c) if(!byTs.has(x[0])) byTs.set(x[0], x);
+  const best = [...byTs.values()].sort((a,b)=>a[0]-b[0]);
   if(!best.length){ bumpTries(t.id); return false; }
   const r2 = n => Math.round(n*supply*100)/100;
-  const cs = best.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
-  const chart = { v:2, src:'gt', i:step, w:[Math.min(t0, cs[0][0]), Math.max(t1, cs[cs.length-1][0]+step)], c:cs, m:marks.slice(0,20) };
+  const filled = [];                                                  // missing minutes (no trade) become flat candles
+  for(const c of best){
+    const last = filled[filled.length-1];
+    if(last) for(let k = last[0] + step/1000; k < c[0] && filled.length < 400; k += step/1000) filled.push([k, last[4], last[4], last[4], last[4]]);
+    filled.push(c);
+  }
+  if(filled.length < 12){                                             // too thin (coin barely traded per minute): second candles from the chain, server-side
+    try{
+      const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', ids:[t.id] } });
+      if(data?.charts){ const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle(); const c = parseChart(row?.chart); if(c){ t.chart = c; return true; } }
+    }catch(e){ /* keep the minute candles */ }
+  }
+  const cs = filled.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
+  const chart = { v:2, src:'gt', q:2, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
   const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
   if(error){ bumpTries(t.id); return false; }
   t.chart = parseChart(chart); return true;
@@ -1161,7 +1204,7 @@ async function buildChartsInBrowser(){
   if(chartQueueRunning || !session) return;
   chartQueueRunning = true;
   try{
-    const todo = trades.filter(t=>(!t.chart || t.chart.v!==2) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
+    const todo = trades.filter(t=>(!t.chart || t.chart.v!==2 || (t.chart.src==='gt' && !t.chart.q && !t.mint.endsWith('pump'))) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
       .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
     let dirty = 0;
     while(todo.length){
@@ -1344,7 +1387,7 @@ function openDetail(id, refresh){
                : [[opened,'b',t.entryMc],[t.timestamp,'s',t.exitMc]]).sort((a,b)=>a[0]-b[0]);
   const f0 = fills.length ? fills[0][0] : opened;
   const st = chartState(t);
-  const note = st === 'ready' ? `Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+' min' : (t.chart.i/1000)+' s'} candles · ${t.chart.src==='pump'?'every trade from pump.fun':'GeckoTerminal'}`
+  const note = st === 'ready' ? `Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+' min' : (t.chart.i/1000)+' s'} candles · ${t.chart.src==='pump'?'every trade from pump.fun':t.chart.src==='chain'?'every swap, on-chain':'GeckoTerminal'}`
     : st === 'loading' ? 'Loading the real candles…'
     : st === 'manual' ? 'Manual trade: entry and exit only, no market data.'
     : 'No market data found for this coin. Showing entry and exit only.';

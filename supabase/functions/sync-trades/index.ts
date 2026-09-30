@@ -565,6 +565,123 @@ async function buildPumpCharts(deadline: number, userId: string | null, onlyIds:
   return built;
 }
 
+/* ---------- second-level candles for ANY coin, straight from the chain ----------
+   For coins outside pump.fun (Meteora, Raydium, launchpads…) or whose minute data is too thin: read the coin's pools'
+   own transactions around the trade, price each swap from the pool's balance changes (quote / token), bucket ~50 candles. */
+function poolPrice(tx: any, mint: string, solUsd: number): number {
+  if (!tx?.meta || tx.meta.err) return 0;
+  const by = new Map<string, Map<string, number>>();
+  const add = (list: any[], sign: number) => { for (const b of list || []) { if (!b.owner) continue; const m = by.get(b.owner) || new Map<string, number>(); by.set(b.owner, m);
+    m.set(b.mint, (m.get(b.mint) || 0) + sign * Number(b.uiTokenAmount?.uiAmountString ?? 0)); } };
+  add(tx.meta.preTokenBalances, -1); add(tx.meta.postTokenBalances, 1);
+  let best = 0, bestAmt = 0;
+  for (const [, m] of by) {                                           // the pool: holds the coin AND the quote, moving opposite ways
+    const d = m.get(mint) || 0; if (!d) continue;
+    let q = (m.get(WSOL) || 0) * solUsd; for (const u of USD_MINTS) q += m.get(u) || 0;
+    if (!q || Math.sign(q) === Math.sign(d)) continue;
+    if (Math.abs(d) > bestAmt) { bestAmt = Math.abs(d); best = Math.abs(q / d); }
+  }
+  return best;
+}
+async function buildChainChart(t: any, deadline: number): Promise<boolean> {
+  const legTs = Array.isArray(t.legs) ? t.legs.map((l: any) => Number(l[0])).filter(Number.isFinite) : [];
+  const end = legTs.length ? Math.max(...legTs) : Number(t.timestamp_ms), start = legTs.length ? Math.min(...legTs) : end - Number(t.hold_time) * 1000;
+  const t0 = start - 120_000, t1 = end + 120_000;
+  // the pool is found in the trade itself: the token vault of the counterparty in the buy tx (unique per pool).
+  // Its history is read starting AT the trade (before = the sell/buy tx), not from today, so busy coins stay cheap.
+  const buySig = String(t.ext_id || "").split(":")[2] || "";
+  const anchors: { acct: string; before?: string }[] = [];
+  if (buySig) {
+    try {
+      const tx = await rpc("getTransaction", [buySig, { encoding: "json", maxSupportedTransactionVersion: 1 }]);
+      const keys: string[] = [...tx.transaction.message.accountKeys, ...(tx.meta.loadedAddresses?.writable || []), ...(tx.meta.loadedAddresses?.readonly || [])];
+      const d = new Map<number, number>();
+      for (const b of tx.meta.preTokenBalances || []) if (b.mint === t.mint) d.set(b.accountIndex, (d.get(b.accountIndex) || 0) - Number(b.uiTokenAmount?.uiAmountString || 0));
+      for (const b of tx.meta.postTokenBalances || []) if (b.mint === t.mint) d.set(b.accountIndex, (d.get(b.accountIndex) || 0) + Number(b.uiTokenAmount?.uiAmountString || 0));
+      let vault = "", big = 0; for (const [ix, v] of d) if (v < 0 && -v > big) { big = -v; vault = keys[ix]; }   // the account that GAVE the tokens to the buyer
+      if (vault) anchors.push({ acct: vault });
+    } catch (_) { /* fall back to listed pools */ }
+  }
+  try {
+    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/tokens/${t.mint}/pools?page=1`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+    const j = await r.json();
+    for (const p of (j?.data || []).slice(0, 3)) if (!p?.attributes?.pool_created_at || Date.parse(p.attributes.pool_created_at) <= t1) anchors.push({ acct: p.attributes.address });
+  } catch (_) { /* vault only */ }
+  if (!anchors.length) return false;
+  const sup = Number((await rpc("getTokenSupply", [t.mint]))?.value?.uiAmountString || 0);
+  if (!sup) return false;
+  if (!priceSeries || priceSeries[0][0] > t0) await loadSolPrices(t0);
+  const sigs = new Map<string, number>();
+  for (const { acct } of anchors) {
+    // jump near the trade first: page backwards from "now" only until we pass t1, then collect until t0
+    let before: string | undefined;
+    for (let page = 0; page < 12 && Date.now() < deadline - 25_000; page++) {
+      const opts: any = { limit: 1000 }; if (before) opts.before = before;
+      const list = await rpc("getSignaturesForAddress", [acct, opts]);
+      if (!list?.length) break;
+      let done = false;
+      for (const s of list) { const ts = (s.blockTime || 0) * 1000; if (ts > t1 || s.err) continue; if (ts < t0) { done = true; break; } sigs.set(s.signature, ts); }
+      if (done || list.length < 1000) break;
+      before = list[list.length - 1].signature;
+    }
+    if (sigs.size > 40) break;                                        // the trade's own pool already gives plenty
+  }
+  let all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
+  const N = HELIUS ? 200 : 60;
+  if (all.length > N) { const k = all.length / N; all = Array.from({ length: N }, (_, i) => all[Math.floor(i * k)]); }   // even sample: plenty for ~50 candles
+  // read order: coarse-to-fine across the whole window (every 8th, then every 4th…), fills' neighbourhood first,
+  // so if the RPC is slow and time runs out, the chart still spans the whole window
+  const near = (ts: number) => legTs.some((x: number) => Math.abs(x - ts) < 8_000);
+  const order: number[] = [];
+  all.forEach((x, i) => { if (near(x[1])) order.push(i); });
+  for (const step of [8, 4, 2, 1]) for (let i = 0; i < all.length; i += step) if (!order.includes(i)) order.push(i);
+  // the public RPC allows ~4 reads/s: pace them (Helius: parallel). Each read retried with backoff instead of dropped.
+  const readTx = async (sig: string) => {
+    for (let k = 0; k < 4; k++) {
+      try {
+        const r = await fetch(HELIUS ? RPCS_HIST[0] : "https://api.mainnet-beta.solana.com", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(12000),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTransaction", params: [sig, { encoding: "json", maxSupportedTransactionVersion: 1 }] }) });
+        if (r.status === 429) { await sleep(1200 * (k + 1)); continue; }
+        const j = await r.json();
+        if (j?.error) { await sleep(1200 * (k + 1)); continue; }
+        return j?.result || null;
+      } catch (_) { await sleep(800); }
+    }
+    return null;
+  };
+  const pts: { ts: number; px: number }[] = [];
+  if (HELIUS) {
+    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 8) {
+      const chunk = order.slice(i, i + 8).map((k) => all[k]);
+      const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
+      txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) pts.push({ ts: chunk[j][1], px }); });
+    }
+  } else {
+    for (const k of order) {
+      if (Date.now() > deadline - 4_000) break;
+      const [sig, ts] = all[k], t0r = Date.now();
+      const px = poolPrice(await readTx(sig), t.mint, solUsdAt(ts)); if (px > 0) pts.push({ ts, px });
+      const wait = 280 - (Date.now() - t0r); if (wait > 0) await sleep(wait);
+    }
+  }
+  if (pts.length < 4) return false;
+  pts.sort((a, b) => a.ts - b.ts);
+  const a = pts[0].ts, b = Math.max(pts[pts.length - 1].ts, Math.min(t1, end + 1000)), spanS = Math.max(1, (b - a) / 1000);
+  const bucket = BUCKETS.find((x) => spanS / x <= 60) || 300, bms = bucket * 1000;
+  const candles: number[][] = []; let prev: number | null = null;
+  for (let k = a; k <= b && candles.length < 400; k += bms) {        // every bucket gets a candle (flat when nobody traded)
+    const inB = pts.filter((x) => x.ts >= k && x.ts < k + bms).map((x) => x.px * sup);
+    const o = prev ?? (inB[0] ?? pts[0].px * sup);
+    if (inB.length) { candles.push([k, o, Math.max(o, ...inB), Math.min(o, ...inB), inB[inB.length - 1]]); prev = inB[inB.length - 1]; }
+    else candles.push([k, o, o, o, o]);
+  }
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const marks = (Array.isArray(t.legs) ? t.legs : []).map((l: any) => [Number(l[0]), l[1], round(Number(l[2]) || 0)]).slice(0, 20);
+  const chart = { v: 2, src: "chain", q: 2, i: bms, w: [a, b + bms], c: candles.map((c) => [c[0], round(c[1]), round(c[2]), round(c[3]), round(c[4])]), m: marks };
+  const { error } = await db.from("trades").update({ chart }).eq("id", t.id);
+  return !error;
+}
+
 /* ---------- coin images ----------
    Found on pump.fun, DexScreener, the token's on-chain metadata (Token-2022 or Metaplex -> JSON -> image) or Helius,
    then COPIED into our public storage bucket (fast, never disappears with an IPFS gateway, CORS-clean for the share image).
@@ -702,7 +819,17 @@ Deno.serve(async (req) => {
       const ids = raw.map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
       if (!ids.length) return new Response('{"error":"id"}', { status: 400, headers: h });
       pumpGap = 700;
-      let charts = 0; try { charts = await buildPumpCharts(Date.now() + 50_000, userId, ids); } catch (e) { console.error("chart", (e as Error).message); }
+      const dl = Date.now() + 55_000;
+      let charts = 0; try { charts = await buildPumpCharts(dl, userId, ids); } catch (e) { console.error("chart", (e as Error).message); }
+      try {                                                           // coins outside pump.fun (or thin minute data): candles from the chain
+        const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", ids).not("mint", "is", null);
+        for (const t of rows || []) {
+          if (Date.now() > dl - 15_000) break;
+          const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.c?.length || 0) < 12);
+          if (!weak || String(t.mint).endsWith("pump")) continue;
+          if (await buildChainChart(t, dl)) charts++;
+        }
+      } catch (e) { console.error("chain chart", (e as Error).message); }
       return new Response(JSON.stringify({ charts }), { headers: h });
     }
     if (body?.task === "resync" && ["pumpfun", "fomo", "wallet"].includes(body?.provider)) {   // start this wallet over (cards are kept, duplicates impossible)

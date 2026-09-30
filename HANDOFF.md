@@ -126,3 +126,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Remboursements payés par un relais (Fomo `FHpcNS…` paie la tx et le dépôt, mais la fermeture rend la rent au wallet) : les comptes créés dans une tx non payée par le wallet sont notés (`made`), la tx de fermeture (`parseRefund`) crédite le trade qui les a créés, même après coup (`sync_state.owners` → mise à jour par ext_id).
 - Temps partagé : quand plusieurs wallets sont à synchroniser, chacun a au plus 30 s par passage (un gros historique ne bloque plus les autres ; il continue dans les passages de rattrapage).
 - Rent rendue DANS une tx de swap payée par le wallet : neutre si le compte était un dépôt d un de nos trades (`sync_state.walletMade`), sinon (vieux compte fermé à ce moment) créditée au trade, brut et net — même règle que Fomo. Ex. CHILL : vieux compte HdZFFJ fermé pendant l achat → +$0.19 / +68 % comme Fomo. MC d entrée/sortie calculés sur le prix du swap seul (`im`/`rm`).
+
+## Graphes des coins hors pump.fun
+- Minute GeckoTerminal (fenêtre ±15 min, pools fusionnés pour passer une migration, minutes vides comblées) ; trade < 24 h : bougies à la seconde depuis les 300 derniers trades GT si le flux couvre le trade.
+- Si < 12 bougies : le navigateur demande `{task:"chart", ids}` → `buildChainChart` côté serveur : pool trouvé dans la tx d'achat (coffre de tokens de la contrepartie, unique par pool) + pools GT, signatures du coffre autour du trade, 60 tx échantillonnées (200 avec Helius) lues en ordre grossier→fin (proches des fills d'abord), ~4 lectures/s sur le RPC public, prix = variation quote/token du pool, ~50 bougies (`src:"chain"`, `q:2`). Ex. $LONG : 43 bougies de 3 s, MC achat 60,9 K (fill 61,3 K), vente 109,8 K (fill 106 K).
+- Les vieux graphes GT sans `q` sont reconstruits une fois au chargement de l'app.
+- Une clé `HELIUS_API_KEY` rend ces graphes bien plus rapides et complets (lectures en parallèle).
