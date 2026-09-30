@@ -530,3 +530,7 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .share-q span{margin-right:4px;font-weight:700;}
 .share-q button{min-height:36px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--tx);font-size:12px;font-weight:700;}
 .share-q button.on{background:var(--tx);color:#000;border-color:var(--tx);}
+/* fill rounds sized to the candles: ~2.5 candles wide, readable at any zoom */
+.chartbox{container-type:inline-size;}
+.mk-dot{--d:0;width:clamp(15px, calc(var(--d) * 1cqw), 30px) !important;height:clamp(15px, calc(var(--d) * 1cqw), 30px) !important;font-size:clamp(8.5px, calc(var(--d) * 0.55cqw), 16px) !important;z-index:2;}
+.chartbox.big .mk-dot{width:clamp(20px, calc(var(--d) * 1cqw), 44px) !important;height:clamp(20px, calc(var(--d) * 1cqw), 44px) !important;font-size:clamp(11px, calc(var(--d) * 0.55cqw), 23px) !important;}

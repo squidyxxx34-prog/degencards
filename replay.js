@@ -26,7 +26,7 @@ const STR = {
        held:'tenu', secured:'SAC S\u00C9CURIS\u00C9', closed:'TRADE CL\u00D4TUR\u00C9', profit:'PROFIT', result:'R\u00C9SULTAT', inv:'Investi', entry:'MC entr\u00E9e', exit:'MC sortie', tag:'Tes trades. En cartes.',
        hooks:{ printed:'COMMENT J\u2019AI PRINT', scalp:'SCALP DU JOUR', copy:'TU L\u2019AURAIS PRIS ?', sniped:'SNIP\u00C9', lesson:'LE\u00C7ON APPRISE', go:'C\u2019EST PARTI' } },
 };
-let GREEN, UP, DN, RED, L, O, K, FX;
+let GREEN, UP, DN, RED, L, O, K, FX, DOT_R = 30;
 let T_INTRO, T_WARP, T_REPLAY, T_OUTRO, T_BRAND, DURATION, O_WARP, O_REPLAY, O_OUTRO, O_BRAND;
 function configure(opt){
   O = { ...DEFAULTS, ...(opt || {}) };
@@ -245,7 +245,7 @@ function warp(ctx, W, H, u, t, img, ms, seed){
 }
 
 /* a fill on the chart: small filled round, green B = buy, red S = sell */
-function tradeDot(ctx, x, y, u, kind, r = 16){
+function tradeDot(ctx, x, y, u, kind, r = 16){                     // r in 1080-units
   const col = kind === 'b' ? UP : DN;
   ctx.save(); ctx.shadowBlur = 0;
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r*u, 0, Math.PI*2); ctx.fill();
@@ -263,7 +263,7 @@ function reticle(ctx, x, y, u, col, k, label, amount){
     const ang = Math.PI/4 + i * Math.PI/2, r0 = r * 0.55, r1 = r * 0.85;
     ctx.beginPath(); ctx.moveTo(x + Math.cos(ang)*r0, y + Math.sin(ang)*r0); ctx.lineTo(x + Math.cos(ang)*r1, y + Math.sin(ang)*r1); ctx.stroke();
   }
-  ctx.shadowBlur = 0; tradeDot(ctx, x, y, u, label === 'BUY' ? 'b' : 's', 14);
+  ctx.shadowBlur = 0; tradeDot(ctx, x, y, u, label === 'BUY' ? 'b' : 's', DOT_R);
   // label pill under, amount above
   const pk = easeOutBack(seg(k, 0.25, 0.7));
   ctx.globalAlpha = clamp01(pk);
@@ -286,6 +286,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const KK = Math.min(K, P.n);                                        // 'full' camera: the whole chart, drawn in place
   const head = Math.max(1, r), start = O.camera === 'full' ? 0 : Math.max(0, head - KK);
   const slot = pw / KK;
+  DOT_R = Math.max(22, Math.min(64, (slot / u) * 1.25));              // fill rounds ~2.5 candles wide
   const vis = []; for(let i = Math.max(0, Math.floor(start) - 1); i < Math.min(P.n, Math.ceil(head)); i++) vis.push(i);
   // y range over the visible candles (current one partially formed), padded
   const cur = (i) => {                                                 // candle i as drawn at this instant
@@ -351,7 +352,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const i = P.cs.findIndex(c => m[0] < c[0] + P.iv); const ii = i < 0 ? P.n - 1 : i;
     if(r < ii + 0.99) return;
     const mc = (t.chart.src === 'pump' && m[2] > 0) ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
-    tradeDot(ctx, X(ii), Y(mc), u, m[1], 15);
+    tradeDot(ctx, X(ii), Y(mc), u, m[1], DOT_R);
   });
   ctx.restore();
   // live price line + multiplier vs buy
@@ -447,7 +448,7 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   ctx.lineTo(X(upto), bottom); ctx.lineTo(X(0), bottom); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
   ctx.beginPath(); ctx.moveTo(X(0), Y(closes[0])); for(let i = 1; i <= upto; i++) ctx.lineTo(X(i), Y(closes[i]));
   ctx.strokeStyle = col; ctx.lineWidth = 6*u; ctx.lineJoin = 'round'; ctx.shadowColor = col; ctx.shadowBlur = 24*u; ctx.stroke(); ctx.shadowBlur = 0;
-  [[P.ib, P.buyMc, 'b'], [P.is, P.sellMc, 's']].forEach(([i, mc, kind]) => { if(i <= upto) tradeDot(ctx, X(i), Y(mc), u, kind, 18); });
+  [[P.ib, P.buyMc, 'b'], [P.is, P.sellMc, 's']].forEach(([i, mc, kind]) => { if(i <= upto) tradeDot(ctx, X(i), Y(mc), u, kind, 30); });
   ctx.restore();
   // stats
   const sa = easeOut(seg(k, 0.45, 0.65));
