@@ -127,7 +127,7 @@ const store = {
     if(error){ console.error('trades load failed'); return []; }
     return data.filter(r=>UUID_RE.test(String(r.id))).map(r=>({ id:String(r.id), tradeId:num(r.trade_id,0,1e9), ticker:cleanTicker(r.ticker)||'UNKNOWN', pnl:num(r.pnl,-1e12,1e12), roi:num(r.roi,-100,1e7), entryMc:num(r.entry_mc,0,1e15), exitMc:num(r.exit_mc,0,1e15), holdTime:num(r.hold_time,0,31536000), timestamp:num(r.timestamp_ms,0,4102444800000), source: SOURCES.includes(r.source)?r.source:'manual', chart: parseChart(r.chart),
       mint: typeof r.mint==='string' && B58.test(r.mint) ? r.mint : null, chartTries: Number(r.chart_tries)||0, image: safeImg(r.image),
-      fees: r.fees_usd==null ? null : num(r.fees_usd,-1e10,1e10), pnlNet: r.pnl_net==null ? null : num(r.pnl_net,-1e10,1e10), legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
+      fees: r.fees_usd==null ? null : num(r.fees_usd,-1e10,1e10), pnlNet: r.pnl_net==null ? null : num(r.pnl_net,-1e10,1e10), cashback: r.cashback_usd==null ? 0 : num(r.cashback_usd,0,1e9), legs: Array.isArray(r.legs) ? r.legs.slice(0,20) : null }));
   },
   async getDeleted(){
     const {data,error} = await sb.from('trades').select('id,ticker,pnl,roi,timestamp_ms,source,deleted_at')
@@ -1396,7 +1396,7 @@ function openDetail(id, refresh){
           ${row('Exit MC', fmt.mc(t.exitMc), t.exitMc>=t.entryMc?'pos':'neg')}
           ${row('Opened', fmtClock(opened))}
           ${row('Closed', fmtClock(t.timestamp))}
-          ${t.pnlNet!=null ? row('Fees & costs', fmt.usd(-Math.abs(t.fees||0)), 'neg') + row('Net PnL (wallet)', fmt.usd(t.pnlNet), t.pnlNet>=0?'pos':'neg') : ''}
+          ${t.pnlNet!=null ? row('Fees', fmt.usd(-Math.abs(t.fees||0)), 'neg') + (t.cashback > 0 ? row('Cashback (pump.fun)', '+$' + t.cashback.toFixed(t.cashback < 0.01 ? 4 : 2), 'pos') : '') + row('Net PnL (wallet)', fmt.usd(t.pnlNet), t.pnlNet>=0?'pos':'neg') : ''}
         </div>
 
         <h3 class="dt-h">Context</h3>

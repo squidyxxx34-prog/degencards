@@ -119,3 +119,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Repli automatique si l'appareil refuse : 1080p60 puis 1080p30 ; la qualité obtenue s'affiche dans le toast. Choix « 1080p · 60 fps (faster) » mémorisé (`localStorage dc_video_q`).
 - Rendu plus long en 4K (progression + temps restant affichés). Test sur serveur sans GPU : 20 s de vidéo en ~6 min ; bien plus rapide sur téléphone (GPU + encodeur matériel).
 - Replay : textes centrés sur les glyphes réels (`fillCentered`), annonce de vente au centre de l'écran, échelle verticale lissée sur ±0,3 s (anticipe les nouveaux extrêmes), bruit de la bougie en cours ralenti.
+
+## PnL net exact (dépôts + cashback pump.fun)
+- Bug corrigé : les dépôts (rent des comptes créés à l'achat, ~0,0015 SOL chacun, rendus par une tx `CloseAccount` après la vente) étaient comptés comme des frais (~0,37 $/trade). Dans `parseTx`, quand le wallet paie la tx : comptes créés (pre 0 → post > 0, ≤ 0,01 SOL) réintégrés, comptes fermés (rent d'anciens trades rendue) retirés. Frais réels ≈ 0,015 $/trade.
+- Cashback pump.fun : décodé depuis les événements officiels du programme (IDL pump-public-docs) — `TradeEvent.cashback` (bonding curve) et `BuyEvent/SellEvent.cashback` (PumpSwap), logs « Program data » ou inner ix self-CPI (tag e445a52e51cb9a1d), seulement si `user` = le wallet. Ajouté au net, stocké dans `trades.cashback_usd`, affiché dans le détail. Seules les « Cashback Coins » en donnent (mode déprécié pour les nouveaux coins, les anciens continuent).
+- CHILL : route SOL→USDC→NFLX→CHILL (pool PumpSwap coté en NFLX). En SOL : −6 % brut, cohérent ; l'écart avec Fomo (+67,6 %) vient de sa valorisation du NFLX.

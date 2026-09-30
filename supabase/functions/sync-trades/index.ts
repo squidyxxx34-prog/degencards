@@ -4,6 +4,7 @@
 // Never fabricates: open positions and sells without a known buy are skipped.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { PublicKey } from "npm:@solana/web3.js@1.98.0";
+import bs58 from "npm:bs58@5.0.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -91,7 +92,46 @@ function solUsdAt(ts: number) {
 }
 
 /* ---------- one transaction -> swap leg ---------- */
-type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string };
+type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string; cb: number };
+
+/* ---------- pump.fun cashback, straight from the program's own trade events ----------
+   Bonding curve: TradeEvent.cashback (lamports). PumpSwap: BuyEvent / SellEvent .cashback (quote units, SOL pools).
+   Events come as "Program data:" logs or as self-CPI inner instructions (anchor event tag e445a52e51cb9a1d). */
+const EV_TRADE = [189, 219, 127, 211, 78, 230, 97, 238], EV_BUY = [103, 244, 82, 31, 44, 245, 119, 119], EV_SELL = [62, 47, 55, 10, 165, 3, 220, 42];
+const EV_CPI = [0xe4, 0x45, 0xa5, 0x2e, 0x51, 0xcb, 0x9a, 0x1d];
+const startsWith = (b: Uint8Array, p: number[]) => p.every((x, i) => b[i] === x);
+function readCashback(b: Uint8Array, kind: "trade" | "buy" | "sell", wallet: string): number {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength); let o = 0;
+  const pk = () => { const v = new PublicKey(b.slice(o, o + 32)).toBase58(); o += 32; return v; };
+  const u64 = () => { const v = Number(dv.getBigUint64(o, true)); o += 8; return v; };
+  const boo = () => { o += 1; }, i64 = () => { o += 8; }, str = () => { const n = dv.getUint32(o, true); o += 4 + n; };
+  if (kind === "trade") {
+    pk(); u64(); u64(); boo(); const user = pk(); i64(); u64(); u64(); u64(); u64(); pk(); u64(); u64(); pk(); u64(); u64();
+    boo(); u64(); u64(); u64(); i64(); str(); boo(); u64(); const cb = u64();
+    return user === wallet ? cb : 0;
+  }
+  i64(); for (let k = 0; k < 13; k++) u64(); pk(); const user = pk(); pk(); pk(); pk(); pk(); pk(); u64(); u64();
+  if (kind === "buy") { boo(); u64(); u64(); u64(); i64(); u64(); str(); }
+  u64(); const cb = u64();
+  return user === wallet ? cb : 0;
+}
+function cashbackLamports(tx: any, wallet: string): number {
+  const blobs: Uint8Array[] = [];
+  for (const l of tx?.meta?.logMessages || []) if (l.startsWith("Program data: ")) { try { blobs.push(Uint8Array.from(atob(l.slice(14)), (c) => c.charCodeAt(0))); } catch (_) {} }
+  for (const inner of tx?.meta?.innerInstructions || []) for (const ix of inner.instructions || []) {
+    try { const d = bs58.decode(ix.data); if (d.length > 16 && startsWith(d, EV_CPI)) blobs.push(d.slice(8)); } catch (_) {}
+  }
+  let total = 0; const seen = new Set<string>();
+  for (const b of blobs) {
+    const key = Array.from(b.slice(0, 48)).join(","); if (seen.has(key)) continue; seen.add(key);   // same event can appear as log AND inner ix
+    try {
+      if (startsWith(b, EV_TRADE)) total += readCashback(b.slice(8), "trade", wallet);
+      else if (startsWith(b, EV_BUY)) total += readCashback(b.slice(8), "buy", wallet);
+      else if (startsWith(b, EV_SELL)) total += readCashback(b.slice(8), "sell", wallet);
+    } catch (_) { /* unknown layout: no cashback */ }
+  }
+  return total;
+}
 function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   if (!tx?.meta || tx.meta.err) return null;
   const msg = tx.transaction.message;
@@ -99,6 +139,16 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   const idx = keys.indexOf(wallet);
   const ts = (tx.blockTime || 0) * 1000;
   let lamports = idx >= 0 ? tx.meta.postBalances[idx] - tx.meta.preBalances[idx] : 0;
+  // deposits: when the wallet pays this tx, lamports put into accounts CREATED here (pre 0 -> post > 0) are rent it gets
+  // back when they're closed (usually a CloseAccount right after the sell), and accounts CLOSED here gave it back rent from
+  // earlier trades. Neither is a cost of this trade, so both are taken out of the net cash flow.
+  if (idx === 0) {
+    const pre = tx.meta.preBalances, post = tx.meta.postBalances;
+    for (let j = 1; j < post.length; j++) {
+      if (pre[j] === 0 && post[j] > 0 && post[j] <= 10_000_000) lamports += post[j];          // new account's rent (≤ 0.01 SOL)
+      else if (pre[j] > 0 && post[j] === 0 && pre[j] <= 10_000_000) lamports -= pre[j];       // older rent returned in this tx
+    }
+  }
   const delta = new Map<string, number>();
   const add = (list: any[], sign: number) => {
     for (const b of list || []) {
@@ -162,7 +212,8 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
     const g = -quoteVal(best, new Set([mint]), 0);              // counterparty received value  <=>  we paid it
     if (Math.sign(g) === Math.sign(usdTotal) && Math.abs(g) > 1e-6 && Math.abs(g) < 1e7) gusd = g;
   }
-  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig };
+  const cb = cashbackLamports(tx, wallet) / 1e9 * solUsd;            // pump.fun cashback earned by this trade (USD)
+  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig, cb };
 }
 
 /* ---------- token metadata ---------- */
@@ -317,11 +368,11 @@ async function syncAccount(acc: any, deadline: number) {
     const px = Math.abs(leg.gusd / leg.tok);                     // USD per token at this fill (trade price)
     if (leg.tok > 0) {
       if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, ninv: 0, nret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
-      p.b += leg.tok; p.inv += -leg.gusd; p.ninv = (p.ninv || 0) - leg.usd; p.last = leg.ts;
+      p.b += leg.tok; p.inv += -leg.gusd; p.ninv = (p.ninv || 0) - leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
       p.bl = [...(p.bl || []), [leg.ts, px]].slice(-10);
     } else {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
-      p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.last = leg.ts;
+      p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
       p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
       const leftUsd = Math.max(0, p.b - p.s) * px;                   // what the remaining bag is worth at this sell price
       if (p.s >= p.b * 0.97 || leftUsd < Math.max(0.05, p.inv * 0.01)) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
@@ -351,8 +402,10 @@ async function syncAccount(acc: any, deadline: number) {
         exit_mc: Math.round(Math.min(1e13, sup && c.s ? (c.ret / c.s) * sup : 0)),
         hold_time: Math.max(1, Math.min(31536000, Math.round((c.last - c.first) / 1000))),
         timestamp_ms: Math.max(1230768000000, c.last),
-        pnl_net: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.nret || 0) - c.ninv)) * 100) / 100 : null,
+        // net = what the wallet really made: trade flows minus real fees (refundable deposits excluded) plus pump.fun cashback
+        pnl_net: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.nret || 0) - c.ninv + (c.cb || 0))) * 100) / 100 : null,
         fees_usd: c.ninv ? Math.round(Math.max(-1e10, Math.min(1e10, (c.ninv - c.inv) + (c.ret - (c.nret || 0)))) * 100) / 100 : null,
+        cashback_usd: c.cb ? Math.round(c.cb * 10000) / 10000 : 0,
         legs: sup ? [...(c.bl || []).map(([t, px]: number[]) => [t, "b", Math.round(px * sup)]), ...(c.sl || []).map(([t, px]: number[]) => [t, "s", Math.round(px * sup)])] : null,
       };
       const { data: ins, error } = await db.from("trades").insert(row).select("id").maybeSingle();
