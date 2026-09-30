@@ -710,7 +710,8 @@ Deno.serve(async (req) => {
     const { data: locked } = await db.rpc("try_lock_account", { p_id: acc.id, p_seconds: 150 });
     if (locked !== true) continue;                                    // another sync is already on this wallet
     try {
-      const r: any = await syncAccount(acc, deadline);
+      // fair share: one huge wallet can't starve the others (its backlog continues in the catch-up passes)
+      const r: any = await syncAccount(acc, accounts.length > 1 ? Math.min(deadline, Date.now() + 30_000) : deadline);
       imported += r.imported || 0; pending += r.pending || 0; synced++;
       if (r.error) await db.from("connected_accounts").update({ sync_error: r.error, last_synced_at: new Date().toISOString() }).eq("id", acc.id);
     } catch (e) {
