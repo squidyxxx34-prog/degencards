@@ -92,7 +92,7 @@ function solUsdAt(ts: number) {
 }
 
 /* ---------- one transaction -> swap leg ---------- */
-type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string; cb: number; made: string[] };
+type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string; cb: number; made: string[]; wmade: string[]; closedRent: [string, number][]; px0?: number };
 type Refund = { refund: true; closed: string[]; usd: number; ts: number };
 
 /* ---------- pump.fun cashback, straight from the program's own trade events ----------
@@ -141,20 +141,21 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   const ts = (tx.blockTime || 0) * 1000;
   let lamports = idx >= 0 ? tx.meta.postBalances[idx] - tx.meta.preBalances[idx] : 0;
   // deposits: when the wallet pays this tx, lamports put into accounts CREATED here (pre 0 -> post > 0) are rent it gets
-  // back when they're closed (usually a CloseAccount right after the sell), and accounts CLOSED here gave it back rent from
-  // earlier trades. Neither is a cost of this trade, so both are taken out of the net cash flow.
+  // back when they're closed (usually a CloseAccount right after the sell): not a cost. Rent of accounts CLOSED here is
+  // listed and decided in the position pass (neutral if it was one of our trades' deposits, credited to this trade otherwise).
   const made: string[] = [];
   if (idx > 0) {                                                     // a relayer paid this tx: remember the accounts it created,
     const pre = tx.meta.preBalances, post = tx.meta.postBalances;   // their rent can come back to the wallet when they're closed
     for (let j = 1; j < post.length; j++) if (pre[j] === 0 && post[j] > 0 && post[j] <= 10_000_000) made.push(keys[j]);
   }
+  const wmade: string[] = [], closedLam: [string, number][] = [];
   if (idx === 0) {
     const pre = tx.meta.preBalances, post = tx.meta.postBalances;
     for (let j = 1; j < post.length; j++) {
-      if (pre[j] === 0 && post[j] > 0 && post[j] <= 10_000_000) lamports += post[j];          // new account's rent (≤ 0.01 SOL)
-      else if (pre[j] > 0 && post[j] === 0 && pre[j] <= 10_000_000) lamports -= pre[j];       // older rent returned in this tx
+      if (pre[j] === 0 && post[j] > 0 && post[j] <= 10_000_000) { lamports += post[j]; wmade.push(keys[j]); }   // new account's rent (≤ 0.01 SOL): a deposit, not a cost
+      else if (pre[j] > 0 && post[j] === 0 && pre[j] <= 10_000_000) closedLam.push([keys[j], pre[j]]);          // rent returned in this tx: decided per account later
     }
-  }
+  }   // relayer-paid txs: closed rent may go back to the relayer, so nothing is credited from them here
   const delta = new Map<string, number>();
   const add = (list: any[], sign: number) => {
     for (const b of list || []) {
@@ -219,7 +220,8 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
     if (Math.sign(g) === Math.sign(usdTotal) && Math.abs(g) > 1e-6 && Math.abs(g) < 1e7) gusd = g;
   }
   const cb = cashbackLamports(tx, wallet) / 1e9 * solUsd;            // pump.fun cashback earned by this trade (USD)
-  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig, cb, made };
+  const closedRent: [string, number][] = closedLam.map(([a, l]) => [a, l / 1e9 * solUsd]);
+  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig, cb, made, wmade, closedRent };
 }
 
 /* a tx that only closes accounts and pays their rent to the wallet (no token moved): a refund of an earlier deposit */
@@ -383,7 +385,8 @@ async function syncAccount(acc: any, deadline: number) {
 
   // 3. rebuild positions
   const state = acc.sync_state?.positions || {};
-  const owners: Record<string, string> = { ...(acc.sync_state?.owners || {}) };   // relayer-created account -> ext_id of the trade it belongs to (once the card exists)
+  const owners: Record<string, string> = { ...(acc.sync_state?.owners || {}) };
+  const walletMade = new Set<string>(acc.sync_state?.walletMade || []);   // deposits our tracked trades made (their rent coming back is neutral)
   const closed: any[] = [];
   const lateRefunds: Record<string, number> = {};                   // ext_id -> refund USD for cards already saved
   for (const leg of legs.slice(0, done) as any[]) {
@@ -397,16 +400,25 @@ async function syncAccount(acc: any, deadline: number) {
       else { const ext = leg.closed.map((a: string) => owners[a]).find(Boolean); if (ext) lateRefunds[ext] = (lateRefunds[ext] || 0) + leg.usd; }
       continue;
     }
+    // rent returned inside this swap tx: if the account was a deposit made by one of our tracked trades (already excluded
+    // from its cost) it's neutral; otherwise (an older account closed now) the money really came back during this trade,
+    // so it's credited to it, in gross and net alike (same as Fomo / pump.fun)
+    const g0 = leg.gusd;
+    for (const [a, v] of leg.closedRent || []) {
+      if (walletMade.has(a)) { leg.usd -= v; walletMade.delete(a); }
+      else leg.gusd += v;
+    }
+    for (const a of leg.wmade || []) walletMade.add(a);
     let p = state[leg.mint];
-    const px = Math.abs(leg.gusd / leg.tok);                     // USD per token at this fill (trade price)
+    const px = Math.abs(g0 / leg.tok);                           // USD per token at this fill (swap price, for market caps)
     if (leg.tok > 0) {
       if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, ninv: 0, nret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
-      p.b += leg.tok; p.inv += -leg.gusd; p.ninv = (p.ninv || 0) - leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
+      p.b += leg.tok; p.inv += -leg.gusd; p.im = (p.im || 0) - g0; p.ninv = (p.ninv || 0) - leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
       if (leg.made?.length) p.made = [...(p.made || []), ...leg.made].slice(-12);
       p.bl = [...(p.bl || []), [leg.ts, px]].slice(-10);
     } else {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
-      p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
+      p.s += -leg.tok; p.ret += leg.gusd; p.rm = (p.rm || 0) + g0; p.nret = (p.nret || 0) + leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
       if (leg.made?.length) p.made = [...(p.made || []), ...leg.made].slice(-12);
       p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
       const leftUsd = Math.max(0, p.b - p.s) * px;                   // what the remaining bag is worth at this sell price
@@ -433,8 +445,8 @@ async function syncAccount(acc: any, deadline: number) {
         ticker: cleanSym(syms.get(c.mint) || "", c.mint),
         pnl: Math.round(Math.max(-1e10, Math.min(1e10, pnl)) * 100) / 100,
         roi: Math.round(Math.max(-100, Math.min(1e7, (pnl / c.inv) * 100)) * 10) / 10,
-        entry_mc: Math.round(Math.min(1e13, sup ? (c.inv / c.b) * sup : 0)),
-        exit_mc: Math.round(Math.min(1e13, sup && c.s ? (c.ret / c.s) * sup : 0)),
+        entry_mc: Math.round(Math.min(1e13, sup ? ((c.im ?? c.inv) / c.b) * sup : 0)),
+        exit_mc: Math.round(Math.min(1e13, sup && c.s ? ((c.rm ?? c.ret) / c.s) * sup : 0)),
         hold_time: Math.max(1, Math.min(31536000, Math.round((c.last - c.first) / 1000))),
         timestamp_ms: Math.max(1230768000000, c.last),
         // net = what the wallet really made: trade flows minus real fees (refundable deposits excluded) plus pump.fun cashback
@@ -464,7 +476,7 @@ async function syncAccount(acc: any, deadline: number) {
   // 5. cursor + state
   await db.from("connected_accounts").update({
     last_sig: batch[done - 1].signature, last_synced_at: new Date().toISOString(), sync_error: null,
-    sync_state: { positions: state, owners, ...(stuck ? { stuck } : {}) }, sync_pending: Math.max(0, sigs.length - done), sync_imported: (acc.sync_imported || 0) + imported,
+    sync_state: { positions: state, owners, walletMade: [...walletMade].slice(-500), ...(stuck ? { stuck } : {}) }, sync_pending: Math.max(0, sigs.length - done), sync_imported: (acc.sync_imported || 0) + imported,
   }).eq("id", acc.id);
   return { imported, pending: sigs.length - done };
 }
