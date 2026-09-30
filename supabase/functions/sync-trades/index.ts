@@ -92,7 +92,8 @@ function solUsdAt(ts: number) {
 }
 
 /* ---------- one transaction -> swap leg ---------- */
-type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string; cb: number };
+type Leg = { mint: string; tok: number; usd: number; gusd: number; sol: number; ts: number; sig: string; cb: number; made: string[] };
+type Refund = { refund: true; closed: string[]; usd: number; ts: number };
 
 /* ---------- pump.fun cashback, straight from the program's own trade events ----------
    Bonding curve: TradeEvent.cashback (lamports). PumpSwap: BuyEvent / SellEvent .cashback (quote units, SOL pools).
@@ -142,6 +143,11 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
   // deposits: when the wallet pays this tx, lamports put into accounts CREATED here (pre 0 -> post > 0) are rent it gets
   // back when they're closed (usually a CloseAccount right after the sell), and accounts CLOSED here gave it back rent from
   // earlier trades. Neither is a cost of this trade, so both are taken out of the net cash flow.
+  const made: string[] = [];
+  if (idx > 0) {                                                     // a relayer paid this tx: remember the accounts it created,
+    const pre = tx.meta.preBalances, post = tx.meta.postBalances;   // their rent can come back to the wallet when they're closed
+    for (let j = 1; j < post.length; j++) if (pre[j] === 0 && post[j] > 0 && post[j] <= 10_000_000) made.push(keys[j]);
+  }
   if (idx === 0) {
     const pre = tx.meta.preBalances, post = tx.meta.postBalances;
     for (let j = 1; j < post.length; j++) {
@@ -213,7 +219,23 @@ function parseTx(tx: any, wallet: string, sig: string): Leg | null {
     if (Math.sign(g) === Math.sign(usdTotal) && Math.abs(g) > 1e-6 && Math.abs(g) < 1e7) gusd = g;
   }
   const cb = cashbackLamports(tx, wallet) / 1e9 * solUsd;            // pump.fun cashback earned by this trade (USD)
-  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig, cb };
+  return { mint, tok, usd: usdTotal, gusd, sol, ts, sig, cb, made };
+}
+
+/* a tx that only closes accounts and pays their rent to the wallet (no token moved): a refund of an earlier deposit */
+function parseRefund(tx: any, wallet: string): Refund | null {
+  if (!tx?.meta || tx.meta.err) return null;
+  const msg = tx.transaction.message;
+  const keys: string[] = [...msg.accountKeys, ...(tx.meta.loadedAddresses?.writable || []), ...(tx.meta.loadedAddresses?.readonly || [])];
+  const idx = keys.indexOf(wallet); if (idx < 0) return null;
+  const pre = tx.meta.preBalances, post = tx.meta.postBalances, gain = post[idx] - pre[idx];
+  if (gain <= 0) return null;
+  const mine = [...(tx.meta.preTokenBalances || []), ...(tx.meta.postTokenBalances || [])].filter((b: any) => b.owner === wallet);
+  if (mine.some((b: any) => Number(b.uiTokenAmount?.uiAmountString || 0) !== 0)) return null;   // a real token movement: not a refund
+  const closed: string[] = []; for (let j = 0; j < post.length; j++) if (j !== idx && pre[j] > 0 && post[j] === 0 && pre[j] <= 10_000_000) closed.push(keys[j]);
+  if (!closed.length) return null;
+  const ts = (tx.blockTime || 0) * 1000;
+  return { refund: true, closed, usd: gain / 1e9 * solUsdAt(ts), ts };
 }
 
 /* ---------- token metadata ---------- */
@@ -345,7 +367,7 @@ async function syncAccount(acc: any, deadline: number) {
     }));
     const firstMiss = res.findIndex((r) => !r.ok);
     const usable = firstMiss < 0 ? res.length : firstMiss;            // stop BEFORE an unreadable tx: the cursor never moves past it
-    for (let j = 0; j < usable; j++) legs[i + j] = parseTx(res[j].tx, wallet, chunk[j].signature);
+    for (let j = 0; j < usable; j++) legs[i + j] = parseTx(res[j].tx, wallet, chunk[j].signature) || (parseRefund(res[j].tx, wallet) as any);
     done = i + usable;
     if (usable < res.length) {
       const sig = chunk[usable].signature, err = (res[usable] as any).err || "";
@@ -361,18 +383,31 @@ async function syncAccount(acc: any, deadline: number) {
 
   // 3. rebuild positions
   const state = acc.sync_state?.positions || {};
+  const owners: Record<string, string> = { ...(acc.sync_state?.owners || {}) };   // relayer-created account -> ext_id of the trade it belongs to (once the card exists)
   const closed: any[] = [];
-  for (const leg of legs.slice(0, done)) {
+  const lateRefunds: Record<string, number> = {};                   // ext_id -> refund USD for cards already saved
+  for (const leg of legs.slice(0, done) as any[]) {
     if (!leg) continue;
+    if (leg.refund) {                                                 // deposit coming back: credit the trade whose account it was
+      const hit = (arr: string[] | undefined) => !!arr && leg.closed.some((a: string) => arr.includes(a));
+      const open = Object.values(state).find((p: any) => hit(p.made)) as any;
+      const done_ = open ? null : closed.find((c: any) => hit(c.made));
+      if (open) open.nret = (open.nret || 0) + leg.usd;
+      else if (done_) done_.nret = (done_.nret || 0) + leg.usd;
+      else { const ext = leg.closed.map((a: string) => owners[a]).find(Boolean); if (ext) lateRefunds[ext] = (lateRefunds[ext] || 0) + leg.usd; }
+      continue;
+    }
     let p = state[leg.mint];
     const px = Math.abs(leg.gusd / leg.tok);                     // USD per token at this fill (trade price)
     if (leg.tok > 0) {
       if (!p) p = state[leg.mint] = { b: 0, s: 0, inv: 0, ret: 0, ninv: 0, nret: 0, first: leg.ts, last: leg.ts, sig: leg.sig };
       p.b += leg.tok; p.inv += -leg.gusd; p.ninv = (p.ninv || 0) - leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
+      if (leg.made?.length) p.made = [...(p.made || []), ...leg.made].slice(-12);
       p.bl = [...(p.bl || []), [leg.ts, px]].slice(-10);
     } else {
       if (!p || p.b <= 0) continue;                              // sell of a bag bought before tracking: unknown cost, skipped
       p.s += -leg.tok; p.ret += leg.gusd; p.nret = (p.nret || 0) + leg.usd; p.cb = (p.cb || 0) + (leg.cb || 0); p.last = leg.ts;
+      if (leg.made?.length) p.made = [...(p.made || []), ...leg.made].slice(-12);
       p.sl = [...(p.sl || []), [leg.ts, px]].slice(-10);
       const leftUsd = Math.max(0, p.b - p.s) * px;                   // what the remaining bag is worth at this sell price
       if (p.s >= p.b * 0.97 || leftUsd < Math.max(0.05, p.inv * 0.01)) { closed.push({ mint: leg.mint, ...p }); delete state[leg.mint]; }
@@ -417,10 +452,19 @@ async function syncAccount(acc: any, deadline: number) {
     }
   }
 
+  for (const c of closed) for (const a of c.made || []) owners[a] = `${wallet}:${c.mint}:${c.sig}`.slice(0, 200);
+  for (const [ext, add] of Object.entries(lateRefunds)) {            // refund arrived after the card was saved: bump its net, lower its fees
+    const { data: row } = await db.from("trades").select("pnl_net,fees_usd").eq("user_id", acc.user_id).eq("ext_id", ext).maybeSingle();
+    if (row && row.pnl_net != null) await db.from("trades").update({
+      pnl_net: Math.round((Number(row.pnl_net) + add) * 100) / 100, fees_usd: row.fees_usd == null ? null : Math.round((Number(row.fees_usd) - add) * 100) / 100,
+    }).eq("user_id", acc.user_id).eq("ext_id", ext);
+  }
+  const ownerKeys = Object.keys(owners); if (ownerKeys.length > 400) for (const k of ownerKeys.slice(0, ownerKeys.length - 400)) delete owners[k];
+
   // 5. cursor + state
   await db.from("connected_accounts").update({
     last_sig: batch[done - 1].signature, last_synced_at: new Date().toISOString(), sync_error: null,
-    sync_state: { positions: state, ...(stuck ? { stuck } : {}) }, sync_pending: Math.max(0, sigs.length - done), sync_imported: (acc.sync_imported || 0) + imported,
+    sync_state: { positions: state, owners, ...(stuck ? { stuck } : {}) }, sync_pending: Math.max(0, sigs.length - done), sync_imported: (acc.sync_imported || 0) + imported,
   }).eq("id", acc.id);
   return { imported, pending: sigs.length - done };
 }
