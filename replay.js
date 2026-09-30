@@ -26,7 +26,7 @@ const STR = {
        held:'tenu', secured:'SAC S\u00C9CURIS\u00C9', closed:'TRADE CL\u00D4TUR\u00C9', profit:'PROFIT', result:'R\u00C9SULTAT', inv:'Investi', entry:'MC entr\u00E9e', exit:'MC sortie', tag:'Tes trades. En cartes.',
        hooks:{ printed:'COMMENT J\u2019AI PRINT', scalp:'SCALP DU JOUR', copy:'TU L\u2019AURAIS PRIS ?', sniped:'SNIP\u00C9', lesson:'LE\u00C7ON APPRISE', go:'C\u2019EST PARTI' } },
 };
-let GREEN, UP, DN, RED, L, O, K, FX, DOT_R = 30;
+let GREEN, UP, DN, RED, L, O, K, FX; const DOT_R = 30;                // fill rounds: one fixed, readable size
 let T_INTRO, T_WARP, T_REPLAY, T_OUTRO, T_BRAND, DURATION, O_WARP, O_REPLAY, O_OUTRO, O_BRAND;
 function configure(opt){
   O = { ...DEFAULTS, ...(opt || {}) };
@@ -244,9 +244,35 @@ function warp(ctx, W, H, u, t, img, ms, seed){
   if(flash > 0){ ctx.fillStyle = `rgba(255,255,255,${0.85*flash})`; ctx.fillRect(0,0,W,H); }
 }
 
+/* place fill rounds without overlap: pairwise push apart vertically (buy down, sell up), then draw leader + round */
+function drawFills(ctx, list, u, R){
+  const pts = list.map(p => ({ ...p, x: p.ax, y: p.ay })), minD = 2 * R * u + 6 * u;
+  for(let pass = 0; pass < 8; pass++){
+    let moved = false;
+    for(let a = 0; a < pts.length; a++) for(let b = a + 1; b < pts.length; b++){
+      const p = pts[a], q = pts[b], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+      if(d >= minD) continue;
+      const need = (minD - d) / 2 + 0.5;
+      const upFirst = p.kind === 's' && q.kind !== 's' ? p : q.kind === 's' && p.kind !== 's' ? q : (p.ay <= q.ay ? p : q);
+      const other = upFirst === p ? q : p;
+      upFirst.y -= need; other.y += need; moved = true;
+    }
+    if(!moved) break;
+  }
+  pts.forEach(p => {
+    if(Math.hypot(p.x - p.ax, p.y - p.ay) > 3 * u){                  // displaced: leader line + small anchor on the exact fill
+      const col = p.kind === 'b' ? DOT_B : DOT_S;
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 3 * u; ctx.beginPath(); ctx.moveTo(p.ax, p.ay); ctx.lineTo(p.x, p.y); ctx.stroke();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(p.ax, p.ay, 7 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke(); ctx.restore();
+    }
+  });
+  pts.forEach(p => tradeDot(ctx, p.x, p.y, u, p.kind, R));
+}
 /* a fill on the chart: small filled round, green B = buy, red S = sell */
-function tradeDot(ctx, x, y, u, kind, r = 16){                     // r in 1080-units
-  const col = kind === 'b' ? UP : DN;
+const DOT_B = '#18C964', DOT_S = '#FF3B4E';                          // buy / sell stay green / red whatever the theme
+function tradeDot(ctx, x, y, u, kind, r = 30){                     // r in 1080-units
+  const col = kind === 'b' ? DOT_B : DOT_S;
   ctx.save(); ctx.shadowBlur = 0;
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r*u, 0, Math.PI*2); ctx.fill();
   ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke();
@@ -286,7 +312,6 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const KK = Math.min(K, P.n);                                        // 'full' camera: the whole chart, drawn in place
   const head = Math.max(1, r), start = O.camera === 'full' ? 0 : Math.max(0, head - KK);
   const slot = pw / KK;
-  DOT_R = Math.max(22, Math.min(64, (slot / u) * 1.25));              // fill rounds ~2.5 candles wide
   const vis = []; for(let i = Math.max(0, Math.floor(start) - 1); i < Math.min(P.n, Math.ceil(head)); i++) vis.push(i);
   // y range over the visible candles (current one partially formed), padded
   const cur = (i) => {                                                 // candle i as drawn at this instant
@@ -347,13 +372,16 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
       const lp = pts[pts.length-1]; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(lp[0], lp[1], 8*u, 0, Math.PI*2); ctx.fill();   // live price (not a fill)
     }
   }
-  // fills that already happened: small ringed dots
+  // fills that already happened: fixed-size rounds; when two would overlap they are pushed apart
+  // (buys down, sells up) and a short leader keeps pointing at the exact fill
+  const shown = [];
   P.marks.forEach(m => {
     const i = P.cs.findIndex(c => m[0] < c[0] + P.iv); const ii = i < 0 ? P.n - 1 : i;
     if(r < ii + 0.99) return;
     const mc = (t.chart.src === 'pump' && m[2] > 0) ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
-    tradeDot(ctx, X(ii), Y(mc), u, m[1], DOT_R);
+    shown.push({ kind: m[1], ax: X(ii), ay: Y(mc) });
   });
+  drawFills(ctx, shown, u, DOT_R);
   ctx.restore();
   // live price line + multiplier vs buy
   const last = cur(Math.min(P.n - 1, full)), nowMc = last[4];
@@ -448,7 +476,7 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   ctx.lineTo(X(upto), bottom); ctx.lineTo(X(0), bottom); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
   ctx.beginPath(); ctx.moveTo(X(0), Y(closes[0])); for(let i = 1; i <= upto; i++) ctx.lineTo(X(i), Y(closes[i]));
   ctx.strokeStyle = col; ctx.lineWidth = 6*u; ctx.lineJoin = 'round'; ctx.shadowColor = col; ctx.shadowBlur = 24*u; ctx.stroke(); ctx.shadowBlur = 0;
-  [[P.ib, P.buyMc, 'b'], [P.is, P.sellMc, 's']].forEach(([i, mc, kind]) => { if(i <= upto) tradeDot(ctx, X(i), Y(mc), u, kind, 30); });
+  drawFills(ctx, [[P.ib, P.buyMc, 'b'], [P.is, P.sellMc, 's']].filter(([i]) => i <= upto).map(([i, mc, kind]) => ({ kind, ax: X(i), ay: Y(mc) })), u, DOT_R);
   ctx.restore();
   // stats
   const sa = easeOut(seg(k, 0.45, 0.65));

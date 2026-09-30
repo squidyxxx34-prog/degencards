@@ -221,7 +221,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
 function drawChart(ctx, t, x, y, w, h, p, u, opt){
   const ch = t.chart && t.chart.v === 2 ? t.chart : null;
   const topZone = 70*u;
-  let dotR = 22*u;                                              // markers row lives above the chart area (y - 70u)
+  const dotR = 22*u;                                                   // fill rounds: one fixed, readable size                                              // markers row lives above the chart area (y - 70u)
   const drawP = easeOut(seg(p, 0.16, 0.66));
   let X, Y, marks;
   if(ch){
@@ -232,7 +232,6 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     const pad = (y1-y0)*0.08; y0 -= pad; y1 += pad;
     X = v => x + ((v - x0)/(x1 - x0)) * w; Y = v => y + (1 - (v - y0)/(y1 - y0)) * h;
     const n = Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.66);
-    dotR = Math.max(18*u, Math.min(40*u, ((iv/(x1-x0)) * w) * 1.25));   // fill rounds ~2.5 candles wide
     for(let i=0;i<n;i++){
       const [ts,o,hi,lo,c] = cs[i], up = c >= o, col = up ? CANDLE_UP : CANDLE_DN, cxp = X(ts + iv/2);
       ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5*u, bw*0.14);
@@ -262,6 +261,15 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
   const gap = 64*u; pos.forEach((m,i)=>{ m.mx = m.x; if(i && m.mx - pos[i-1].mx < gap) m.mx = pos[i-1].mx + gap; });
   const over = Math.max(0, (pos.length ? pos[pos.length-1].mx : 0) - (x + w)); pos.forEach(m => m.mx -= over);
   const mr = 28*u, my = y - topZone + mr - 30*u;
+  // fill rounds that would overlap are pushed apart (buy down, sell up); a leader keeps pointing at the exact fill
+  pos.forEach(m => { m.dx = m.x; m.dy = m.y; });
+  const minD = 2*dotR + 6*u;
+  for(let pass = 0; pass < 8; pass++){ let mv = false;
+    for(let a = 0; a < pos.length; a++) for(let b = a+1; b < pos.length; b++){
+      const P1 = pos[a], Q = pos[b], d = Math.hypot(Q.dx-P1.dx, Q.dy-P1.dy); if(d >= minD) continue;
+      const need = (minD - d)/2 + 0.5, upM = P1.k==='s' && Q.k!=='s' ? P1 : Q.k==='s' && P1.k!=='s' ? Q : (P1.y <= Q.y ? P1 : Q), dnM = upM === P1 ? Q : P1;
+      upM.dy -= need; dnM.dy += need; mv = true; }
+    if(!mv) break; }
   pos.forEach((m, i) => {
     const k = easeOutBack(seg(p, 0.72 + i*0.05, 0.84 + i*0.05)); if(k <= 0) return;
     const col = m.k === 'b' ? CANDLE_UP : CANDLE_DN;
@@ -270,8 +278,11 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     ctx.strokeStyle = col; ctx.lineWidth = 3*u; ctx.setLineDash([10*u, 9*u]);
     ctx.beginPath(); ctx.moveTo(m.mx, my + mr); ctx.lineTo(m.mx + (m.x - m.mx)*clamp01(k), my + mr + (m.y - my - mr)*clamp01(k)); ctx.stroke(); ctx.setLineDash([]);
     // fill dot
-    if(k >= 1){ const dr = dotR; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(m.x, m.y, dr, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${dr * 1.1}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.k === 'b' ? 'B' : 'S', m.x, m.y + 1*u); ctx.textBaseline = 'alphabetic'; }
+    if(k >= 1){ const dr = dotR, fc = m.k === 'b' ? '#18C964' : '#FF3B4E';
+      if(Math.hypot(m.dx - m.x, m.dy - m.y) > 3*u){ ctx.strokeStyle = fc; ctx.lineWidth = 3*u; ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.dx, m.dy); ctx.stroke();
+        ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(m.x, m.y, 6*u, 0, Math.PI*2); ctx.fill(); }
+      ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(m.dx, m.dy, dr, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${dr * 1.1}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.k === 'b' ? 'B' : 'S', m.dx, m.dy + 1*u); ctx.textBaseline = 'alphabetic'; }
     // marker
     ctx.translate(m.mx, my); ctx.scale(k, k);
     ctx.shadowColor = hexA(col === CANDLE_UP ? '#18C964' : '#FF3B4E', 0.8); ctx.shadowBlur = 24*u;

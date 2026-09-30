@@ -318,8 +318,7 @@ function parseChart(c){
 const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFixed(1)+'M' : v>=1e3 ? (v/1e3).toFixed(1)+'K' : String(Math.round(v));
 /* B / S pinned at the top of the chart, a dashed drop line down to the exact fill point on the candles */
 const CH_TOP = 24;   // % of the chart height reserved for the markers
-function markersHtml(marks, X, Y, big, slotPct = 0){
-  const dPct = (2.5 * slotPct).toFixed(2);                              // fill rounds: about 2.5 candles wide (clamped in CSS)
+function markersHtml(marks, X, Y, big){
   const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
   // markers that would touch at the top: spread them sideways (B left, S right), the drop line stays on the real time
   const gap = big ? 4.5 : 8;
@@ -328,10 +327,27 @@ function markersHtml(marks, X, Y, big, slotPct = 0){
   const over = Math.max(0, sorted.length ? sorted[sorted.length-1].mx - 100 : 0);
   sorted.forEach(m=>{ m.mx = Math.max(0, m.mx - over); });
   const mkPx = big ? 20 : 16, hPx = big ? 170 : 66, mb = (mkPx / hPx) * 100;          // marker bottom, in % of height
-  const lines = pos.map(m=>`<line x1="${m.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${m.x.toFixed(2)}" y2="${m.y.toFixed(2)}" stroke="${m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
-  return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>` + pos.map(m=>`
-    <span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%;--d:${dPct}" aria-hidden="true">${m.kind==='b'?'B':'S'}</span>
-    <span class="mk mk-top mk-${m.kind}" style="left:${m.mx.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`).join('');
+  // fill rounds: one fixed size; if two would overlap, push them apart (buy down, sell up) in real pixels,
+  // a short leader + small anchor keep pointing at the exact fill
+  const bw = big ? 520 : 170, bh = hPx, D = big ? 22 : 16, minD = D + 3;
+  const pts = pos.map(m=>({ m, ax: m.x/100*bw, ay: m.y/100*bh, x: m.x/100*bw, y: m.y/100*bh }));
+  for(let pass = 0; pass < 8; pass++){
+    let moved = false;
+    for(let i = 0; i < pts.length; i++) for(let j = i+1; j < pts.length; j++){
+      const p = pts[i], q = pts[j], d = Math.hypot(q.x-p.x, q.y-p.y); if(d >= minD) continue;
+      const need = (minD - d)/2 + 0.3;
+      const up = p.m.kind==='s' && q.m.kind!=='s' ? p : q.m.kind==='s' && p.m.kind!=='s' ? q : (p.ay <= q.ay ? p : q), dn = up === p ? q : p;
+      up.y -= need; dn.y += need; moved = true;
+    }
+    if(!moved) break;
+  }
+  pts.forEach(p=>{ p.dx = p.x/bw*100; p.dy = Math.max(-20, Math.min(120, p.y/bh*100)); p.off = Math.hypot(p.x-p.ax, p.y-p.ay) > 2; });
+  const lines = pos.map(m=>`<line x1="${m.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${m.x.toFixed(2)}" y2="${m.y.toFixed(2)}" stroke="${m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('')
+    + pts.filter(p=>p.off).map(p=>`<line x1="${p.m.x.toFixed(2)}" y1="${p.m.y.toFixed(2)}" x2="${p.dx.toFixed(2)}" y2="${p.dy.toFixed(2)}" stroke="${p.m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="2" vector-effect="non-scaling-stroke"/>`).join('');
+  return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>` + pts.map(p=>`
+    ${p.off ? `<span class="mk-anchor mk-${p.m.kind}" style="left:${p.m.x.toFixed(2)}%;top:${p.m.y.toFixed(2)}%"></span>` : ''}
+    <span class="mk-dot mk-${p.m.kind}" style="left:${p.dx.toFixed(2)}%;top:${p.dy.toFixed(2)}%" aria-hidden="true">${p.m.kind==='b'?'B':'S'}</span>
+    <span class="mk mk-top mk-${p.m.kind}" style="left:${p.m.mx.toFixed(2)}%">${p.m.kind==='b'?'B':'S'}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */
@@ -358,7 +374,7 @@ function miniChart(t, big){
     const marks = ch.m.map(m=>[m[0], m[1], ch.src==='pump' && m[2] > 0 ? m[2] : at(m[0])]);   // pump: exact fill price
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
-      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big, (iv/(x1-x0))*100)}${labels}</div>`;
+      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
   }
   if(t.mint && chartState(t) === 'loading'){                        // loading: animated skeleton candles, not a fake line
     const n = big ? 26 : 16, bars = Array.from({length:n}, (_,i)=>{ const h = 18 + 30*Math.abs(Math.sin(i*1.7 + t.tradeId)); return `<i style="height:${h.toFixed(0)}%;animation-delay:${(i*60)}ms"></i>`; }).join('');

@@ -534,3 +534,9 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .chartbox{container-type:inline-size;}
 .mk-dot{--d:0;width:clamp(15px, calc(var(--d) * 1cqw), 30px) !important;height:clamp(15px, calc(var(--d) * 1cqw), 30px) !important;font-size:clamp(8.5px, calc(var(--d) * 0.55cqw), 16px) !important;z-index:2;}
 .chartbox.big .mk-dot{width:clamp(20px, calc(var(--d) * 1cqw), 44px) !important;height:clamp(20px, calc(var(--d) * 1cqw), 44px) !important;font-size:clamp(11px, calc(var(--d) * 0.55cqw), 23px) !important;}
+/* fill rounds: one fixed, readable size (overlaps are resolved in JS) */
+.mk-dot{width:16px !important;height:16px !important;font-size:9px !important;z-index:3;}
+.chartbox.big .mk-dot{width:22px !important;height:22px !important;font-size:12px !important;}
+.mk-anchor{position:absolute;width:6px;height:6px;border-radius:50%;transform:translate(-50%,-50%);z-index:2;box-shadow:0 0 0 1.5px rgba(5,7,10,.85);}
+.mk-anchor.mk-b{background:#18c964;} .mk-anchor.mk-s{background:#ff3b4e;}
+.chartbox.big .mk-anchor{width:8px;height:8px;}
