@@ -68,7 +68,7 @@ function prep(t){
   const ch = t.chart;
   // sparse data: one candle per move between two consecutive REAL prices (open = previous real price, close = this one)
   let cs = ch.c, iv = ch.i;
-  if(ch.sparse && ch.pts && ch.pts.length >= 2){
+  if(false){
     const p = ch.pts; iv = Math.max(1000, (p[p.length-1][0] - p[0][0]) / Math.max(1, p.length - 1));
     cs = p.slice(1).map((q,i)=>[p[i][0], p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
   }

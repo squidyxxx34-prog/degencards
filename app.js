@@ -403,7 +403,16 @@ function parseChart(c){
     const hi = Math.max(...cs.map(x=>x[2])), lo = Math.min(...cs.map(x=>x[3]));
     const miss = m.some(x=>x[2] > 0 && (x[2] > hi*1.3 || x[2] < lo/1.3));
     const sparse = cl.length > 0 && cl.real.length >= 2 && (miss || (cl.length > 6 && cl.fillers / cl.length > 0.35));
-    return cl.length ? { v:2, c:dn.c, m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
+    if(sparse){                                                       // tick candles: one candle per move between two consecutive REAL
+      const p = cl.real.filter((q,i,arr)=>!i || q[0] > arr[i-1][0] || q[1] !== arr[i-1][1]), T = 1000;   // prices, evenly spaced (no
+      if(p.length >= 2){                                               // gap, no flat stretch); fills mapped onto the same axis
+        const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
+        const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
+        const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = densify(tc, T);
+        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: tc.length };
+      }
+    }
+    return cl.length ? { v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -435,13 +444,13 @@ function miniChart(t, big){
     const cs = ch.c, iv = ch.i;
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
     if(x1 <= x0) x1 = x0 + iv;
-    const ys = ch.sparse ? [...ch.pts.map(p=>p[1]), ...ch.m.map(m=>m[2]).filter(v=>v>0)] : [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
+    const ys =  [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
     const bw = Math.max(0.5, Math.min((iv/(x1-x0))*100*0.78, big ? 3.2 : 4.5));   // few candles: thin bodies, not blocks
-    const body = ch.sparse ? '' : cs.map(([ts,o,hi,lo,c])=>{
+    const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
       return `<line x1="${cx.toFixed(2)}" x2="${cx.toFixed(2)}" y1="${Y(hi).toFixed(2)}" y2="${Y(lo).toFixed(2)}" stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"/>`+
@@ -452,13 +461,13 @@ function miniChart(t, big){
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     // modern look: faint grid, a glowing area under the price, last-price line
     const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#18c964' : '#ff3b4e', gid = 'g' + Math.random().toString(36).slice(2,8);
-    const lp = ch.sparse ? ch.pts : cs.map(c=>[c[0]+iv/2, c[4]]);
+    const lp = cs.map(c=>[c[0]+iv/2, c[4]]);
     const line = lp.map(p=>`${X(p[0]).toFixed(2)},${Y(p[1]).toFixed(2)}`).join(' ');
     const area = `<polygon points="${X(lp[0][0]).toFixed(2)},100 ${line} ${X(lp[lp.length-1][0]).toFixed(2)},100" fill="url(#${gid})"/>`;
     const grid = [0.25,0.5,0.75].map(f=>{ const y = (CH_TOP + f*(100-CH_TOP)).toFixed(2); return `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
     const lastY = Y(lp[lp.length-1][1]).toFixed(2);
     const deco = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity=".22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>${grid}${area}
-      <polyline points="${line}" fill="none" stroke="${tone}" stroke-opacity="${ch.sparse ? 1 : .35}" stroke-width="${ch.sparse ? 2 : 1}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      <polyline points="${line}" fill="none" stroke="${tone}" stroke-opacity=".35" stroke-width="1" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <line x1="0" x2="100" y1="${lastY}" y2="${lastY}" stroke="${tone}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`;
     return `<div class="chartbox modern ${big?'big':''}" style="height:${h}px">
       <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${deco}${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
@@ -1475,7 +1484,7 @@ function openDetail(id, refresh){
   const same = all.filter(x=> t.mint ? x.mint === t.mint : x.ticker === t.ticker);
   const sameTotal = same.reduce((s,x)=>s+x.pnl, 0);
   // fills: exact ones from the chart when available
-  const fills = (t.chart?.src === 'pump' && t.chart.m?.length ? t.chart.m.map(m=>[m[0], m[1], m[2]])
+  const fills = (t.chart?.src === 'pump' && t.chart.m0?.length ? t.chart.m0.map(m=>[m[0], m[1], m[2]])
                : t.legs?.length ? t.legs.map(l=>[+l[0], l[1], +l[2]])
                : [[opened,'b',t.entryMc],[t.timestamp,'s',t.exitMc]]).sort((a,b)=>a[0]-b[0]);
   const f0 = fills.length ? fills[0][0] : opened;
