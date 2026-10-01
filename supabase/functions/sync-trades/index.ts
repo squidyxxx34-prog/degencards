@@ -655,7 +655,7 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
     }
   }
   let all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
-  const N = HELIUS ? 200 : 60;
+  const N = HELIUS ? 90 : 60;                                       // Helius free = 10 req/s: 90 reads ≈ 9 s
   if (all.length > N) { const k = all.length / N; all = Array.from({ length: N }, (_, i) => all[Math.floor(i * k)]); }   // even sample: plenty for ~50 candles
   // read order: coarse-to-fine across the whole window (every 8th, then every 4th…), fills' neighbourhood first,
   // so if the RPC is slow and time runs out, the chart still spans the whole window
@@ -679,9 +679,10 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   };
   const pts: { ts: number; px: number }[] = [];
   if (HELIUS) {
-    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 25) {   // Helius: 25 reads at once
-      const chunk = order.slice(i, i + 25).map((k) => all[k]);
+    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 9) {    // Helius free plan: 10 req/s, so 9 reads per second
+      const chunk = order.slice(i, i + 9).map((k) => all[k]), tc = Date.now();
       const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
+      const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
       txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) pts.push({ ts: chunk[j][1], px }); });
     }
   } else {
