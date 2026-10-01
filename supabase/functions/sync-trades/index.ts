@@ -584,6 +584,7 @@ function poolPrice(tx: any, mint: string, solUsd: number): number {
   return best;
 }
 async function buildChainChart(t: any, deadline: number): Promise<boolean> {
+  const tStart = Date.now();
   const legTs = Array.isArray(t.legs) ? t.legs.map((l: any) => Number(l[0])).filter(Number.isFinite) : [];
   const end = legTs.length ? Math.max(...legTs) : Number(t.timestamp_ms), start = legTs.length ? Math.min(...legTs) : end - Number(t.hold_time) * 1000;
   const t0 = start - 120_000, t1 = end + 120_000;
@@ -621,6 +622,8 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   // swaps just before the buy, between buy and sell, and just after the sell — 2-3 pages, however busy the coin is now
   const wallet = String(t.ext_id || "").split(":")[0];
   let sellSig = "";
+  const vault = anchors[0]?.acct;
+  const beforeBuy = vault && buySig ? getSigs(vault, { before: buySig }) : Promise.resolve([]);   // runs while we look for the sell
   if (wallet && B58.test(wallet)) {
     let before: string | undefined;
     for (let page = 0; page < 6 && !sellSig; page++) {
@@ -631,14 +634,11 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
       before = list[list.length - 1].signature;
     }
   }
-  const vault = anchors[0]?.acct;
   if (vault && buySig) {
-    keep(await getSigs(vault, { before: buySig }));                                   // before the buy (stops at t0)
-    if (sellSig) keep(await getSigs(vault, { before: sellSig, until: buySig }));     // during the trade
-    if (sellSig) {                                                                   // after the sell: only if the pool's recent history reaches back that far
-      const list = await getSigs(vault, { until: sellSig });
-      if (list.length < 1000) keep(list);
-    }
+    const [pre, during, after] = await Promise.all([beforeBuy,                      // before the buy (stops at t0)
+      sellSig ? getSigs(vault, { before: sellSig, until: buySig }) : Promise.resolve([]),   // during the trade
+      sellSig ? getSigs(vault, { until: sellSig }) : Promise.resolve([])]);             // after the sell
+    keep(pre); keep(during); if (after.length < 1000) keep(after);                  // after: only if recent history reaches back that far
     sigs.set(buySig, start); if (sellSig) sigs.set(sellSig, end);
   }
   if (sigs.size < 10) {                                                              // no anchor (old data): plain backwards paging on the listed pools
@@ -679,8 +679,8 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   };
   const pts: { ts: number; px: number }[] = [];
   if (HELIUS) {
-    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 8) {
-      const chunk = order.slice(i, i + 8).map((k) => all[k]);
+    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 25) {   // Helius: 25 reads at once
+      const chunk = order.slice(i, i + 25).map((k) => all[k]);
       const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
       txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) pts.push({ ts: chunk[j][1], px }); });
     }
@@ -707,6 +707,7 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   const marks = (Array.isArray(t.legs) ? t.legs : []).map((l: any) => [Number(l[0]), l[1], round(Number(l[2]) || 0)]).slice(0, 20);
   const chart = { v: 2, src: "chain", q: 2, i: bms, w: [a, b + bms], c: candles.map((c) => [c[0], round(c[1]), round(c[2]), round(c[3]), round(c[4])]), m: marks };
   const { error } = await db.from("trades").update({ chart }).eq("id", t.id);
+  console.log(`chain chart ${t.id} helius=${!!HELIUS} reads=${all.length} pts=${pts.length} candles=${candles.length} ${Date.now() - tStart}ms`);
   return !error;
 }
 
