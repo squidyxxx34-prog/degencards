@@ -1227,8 +1227,10 @@ function gtGet(path){                                                   // one r
   };
   const p = gtChain.then(run, run); gtChain = p.catch(()=>{}); return p;
 }
-function chartTries(id){ try{ return Number(localStorage.getItem('dc_ct_'+id)||0); }catch(e){ return 0; } }
-function bumpTries(id){ try{ localStorage.setItem('dc_ct_'+id, String(chartTries(id)+1)); }catch(e){} }
+/* failed chart attempts per trade, per device: they expire after 6 h (a source can be down or rate-limited for a while,
+   the chart must still come back later instead of being given up for good) */
+function chartTries(id){ try{ const v = JSON.parse(localStorage.getItem('dc_ct3_'+id)||'null'); return v && Date.now() - v.at < 6*3600e3 ? v.n : 0; }catch(e){ return 0; } }
+function bumpTries(id){ try{ localStorage.setItem('dc_ct3_'+id, JSON.stringify({ n: chartTries(id)+1, at: Date.now() })); }catch(e){} }
 const gtPools = new Map();
 async function buildOneInBrowser(t){
   const end = t.timestamp, start = end - (t.holdTime||0)*1000;
@@ -1237,7 +1239,7 @@ async function buildOneInBrowser(t){
   const ts = marks.map(m=>m[0]);
   const t0 = Math.min(...ts) - 120000, t1 = Math.max(...ts) + 120000;
   if(!gtPools.has(t.mint)){
-    try{ const c = JSON.parse(localStorage.getItem('dc_gtp_'+t.mint)||'null'); if(c && Date.now()-c.at < 7*864e5) gtPools.set(t.mint, c.p); }catch(e){}
+    try{ const c = JSON.parse(localStorage.getItem('dc_gtp_'+t.mint)||'null'); if(c && c.p && c.p.length && Date.now()-c.at < 7*864e5) gtPools.set(t.mint, c.p); }catch(e){}
   }
   if(!gtPools.has(t.mint)){
     const j = await gtGet(`/tokens/${t.mint}/pools?page=1`);
@@ -1246,10 +1248,13 @@ async function buildOneInBrowser(t){
       const baseIsMint = String(p.relationships?.base_token?.data?.id||'').endsWith(t.mint);
       return { addr:a.address, created: Date.parse(a.pool_created_at||'')||0, supply: baseIsMint && price>0 && fdv>0 ? fdv/price : 0 };
     }));
-    try{ localStorage.setItem('dc_gtp_'+t.mint, JSON.stringify({ at:Date.now(), p:gtPools.get(t.mint) })); }catch(e){}
+    if(gtPools.get(t.mint).length){ try{ localStorage.setItem('dc_gtp_'+t.mint, JSON.stringify({ at:Date.now(), p:gtPools.get(t.mint) })); }catch(e){} }
+    else gtPools.delete(t.mint);                                        // not indexed yet: ask again next time, never cache "no pool"
   }
-  const list = gtPools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
-  const supply = (gtPools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
+  const pools = gtPools.get(t.mint) || [];
+  if(!pools.length){ bumpTries(t.id); return false; }
+  const list = pools.filter(p=>!p.created || p.created <= t1).slice(0,3);
+  const supply = (pools.find(p=>p.supply>0)||{}).supply || 0;
   // 1) recent trade: rebuild second-level candles from the pool's real trades (GeckoTerminal keeps the last 300)
   if(false){                                                          // one style for every chart: minute candles below
     for(const p of list){
@@ -1377,7 +1382,8 @@ async function ensureChart(t){
   chartInFlight.add(t.id);
   let ok = false;
   try{
-    ok = await buildOneInBrowser(t);                                   // the reference style: GeckoTerminal minute candles around the trade
+    try{ ok = await buildOneInBrowser(t); }                            // the reference style: GeckoTerminal minute candles around the trade
+    catch(e){ if(String(e.message) !== '429') throw e; await new Promise(r=>setTimeout(r, 21000)); ok = await buildOneInBrowser(t); }   // rate limit: wait, retry once
     if(!ok && (!t.chart || t.chart.sparse)){                           // not on GeckoTerminal: real candles built server-side (pump.fun feed / chain)
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
       if(data?.charts){
@@ -1476,7 +1482,7 @@ const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
 const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
-const styled = ch => !!(ch && ch.v === 2 && ch.src === 'gt' && ch.q === 3 && !ch.sparse);
+const styled = ch => !!(ch && ch.v === 2 && ch.src === 'gt' && ch.q === 3);
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && (!styled(t.chart) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
