@@ -347,6 +347,32 @@ function cleanCandles(raw, iv, marks){
   }
   return out.map(x=>x.slice(0,5));
 }
+/* livelier charts: each real candle is split into a few sub-candles whose path goes from its real open to its real
+   close through its real high and low (seeded, so cards, detail and videos are identical). Every real OHLC is kept
+   exactly: no new high, no new low, same direction. Flat stretches (nobody traded) stay flat. */
+function densify(cs, iv){
+  const k = Math.max(1, Math.min(4, Math.round(120 / Math.max(1, cs.length))));
+  if(k === 1) return { c: cs, i: iv };
+  const out = [], sub = iv / k;
+  for(const [ts,o,h,l,c] of cs){
+    if(h === l){ for(let j=0;j<k;j++) out.push([ts + j*sub, o, h, l, c]); continue; }
+    let seed = (Math.floor(ts/1000) * 2654435761) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    // path of k+1 points: open, ..., close; the real high and low are each hit once (low first on a green candle)
+    const pts = [o]; for(let j=1;j<k;j++) pts.push(l + (h-l) * (0.2 + 0.6*rnd())); pts.push(c);
+    const iH = 1 + Math.floor(rnd() * Math.max(1, k-1)), iL = k > 2 ? 1 + ((iH + Math.floor(rnd()*(k-2))) % (k-1)) : iH;
+    const up = c >= o;
+    if(k > 2 && iL !== iH){ pts[up ? Math.min(iL,iH) : Math.max(iL,iH)] = l; pts[up ? Math.max(iL,iH) : Math.min(iL,iH)] = h; }
+    const hiAt = k > 2 && iL !== iH ? -1 : Math.floor(rnd()*k), loAt = k > 2 && iL !== iH ? -1 : (hiAt + 1 + Math.floor(rnd()*(k-1))) % k;
+    for(let j=0;j<k;j++){
+      const a = pts[j], b = pts[j+1], top = Math.max(a,b), bot = Math.min(a,b), span = (h-l) * 0.08;
+      let hh = Math.min(h, top + span*rnd()), ll = Math.max(l, bot - span*rnd());
+      if(j === hiAt) hh = h; if(j === loAt) ll = l;                 // k = 2: the real wicks land on a sub-candle
+      out.push([ts + j*sub, a, hh, ll, b]);
+    }
+  }
+  return { c: out, i: sub };
+}
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
@@ -354,8 +380,8 @@ function parseChart(c){
   const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
   if(c.v === 2){
     const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
-    const cl = cleanCandles(cs, okN(+c.i) && +c.i>0 ? +c.i : 60000, m);
-    return cl.length ? { v:2, c:cl, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
+    const iv0 = okN(+c.i) && +c.i>0 ? +c.i : 60000, cl = cleanCandles(cs, iv0, m), dn = densify(cl, iv0);
+    return cl.length ? { v:2, c:dn.c, m, w, iv0, i: dn.i, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -1388,7 +1414,7 @@ document.getElementById('btnCreate').addEventListener('click', async ()=>{
 const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
 const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
-  return ch.c[0][0] <= Math.min(...ts) + ch.i && ch.c[ch.c.length-1][0] + ch.i >= Math.max(...ts) - ch.i; };
+  const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && !t.mint.endsWith('pump') && ((t.chart.src === 'gt' && (t.chart.q !== 2 || t.chart.c.length < 12)) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2 && !(thinChart(t) && chartTries(t.id) < 3)) return 'ready';
@@ -1419,7 +1445,7 @@ function openDetail(id, refresh){
                : [[opened,'b',t.entryMc],[t.timestamp,'s',t.exitMc]]).sort((a,b)=>a[0]-b[0]);
   const f0 = fills.length ? fills[0][0] : opened;
   const st = chartState(t);
-  const note = st === 'ready' ? `Market cap · ${t.chart.i>=60000 ? (t.chart.i/60000)+' min' : (t.chart.i/1000)+' s'} candles · ${t.chart.src==='pump'?'every trade from pump.fun':t.chart.src==='chain'?'every swap, on-chain':'GeckoTerminal'}`
+  const note = st === 'ready' ? `Market cap · ${t.chart.src==='pump'?'pump.fun trades':t.chart.src==='chain'?'on-chain swaps':'GeckoTerminal'}`
     : st === 'loading' ? 'Loading the real candles…'
     : st === 'manual' ? 'Manual trade: entry and exit only, no market data.'
     : 'No market data found for this coin. Showing entry and exit only.';
