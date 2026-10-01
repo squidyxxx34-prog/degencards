@@ -240,7 +240,7 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
       ctx.fillStyle = col; ctx.fillRect(cxp - bw/2, top, bw, Math.max(2*u, bot - top));
     }
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
-    marks = (ch.m || []).map(m => [m[0], m[1], ch.src === 'pump' && m[2] > 0 ? m[2] : at(m[0])]);
+    marks = (ch.m || []).map(m => [m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);
     // MC scale
     ctx.font = `600 ${22*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.textAlign = 'left';
     ctx.fillText(mcShort(y1 - pad), x, y + 4*u); ctx.fillText(mcShort(Math.max(0, y0 + pad)), x, y + h);

@@ -583,6 +583,13 @@ function poolPrice(tx: any, mint: string, solUsd: number): number {
   }
   return best;
 }
+/* a chart must span the trade: first candle at or before the first fill, last candle at or after the last one */
+function covers(t: any): boolean {
+  const c = t.chart?.c, iv = Number(t.chart?.i) || 60000;
+  const legTs = Array.isArray(t.legs) ? t.legs.map((l: any) => Number(l[0])).filter(Number.isFinite) : [];
+  if (!Array.isArray(c) || !c.length || !legTs.length) return true;
+  return Number(c[0][0]) <= Math.min(...legTs) + iv && Number(c[c.length - 1][0]) + iv >= Math.max(...legTs) - iv;
+}
 async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   const tStart = Date.now();
   const legTs = Array.isArray(t.legs) ? t.legs.map((l: any) => Number(l[0])).filter(Number.isFinite) : [];
@@ -623,7 +630,17 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   const wallet = String(t.ext_id || "").split(":")[0];
   let sellSig = "";
   const vault = anchors[0]?.acct;
-  const beforeBuy = vault && buySig ? getSigs(vault, { before: buySig }) : Promise.resolve([]);   // runs while we look for the sell
+  const pages = async (acct: string, opts: any, max: number, stopTs = 0): Promise<any[]> => {   // follow the history until it's covered
+    const out: any[] = []; let cur = opts.before;
+    for (let p = 0; p < max; p++) {
+      const list = await getSigs(acct, { ...opts, ...(cur ? { before: cur } : {}) });
+      out.push(...list);
+      if (list.length < 1000 || (stopTs && (list[list.length - 1].blockTime || 0) * 1000 < stopTs)) break;
+      cur = list[list.length - 1].signature;
+    }
+    return out;
+  };
+  const beforeBuy = vault && buySig ? pages(vault, { before: buySig }, 4, t0) : Promise.resolve([]);   // runs while we look for the sell
   if (wallet && B58.test(wallet)) {
     let before: string | undefined;
     for (let page = 0; page < 6 && !sellSig; page++) {
@@ -636,7 +653,7 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   }
   if (vault && buySig) {
     const [pre, during, after] = await Promise.all([beforeBuy,                      // before the buy (stops at t0)
-      sellSig ? getSigs(vault, { before: sellSig, until: buySig }) : Promise.resolve([]),   // during the trade
+      sellSig ? pages(vault, { before: sellSig, until: buySig }, 12) : Promise.resolve([]),   // during the trade (every page up to the buy)
       sellSig ? getSigs(vault, { until: sellSig }) : Promise.resolve([])]);             // after the sell
     keep(pre); keep(during); if (after.length < 1000) keep(after);                  // after: only if recent history reaches back that far
     sigs.set(buySig, start); if (sellSig) sigs.set(sellSig, end);
@@ -831,8 +848,8 @@ Deno.serve(async (req) => {
         const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x)).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
         let q = db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries").not("mint", "is", null)
           .not("mint", "like", "%pump").is("deleted_at", null).lt("chart_tries", 3).lt("timestamp_ms", Date.now() - 150_000)
-          .or("chart.is.null,chart->>q.is.null,chart->>q.eq.1").order("timestamp_ms", { ascending: false }).limit(6);
-        q = ids.length ? q.in("id", ids) : q.gt("timestamp_ms", Date.now() - 7 * 864e5);     // recent trades first (older ones: when their card is opened)
+          .order("timestamp_ms", { ascending: false }).limit(ids.length || 6);
+        q = ids.length ? q.in("id", ids) : q.or("chart.is.null,chart->>q.is.null,chart->>q.eq.1").gt("timestamp_ms", Date.now() - 7 * 864e5);     // recent trades first (older ones: when their card is opened)
         const { data: rows } = await q;
         for (const t of rows || []) {
           if (Date.now() > deadline - 30_000) break;                    // as many as fit in this pass
@@ -869,7 +886,7 @@ Deno.serve(async (req) => {
         const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", ids).not("mint", "is", null);
         for (const t of rows || []) {
           if (Date.now() > dl - 15_000) break;
-          const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.q !== 2 || (t.chart?.c?.length || 0) < 12));
+          const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.q !== 2 || (t.chart?.c?.length || 0) < 12)) || !covers(t);
           if (!weak || String(t.mint).endsWith("pump")) continue;
           if (await buildChainChart(t, dl)) charts++;
         }

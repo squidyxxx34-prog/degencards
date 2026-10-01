@@ -70,7 +70,7 @@ function prep(t){
   const idxOf = ts => { let k = cs.findIndex(c => ts < c[0] + iv); return k < 0 ? cs.length - 1 : k; };
   const buys = marks.filter(m=>m[1]==='b'), sells = marks.filter(m=>m[1]==='s');
   const at = ts => { const c = cs[idxOf(ts)]; return (c[2]+c[3])/2; };
-  const mcOf = m => (ch.src === 'pump' && m[2] > 0) ? m[2] : at(m[0]);
+  const mcOf = m => m[2] > 0 ? m[2] : at(m[0]);
   const bm = buys[0] || [t.timestamp - t.holdTime*1000, 'b', t.entryMc];
   const sm = sells[sells.length-1] || [t.timestamp, 's', t.exitMc];
   const ib = idxOf(bm[0]), is = Math.max(ib, idxOf(sm[0]));
@@ -378,7 +378,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   P.marks.forEach(m => {
     const i = P.cs.findIndex(c => m[0] < c[0] + P.iv); const ii = i < 0 ? P.n - 1 : i;
     if(r < ii + 0.99) return;
-    const mc = (t.chart.src === 'pump' && m[2] > 0) ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
+    const mc = m[2] > 0 ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
     shown.push({ kind: m[1], ax: X(ii), ay: Y(mc) });
   });
   drawFills(ctx, shown, u, DOT_R);

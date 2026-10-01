@@ -399,7 +399,7 @@ function miniChart(t, big){
              `<rect x="${(cx-bw/2).toFixed(2)}" y="${top.toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(0.8, bot-top).toFixed(2)}" fill="${col}"/>`;
     }).join('');
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
-    const marks = ch.m.map(m=>[m[0], m[1], ch.src==='pump' && m[2] > 0 ? m[2] : at(m[0])]);   // pump: exact fill price
+    const marks = ch.m.map(m=>[m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);   // the wallet's own fill: exact market cap
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
       <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
@@ -1386,7 +1386,9 @@ document.getElementById('btnCreate').addEventListener('click', async ()=>{
 /* ---------- detail modal ---------- */
 const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
-const thinChart = t => !!(t.chart && t.chart.v === 2 && t.chart.src === 'gt' && t.mint && !t.mint.endsWith('pump') && (t.chart.q !== 2 || t.chart.c.length < 12));
+const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
+  return ch.c[0][0] <= Math.min(...ts) + ch.i && ch.c[ch.c.length-1][0] + ch.i >= Math.max(...ts) - ch.i; };
+const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && !t.mint.endsWith('pump') && ((t.chart.src === 'gt' && (t.chart.q !== 2 || t.chart.c.length < 12)) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2 && !(thinChart(t) && chartTries(t.id) < 3)) return 'ready';
   if(!t.mint) return 'manual';
