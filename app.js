@@ -343,6 +343,7 @@ function cleanCandles(raw, iv, marks){
     const hiCap = Math.max(bt*1.5, nt*1.1, ...fHere), loCap = Math.min(bb/1.5, nb/1.1, ...fHere);
     x[2] = pos(x[2]) ? Math.min(Math.max(x[2], bt), hiCap) : bt;
     x[3] = pos(x[3]) ? Math.max(Math.min(x[3], bb), loCap) : bb;
+    if(fHere.length){ x[2] = Math.max(x[2], ...fHere); x[3] = Math.min(x[3], ...fHere); }   // the wallet's own fill always sits on its candle
   }
   return out.map(x=>x.slice(0,5));
 }
