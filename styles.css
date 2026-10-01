@@ -543,3 +543,6 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 /* in-app chart: the fill is a small white dot ringed in its color (lettered rounds only at the top) */
 .chartbox .mk-dot{width:9px !important;height:9px !important;background:#fff !important;border:2.5px solid var(--dotc) !important;box-shadow:0 0 0 1.5px rgba(5,7,10,.85) !important;font-size:0 !important;z-index:3;}
 .chartbox.big .mk-dot{width:12px !important;height:12px !important;}
+/* modern chart: soft card background, glowing candles */
+.chartbox.modern{background:radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.035), transparent 70%);border-radius:12px;}
+.chartbox.modern svg.cs{filter:drop-shadow(0 0 4px rgba(24,201,100,.10));}

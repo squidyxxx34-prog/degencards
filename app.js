@@ -428,8 +428,17 @@ function miniChart(t, big){
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
     const marks = ch.m.map(m=>[m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);   // the wallet's own fill: exact market cap
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
-    return `<div class="chartbox ${big?'big':''}" style="height:${h}px">
-      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
+    // modern look: faint grid, a glowing area under the price, last-price line
+    const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#18c964' : '#ff3b4e', gid = 'g' + Math.random().toString(36).slice(2,8);
+    const line = cs.map(c=>`${X(c[0]+iv/2).toFixed(2)},${Y(c[4]).toFixed(2)}`).join(' ');
+    const area = `<polygon points="${X(cs[0][0]+iv/2).toFixed(2)},100 ${line} ${X(cs[cs.length-1][0]+iv/2).toFixed(2)},100" fill="url(#${gid})"/>`;
+    const grid = [0.25,0.5,0.75].map(f=>{ const y = (CH_TOP + f*(100-CH_TOP)).toFixed(2); return `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
+    const lastY = Y(cs[cs.length-1][4]).toFixed(2);
+    const deco = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity=".22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>${grid}${area}
+      <polyline points="${line}" fill="none" stroke="${tone}" stroke-opacity=".35" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <line x1="0" x2="100" y1="${lastY}" y2="${lastY}" stroke="${tone}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`;
+    return `<div class="chartbox modern ${big?'big':''}" style="height:${h}px">
+      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${deco}${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
   }
   if(t.mint && chartState(t) === 'loading'){                        // loading: animated skeleton candles, not a fake line
     const n = big ? 26 : 16, bars = Array.from({length:n}, (_,i)=>{ const h = 18 + 30*Math.abs(Math.sin(i*1.7 + t.tradeId)); return `<i style="height:${h.toFixed(0)}%;animation-delay:${(i*60)}ms"></i>`; }).join('');

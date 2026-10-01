@@ -671,15 +671,7 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
       if (sigs.size > 40) break;
     }
   }
-  let all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
-  const N = HELIUS ? 90 : 60;                                       // Helius free = 10 req/s: 90 reads ≈ 9 s
-  if (all.length > N) { const k = all.length / N; all = Array.from({ length: N }, (_, i) => all[Math.floor(i * k)]); }   // even sample: plenty for ~50 candles
-  // read order: coarse-to-fine across the whole window (every 8th, then every 4th…), fills' neighbourhood first,
-  // so if the RPC is slow and time runs out, the chart still spans the whole window
-  const near = (ts: number) => legTs.some((x: number) => Math.abs(x - ts) < 8_000);
-  const order: number[] = [];
-  all.forEach((x, i) => { if (near(x[1])) order.push(i); });
-  for (const step of [8, 4, 2, 1]) for (let i = 0; i < all.length; i += step) if (!order.includes(i)) order.push(i);
+  const all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
   // the public RPC allows ~4 reads/s: pace them (Helius: parallel). Each read retried with backoff instead of dropped.
   const readTx = async (sig: string) => {
     for (let k = 0; k < 4; k++) {
@@ -695,20 +687,43 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
     return null;
   };
   const pts: { ts: number; px: number }[] = [];
-  if (HELIUS) {
-    for (let i = 0; i < order.length && Date.now() < deadline - 4_000; i += 9) {    // Helius free plan: 10 req/s, so 9 reads per second
-      const chunk = order.slice(i, i + 9).map((k) => all[k]), tc = Date.now();
-      const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
-      const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
-      txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) pts.push({ ts: chunk[j][1], px }); });
+  const readMany = async (list: [string, number][]) => {             // returns the sigs that gave a price
+    const ok = new Set<string>();
+    if (HELIUS) {
+      for (let i = 0; i < list.length && Date.now() < deadline - 4_000; i += 9) {   // Helius free plan: 10 req/s, so 9 reads per second
+        const chunk = list.slice(i, i + 9), tc = Date.now();
+        const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
+        const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
+        txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) { pts.push({ ts: chunk[j][1], px }); ok.add(chunk[j][0]); } });
+      }
+    } else {
+      for (const [sig, ts] of list) {
+        if (Date.now() > deadline - 4_000) break;
+        const t0r = Date.now();
+        const px = poolPrice(await readTx(sig), t.mint, solUsdAt(ts)); if (px > 0) { pts.push({ ts, px }); ok.add(sig); }
+        const wait = 280 - (Date.now() - t0r); if (wait > 0) await sleep(wait);
+      }
     }
-  } else {
-    for (const k of order) {
-      if (Date.now() > deadline - 4_000) break;
-      const [sig, ts] = all[k], t0r = Date.now();
-      const px = poolPrice(await readTx(sig), t.mint, solUsdAt(ts)); if (px > 0) pts.push({ ts, px });
-      const wait = 280 - (Date.now() - t0r); if (wait > 0) await sleep(wait);
-    }
+    return ok;
+  };
+  // sample by TIME, not by count: the window is cut in slots and every slot gets a real swap price, so no stretch of the
+  // chart is left without data where people actually traded. Slots whose first pick wasn't a swap get another try.
+  const NB = HELIUS ? 64 : 32, span = Math.max(1, t1 - t0);
+  const slots: [string, number][][] = Array.from({ length: NB }, () => []);
+  for (const e of all) slots[Math.min(NB - 1, Math.max(0, Math.floor(((e[1] - t0) / span) * NB)))].push(e);
+  const priced = new Array(NB).fill(false), tried = new Set<string>();
+  const fills = all.filter((e) => e[0] === buySig || e[0] === sellSig);
+  for (let round = 0; round < (HELIUS ? 3 : 2) && Date.now() < deadline - 6_000; round++) {
+    const pick: [string, number][] = round === 0 ? [...fills] : [];
+    slots.forEach((sl, i) => {
+      if (priced[i] || !sl.length) return;
+      const cand = sl.filter((e) => !tried.has(e[0])); if (!cand.length) return;
+      pick.push(cand[Math.floor(cand.length * [0.5, 0.15, 0.85][round])] || cand[0]);
+    });
+    if (!pick.length) break;
+    pick.forEach((e) => tried.add(e[0]));
+    const ok = await readMany(pick);
+    pick.forEach((e) => { if (ok.has(e[0])) priced[Math.min(NB - 1, Math.max(0, Math.floor(((e[1] - t0) / span) * NB)))] = true; });
   }
   if (pts.length < 4) return false;
   pts.sort((a, b) => a.ts - b.ts);
