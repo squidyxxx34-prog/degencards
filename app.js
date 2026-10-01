@@ -1314,7 +1314,8 @@ async function buildOneInBrowser(t){
     }catch(e){ /* keep the minute candles */ }
   }
   const cs = filled.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
-  const chart = { v:2, src:'gt', q: cs.length >= 12 ? 3 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
+  const reach = cs[0][0] <= Math.min(...ts) + step && cs[cs.length-1][0] + 2*step >= Math.max(...ts);   // candles span buy -> sell
+  const chart = { v:2, src:'gt', q: cs.length >= 12 && reach ? 3 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
   if(t.chart && t.chart.v === 2 && !t.chart.sparse && parseChart(chart)?.sparse) return false;   // never replace a fuller chart
   const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
   if(error){ bumpTries(t.id); return false; }
@@ -1336,11 +1337,12 @@ async function buildChartsInBrowser(){
     let dirty = 0;
     while(todo.length){
       if(!session) break;
+      while(detailOverlay.classList.contains('show') && chartInFlight.size) await new Promise(r=>setTimeout(r, 1500));   // the open card goes first
       const k = Math.max(0, todo.findIndex(x=>onScreen.has(x.id)));   // cards on screen first
       const t = todo.splice(k, 1)[0];
       if(styled(t.chart)) continue;                                   // built meanwhile (card opened)
       try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } if(!styled(t.chart)) bumpTries(t.id); }
-      catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
+      catch(e){ if(String(e.message)==='429') break; bumpTries(t.id); }
     }
     if(dirty) renderAll();
   } finally { chartQueueRunning = false; }
