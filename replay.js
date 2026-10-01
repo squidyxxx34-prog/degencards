@@ -65,7 +65,13 @@ function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F
 const prepCache = new WeakMap();
 function prep(t){
   if(prepCache.has(t)) return prepCache.get(t);
-  const ch = t.chart, cs = ch.c, iv = ch.i;
+  const ch = t.chart;
+  // sparse data: one candle per move between two consecutive REAL prices (open = previous real price, close = this one)
+  let cs = ch.c, iv = ch.i;
+  if(ch.sparse && ch.pts && ch.pts.length >= 2){
+    const p = ch.pts; iv = Math.max(1000, (p[p.length-1][0] - p[0][0]) / Math.max(1, p.length - 1));
+    cs = p.slice(1).map((q,i)=>[p[i][0], p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
+  }
   const marks = (ch.m || []).slice().sort((a,b)=>a[0]-b[0]);
   const idxOf = ts => { let k = cs.findIndex(c => ts < c[0] + iv); return k < 0 ? cs.length - 1 : k; };
   const buys = marks.filter(m=>m[1]==='b'), sells = marks.filter(m=>m[1]==='s');

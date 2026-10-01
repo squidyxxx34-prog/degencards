@@ -227,11 +227,17 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
   if(ch){
     const cs = ch.c, iv = ch.i;
     const x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
-    let y0 = Math.min(...cs.map(c=>c[3])), y1 = Math.max(...cs.map(c=>c[2]));
+    const ys = ch.sparse ? [...ch.pts.map(q=>q[1]), ...(ch.m||[]).map(m=>m[2]).filter(v=>v>0)] : [...cs.map(c=>c[3]), ...cs.map(c=>c[2])];
+    let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.08; y0 -= pad; y1 += pad;
     X = v => x + ((v - x0)/(x1 - x0)) * w; Y = v => y + (1 - (v - y0)/(y1 - y0)) * h;
-    const n = Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.66);
+    const n = ch.sparse ? 0 : Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.66);
+    if(ch.sparse && ch.pts.length){                                   // sparse data: a price line through the real points, drawn progressively
+      const k = Math.max(1, Math.ceil(ch.pts.length * drawP));
+      ctx.strokeStyle = ch.pts[ch.pts.length-1][1] >= ch.pts[0][1] ? CANDLE_UP : CANDLE_DN; ctx.lineWidth = 5*u; ctx.lineJoin = 'round';
+      ctx.beginPath(); ch.pts.slice(0, k).forEach((q,i)=>{ i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1])); }); ctx.stroke();
+    }
     for(let i=0;i<n;i++){
       const [ts,o,hi,lo,c] = cs[i], up = c >= o, col = up ? CANDLE_UP : CANDLE_DN, cxp = X(ts + iv/2);
       ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5*u, bw*0.14);
@@ -244,7 +250,6 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     // MC scale
     ctx.font = `600 ${22*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.textAlign = 'left';
     ctx.fillText(mcShort(y1 - pad), x, y + 4*u); ctx.fillText(mcShort(Math.max(0, y0 + pad)), x, y + h);
-    ctx.textAlign = 'right'; ctx.fillText((iv >= 60000 ? iv/60000+'m' : iv/1000+'s') + ' candles', x + w, y + h + 34*u);
   } else {
     const end = t.timestamp, start = end - (t.holdTime||0)*1000, spanT = Math.max(1000, end - start);
     const x0 = start - spanT*0.15, x1 = end + spanT*0.15;
