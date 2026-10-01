@@ -232,7 +232,7 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.08; y0 -= pad; y1 += pad;
     X = v => x + ((v - x0)/(x1 - x0)) * w; Y = v => y + (1 - (v - y0)/(y1 - y0)) * h;
-    const n =  Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.66);
+    const n =  Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.9);
     if(false){                                   // sparse data: a price line through the real points, drawn progressively
       const k = Math.max(1, Math.ceil(ch.pts.length * drawP));
       ctx.strokeStyle = ch.pts[ch.pts.length-1][1] >= ch.pts[0][1] ? CANDLE_UP : CANDLE_DN; ctx.lineWidth = 5*u; ctx.lineJoin = 'round';

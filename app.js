@@ -392,10 +392,10 @@ function regroup(cs, iv){
   const flat = a => a.filter(x=>x[2] === x[3]).length / Math.max(1, a.length);
   let best = { c: cs, i: iv, f: flat(cs) };
   for(const g of [2,3,4,5,6,8,10,12,15,20]){
-    if(cs.length / g < 16) break;
+    if(cs.length / g < 36) break;                                    // keep the detail: never fewer than ~36 candles
     const m = merge(g), f = flat(m);
     if(f < best.f - 0.02) best = { c: m, i: iv*g, f };
-    if(f <= 0.1) break;
+    if(f <= 0.2) break;
   }
   return best;
 }
@@ -464,7 +464,7 @@ function miniChart(t, big){
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
-    const bw = Math.max(0.5, Math.min((iv/(x1-x0))*100*0.78, big ? 3.2 : 4.5));   // few candles: thin bodies, not blocks
+    const bw = Math.max(0.5, (iv/(x1-x0))*100*0.9);                   // candles side by side, like a trading chart
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
