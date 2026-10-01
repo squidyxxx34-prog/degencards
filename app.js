@@ -426,10 +426,10 @@ function parseChart(c){
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
         const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
-        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: tc.length };
+        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: tc.length };
       }
     }
-    return cl.length ? { v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
+    return cl.length ? { v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -1251,7 +1251,7 @@ async function buildOneInBrowser(t){
   const list = gtPools.get(t.mint).filter(p=>!p.created || p.created <= t1).slice(0,3);
   const supply = (gtPools.get(t.mint).find(p=>p.supply>0)||{}).supply || 0;
   // 1) recent trade: rebuild second-level candles from the pool's real trades (GeckoTerminal keeps the last 300)
-  if(supply && Date.now() - t1 < 864e5){
+  if(false){                                                          // one style for every chart: minute candles below
     for(const p of list){
       const j = await gtGet(`/pools/${p.addr}/trades`);
       const tr = (j?.data||[]).map(x=>{ const a = x.attributes||{}, buy = String(a.to_token_address) === t.mint;
@@ -1302,14 +1302,14 @@ async function buildOneInBrowser(t){
     if(last) for(let k = last[0] + step/1000; k < c[0] && filled.length < 400; k += step/1000) filled.push([k, last[4], last[4], last[4], last[4]]);
     filled.push(c);
   }
-  if(filled.length < 12){                                             // too thin (coin barely traded per minute): second candles from the chain, server-side
+  if(false){                                                          // (server fallback handled by ensureChart)
     try{
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', ids:[t.id] } });
       if(data?.charts){ const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle(); const c = parseChart(row?.chart); if(c){ t.chart = c; return true; } }
     }catch(e){ /* keep the minute candles */ }
   }
   const cs = filled.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
-  const chart = { v:2, src:'gt', q: cs.length >= 12 ? 2 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
+  const chart = { v:2, src:'gt', q: cs.length >= 12 ? 3 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
   if(t.chart && t.chart.v === 2 && !t.chart.sparse && parseChart(chart)?.sparse) return false;   // never replace a fuller chart
   const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
   if(error){ bumpTries(t.id); return false; }
@@ -1319,15 +1319,15 @@ async function buildChartsInBrowser(){
   if(chartQueueRunning || !session) return;
   chartQueueRunning = true;
   try{
-    const todo = trades.filter(t=>(!t.chart || t.chart.v!==2 || (t.chart.src==='gt' && !t.chart.q && !t.mint.endsWith('pump'))) && t.mint && (!t.mint.endsWith('pump') || t.chartTries>=3) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
+    const todo = trades.filter(t=>!styled(t.chart) && t.mint && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
       .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
     let dirty = 0;
     while(todo.length){
       if(!session) break;
       const k = Math.max(0, todo.findIndex(x=>onScreen.has(x.id)));   // cards on screen first
       const t = todo.splice(k, 1)[0];
-      if(t.chart && t.chart.v === 2) continue;                        // built meanwhile (card opened)
-      try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } }
+      if(styled(t.chart)) continue;                                   // built meanwhile (card opened)
+      try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } if(!styled(t.chart)) bumpTries(t.id); }
       catch(e){ bumpTries(t.id); if(String(e.message)==='429') break; }
     }
     if(dirty) renderAll();
@@ -1377,14 +1377,14 @@ async function ensureChart(t){
   chartInFlight.add(t.id);
   let ok = false;
   try{
-    if(t.mint.endsWith('pump') || thinChart(t) || !t.chart){           // second-level candles built server-side (pump.fun feed, or the chain for other coins)
+    ok = await buildOneInBrowser(t);                                   // the reference style: GeckoTerminal minute candles around the trade
+    if(!ok && (!t.chart || t.chart.sparse)){                           // not on GeckoTerminal: real candles built server-side (pump.fun feed / chain)
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
       if(data?.charts){
         const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle();
         const c = parseChart(row?.chart); if(c){ t.chart = c; ok = true; }
       }
     }
-    if(!ok || (t.chart && t.chart.sparse && !t.mint.endsWith('pump'))) ok = (await buildOneInBrowser(t)) || ok;   // any coin: real minute candles from GeckoTerminal
   }catch(e){ /* keep the entry -> exit line */ }
   finally{ chartInFlight.delete(t.id); }
   if(thinChart(t)) bumpTries(t.id);
@@ -1476,7 +1476,8 @@ const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
 const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
-const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && !t.mint.endsWith('pump') && ((t.chart.src === 'gt' && (t.chart.q !== 2 || t.chart.c.length < 12)) || !coversFills(t.chart) || t.chart.sparse));
+const styled = ch => !!(ch && ch.v === 2 && ch.src === 'gt' && ch.q === 3 && !ch.sparse);
+const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && (!styled(t.chart) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
   if(!t.mint) return 'manual';

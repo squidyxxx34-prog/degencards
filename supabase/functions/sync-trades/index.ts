@@ -513,7 +513,7 @@ async function buildPumpCharts(deadline: number, userId: string | null, onlyIds:
   const onlyId = onlyIds && onlyIds.length ? onlyIds : null;
   let q = db.from("trades").select("id,mint,ext_id,timestamp_ms,hold_time,legs,chart,chart_tries")
     .like("mint", "%pump").is("deleted_at", null).lt("chart_tries", onlyId ? 6 : 3).lt("timestamp_ms", Date.now() - 150_000)
-    .or("chart.is.null,chart->>v.is.null,chart->>src.eq.gt").order("timestamp_ms", { ascending: false }).limit(onlyId ? onlyId.length : 15);   // pump coins drawn in minutes get upgraded to seconds
+    .or("chart.is.null,chart->>v.is.null,and(chart->>src.eq.gt,or(chart->>q.is.null,chart->>q.neq.3))").order("timestamp_ms", { ascending: false }).limit(onlyId ? onlyId.length : 15);   // pump coins drawn in minutes get upgraded to seconds
   if (userId) q = q.eq("user_id", userId);
   if (onlyId) q = q.in("id", onlyId);
   const { data: rows, error } = await q;
