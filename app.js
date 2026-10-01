@@ -384,6 +384,21 @@ function densify(cs, iv){
   }
   return { c: out, i: sub };
 }
+/* time per candle picked from the data: candles are merged 2, 3, 4… at a time (real OHLC: first open, highest high,
+   lowest low, last close) until almost none is flat, keeping at least ~16 candles */
+function regroup(cs, iv){
+  const merge = g => { const out = []; for(let i=0;i<cs.length;i+=g){ const b = cs.slice(i, i+g);
+    out.push([b[0][0], b[0][1], Math.max(...b.map(x=>x[2])), Math.min(...b.map(x=>x[3])), b[b.length-1][4]]); } return out; };
+  const flat = a => a.filter(x=>x[2] === x[3]).length / Math.max(1, a.length);
+  let best = { c: cs, i: iv, f: flat(cs) };
+  for(const g of [2,3,4,5,6,8,10,12,15,20]){
+    if(cs.length / g < 16) break;
+    const m = merge(g), f = flat(m);
+    if(f < best.f - 0.02) best = { c: m, i: iv*g, f };
+    if(f <= 0.1) break;
+  }
+  return best;
+}
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
@@ -397,7 +412,7 @@ function parseChart(c){
       const med = r[r.length>>1];                                      // sits off the candles the same way, rescale them to the on-chain market cap
       if(r.every(v=>v < 0.77) || r.every(v=>v > 1.3)) cs.forEach(y=>{ for(let j=1;j<5;j++) y[j] *= med; });
     }
-    const cl = cleanCandles(cs, iv0, m), dn = densify(cl, iv0);
+    const cl = cleanCandles(cs, iv0, m), dn = regroup(cl, iv0);
     // the candles miss the wallet's own fills (data started late / wrong pool) or are mostly empty: drawn as a price line through
     // the real points (swaps read + exact fills) instead of a flat row of candles
     const hi = Math.max(...cs.map(x=>x[2])), lo = Math.min(...cs.map(x=>x[3]));
@@ -408,7 +423,7 @@ function parseChart(c){
       if(p.length >= 2){                                               // gap, no flat stretch); fills mapped onto the same axis
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
-        const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = densify(tc, T);
+        const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
         return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: tc.length };
       }
     }
