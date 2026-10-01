@@ -307,7 +307,13 @@ function generateTradeCard(trade, allTrades){
    - one candle per interval on a regular grid (duplicates merged, empty slots = flat candle at the previous close)
    - absurd prices (a dust swap read as 1e10 x, a wick to ~0) pulled back to the local level; real moves are kept */
 function cleanCandles(raw, iv, marks){
-  const byT = new Map(), srt = [...raw].sort((a,b)=>a[0]-b[0]), t0 = srt.length ? srt[0][0] : 0;
+  const srt = [...raw].sort((a,b)=>a[0]-b[0]);
+  if(srt.length) for(const m of (marks||[])){                       // a fill outside the candles (data started late / ended early):
+    if(!(m[2] > 0)) continue;                                        // its exact market cap is a real price, so the chart reaches it
+    if(m[0] < srt[0][0] - iv/2) srt.unshift([m[0], m[2], m[2], m[2], m[2]]);
+    else if(m[0] >= srt[srt.length-1][0] + iv) srt.push([m[0], m[2], m[2], m[2], m[2]]);
+  }
+  const byT = new Map(), t0 = srt.length ? srt[0][0] : 0;
   for(const [ts,o,h,l,c] of srt){
     const k = t0 + Math.round((ts-t0)/iv)*iv, p = byT.get(k);
     byT.set(k, p ? [k, p[1], Math.max(p[2],h), Math.min(p[3],l), c] : [k,o,h,l,c]);
@@ -1322,7 +1328,7 @@ async function warmCharts(){
 /* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
 const chartInFlight = new Set();
 async function ensureChart(t){
-  if(!t.mint || (t.chart && t.chart.v === 2 && !thinChart(t)) || chartInFlight.has(t.id)) return;
+  if(!t.mint || (t.chart && t.chart.v === 2 && (!thinChart(t) || chartTries(t.id) >= 3)) || chartInFlight.has(t.id)) return;
   chartInFlight.add(t.id);
   let ok = false;
   try{
@@ -1336,6 +1342,7 @@ async function ensureChart(t){
     if(!ok) ok = await buildOneInBrowser(t);                           // any coin: minute candles from GeckoTerminal
   }catch(e){ /* keep the entry -> exit line */ }
   finally{ chartInFlight.delete(t.id); }
+  if(thinChart(t)) bumpTries(t.id);
   if(ok){
     renderAll();
     if(detailOverlay.classList.contains('show') && detailOverlay.dataset.id === t.id) openDetail(t.id, true);
@@ -1426,7 +1433,7 @@ const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length ||
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && !t.mint.endsWith('pump') && ((t.chart.src === 'gt' && (t.chart.q !== 2 || t.chart.c.length < 12)) || !coversFills(t.chart)));
 function chartState(t){
-  if(t.chart && t.chart.v === 2 && !(thinChart(t) && chartTries(t.id) < 3)) return 'ready';
+  if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
   if(!t.mint) return 'manual';
   if(chartInFlight.has(t.id)) return 'loading';
   return chartTries(t.id) < 3 ? 'loading' : 'none';
