@@ -133,3 +133,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Les vieux graphes GT sans `q` sont reconstruits une fois au chargement de l'app.
 - Une clé `HELIUS_API_KEY` rend ces graphes bien plus rapides et complets (lectures en parallèle).
 - Reconstruction des graphes maigres côté serveur : passage `charts` (toutes les 4 min) traite les trades hors pump.fun des 7 derniers jours (autant que le temps le permet) ; ouvrir une carte maigre déclenche la reconstruction immédiate (`{task:"chart", ids}`) ; ciblage admin possible : `{task:"charts", ids:[…]}` avec la clé cron. Lecture ancrée sur les signatures d'achat/vente du trade (avant l'achat, entre achat et vente, après la vente).
+
+## Bougies toujours propres (`cleanCandles`, app.js)
+- Tout graphe passe par `parseChart` → `cleanCandles` : cartes, détail, vidéo CARD et Trade Replay dessinent exactement les mêmes bougies.
+- Grille régulière (une bougie par intervalle, doublons fusionnés, trous = bougie plate au dernier close).
+- Prix aberrants (swap de poussière lu à 1e14, mèche à ~0) : corps à plus de 4x de la médiane locale (±5 bougies) ramenés au niveau local ; mèches plafonnées à 1,5x le corps / 1,1x les corps voisins, sauf si un fill du wallet est dans la bougie. Les données en base restent brutes.

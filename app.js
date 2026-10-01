@@ -303,6 +303,49 @@ function generateTradeCard(trade, allTrades){
 }
 /* real price extract: market cap from 2 min before the first fill to 2 min after the last one.
    Points come from the server (GeckoTerminal minute candles); B / S markers sit on the curve at each fill. */
+/* every chart goes through here, so cards, detail, CARD video and Trade Replay always draw the same clean candles:
+   - one candle per interval on a regular grid (duplicates merged, empty slots = flat candle at the previous close)
+   - absurd prices (a dust swap read as 1e10 x, a wick to ~0) pulled back to the local level; real moves are kept */
+function cleanCandles(raw, iv, marks){
+  const byT = new Map(), srt = [...raw].sort((a,b)=>a[0]-b[0]), t0 = srt.length ? srt[0][0] : 0;
+  for(const [ts,o,h,l,c] of srt){
+    const k = t0 + Math.round((ts-t0)/iv)*iv, p = byT.get(k);
+    byT.set(k, p ? [k, p[1], Math.max(p[2],h), Math.min(p[3],l), c] : [k,o,h,l,c]);
+  }
+  const keys = [...byT.keys()].sort((a,b)=>a-b);
+  if(!keys.length) return [];
+  const out = []; let prev = null;
+  for(let k = keys[0]; k <= keys[keys.length-1] && out.length < 400; k += iv){
+    const r = byT.get(k);
+    if(r){ out.push(r.slice()); prev = r[4]; } else if(prev !== null) out.push([k, prev, prev, prev, prev, 1]);   // 6th field: filler
+  }
+  const pos = v => Number.isFinite(v) && v > 0;
+  const lg = v => Math.log(v);
+  const mids = out.map(x => pos(x[1]) && pos(x[4]) ? (lg(x[1])+lg(x[4]))/2 : pos(x[4]) ? lg(x[4]) : pos(x[1]) ? lg(x[1]) : NaN);
+  const fills = (marks||[]).filter(m=>m[2]>0).map(m=>m[2]);
+  const med = a => { const b = a.filter(Number.isFinite).sort((x,y)=>x-y); return b.length ? b[b.length>>1] : NaN; };
+  const gmed = med(mids.concat(fills.map(lg)));
+  const W = 5, BODY = Math.log(4);
+  const ref = mids.map((_,i)=>{ const r = med(mids.slice(Math.max(0,i-W), i+W+1)); return Number.isFinite(r) ? r : gmed; });
+  // bodies: a price more than 4x away from its neighbourhood is a bad read
+  for(let i=0;i<out.length;i++){
+    const r = Math.exp(ref[i]);
+    for(const j of [1,4]) if(!pos(out[i][j]) || Math.abs(lg(out[i][j]) - ref[i]) > BODY) out[i][j] = r;
+  }
+  for(let i=1;i<out.length;i++) if(out[i][5]) out[i][1] = out[i][2] = out[i][3] = out[i][4] = out[i-1][4];  // fillers follow cleaned closes
+  // wicks: never further than the nearby bodies allow (plus the user's own fills, which are exact)
+  for(let i=0;i<out.length;i++){
+    const x = out[i], bt = Math.max(x[1],x[4]), bb = Math.min(x[1],x[4]);
+    let nt = bt, nb = bb;
+    for(let j=Math.max(0,i-3); j<=Math.min(out.length-1,i+3); j++){ nt = Math.max(nt, out[j][1], out[j][4]); nb = Math.min(nb, out[j][1], out[j][4]); }
+    const tsA = x[0], tsB = x[0]+iv;
+    const fHere = (marks||[]).filter(m=>m[2]>0 && m[0]>=tsA && m[0]<tsB).map(m=>m[2]);
+    const hiCap = Math.max(bt*1.5, nt*1.1, ...fHere), loCap = Math.min(bb/1.5, nb/1.1, ...fHere);
+    x[2] = pos(x[2]) ? Math.min(Math.max(x[2], bt), hiCap) : bt;
+    x[3] = pos(x[3]) ? Math.max(Math.min(x[3], bb), loCap) : bb;
+  }
+  return out.map(x=>x.slice(0,5));
+}
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
@@ -310,7 +353,8 @@ function parseChart(c){
   const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
   if(c.v === 2){
     const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
-    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cs.length } : null;
+    const cl = cleanCandles(cs, okN(+c.i) && +c.i>0 ? +c.i : 60000, m);
+    return cl.length ? { v:2, c:cl, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
