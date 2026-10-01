@@ -354,7 +354,9 @@ function cleanCandles(raw, iv, marks){
   }
   // real price points (candles where swaps were read + the wallet's own fills): used when data is sparse
   const empty = x => x[5] || x[2] === x[3];                           // no swap read in this slot (gap, or a flat candle from the server)
-  const real = out.filter(x=>!empty(x)).map(x=>[x[0] + iv/2, x[4]]).concat((marks||[]).filter(m=>m[2]>0).map(m=>[m[0], m[2]])).sort((a,b)=>a[0]-b[0]);
+  // each candle that saw swaps gives its 4 real prices in trading order (green: open, low, high, close / red: open, high, low, close)
+  const real = out.filter(x=>!empty(x)).flatMap(x=>{ const up = x[4] >= x[1];
+    return [[x[0], x[1]], [x[0] + iv*0.33, up ? x[3] : x[2]], [x[0] + iv*0.66, up ? x[2] : x[3]], [x[0] + iv*0.99, x[4]]]; }).concat((marks||[]).filter(m=>m[2]>0).map(m=>[m[0], m[2]])).sort((a,b)=>a[0]-b[0]);
   const res = out.map(x=>x.slice(0,5)); res.fillers = out.filter(empty).length; res.real = real;
   return res;
 }
@@ -419,7 +421,7 @@ function parseChart(c){
     const miss = m.some(x=>x[2] > 0 && (x[2] > hi*1.3 || x[2] < lo/1.3));
     const sparse = cl.length > 0 && cl.real.length >= 2 && (miss || (cl.length > 6 && cl.fillers / cl.length > 0.35));
     if(sparse){                                                       // tick candles: one candle per move between two consecutive REAL
-      const p = cl.real.filter((q,i,arr)=>!i || q[0] > arr[i-1][0] || q[1] !== arr[i-1][1]), T = 1000;   // prices, evenly spaced (no
+      const p = cl.real.filter((q,i,arr)=>!i || Math.abs(q[1] - arr[i-1][1]) > q[1]*0.002), T = 1000;   // prices, evenly spaced (no
       if(p.length >= 2){                                               // gap, no flat stretch); fills mapped onto the same axis
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
