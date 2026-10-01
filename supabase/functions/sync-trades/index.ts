@@ -751,6 +751,66 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   return !error;
 }
 
+/* ---------- the reference chart style: GeckoTerminal minute candles around the trade (server-side, own rate limit) ----------
+   Every pool of the coin (launch pool + the one it migrated to) merged by time, empty minutes filled flat, at least
+   15 min of context on each side. Market cap = price x the supply GeckoTerminal uses (fdv / price). */
+const GTA = "https://api.geckoterminal.com/api/v2/networks/solana";
+let gtLastS = 0;
+async function gtJson(path: string): Promise<any> {
+  for (let k = 0; k < 4; k++) {
+    const wait = gtLastS + 2100 - Date.now(); if (wait > 0) await sleep(wait);
+    gtLastS = Date.now();
+    try {
+      const r = await fetch(GTA + path, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+      if (r.status === 429) { gtLastS = Date.now() + 8000 * (k + 1); continue; }
+      return r.ok ? await r.json() : null;
+    } catch (_) { await sleep(1000); }
+  }
+  return null;
+}
+async function buildGtChart(t: any): Promise<boolean> {
+  const legs = (Array.isArray(t.legs) ? t.legs : []).filter((l: any) => Number.isFinite(Number(l[0])) && (l[1] === "b" || l[1] === "s"));
+  const end = Number(t.timestamp_ms), start = end - Number(t.hold_time) * 1000;
+  const marks = (legs.length ? legs : [[start, "b", 0], [end, "s", 0]]).map((l: any) => [Number(l[0]), l[1], Math.round(Number(l[2]) || 0)]).slice(0, 20);
+  const ts = marks.map((m: any) => m[0]);
+  const t0 = Math.min(...ts) - 120_000, t1 = Math.max(...ts) + 120_000;
+  const pj = await gtJson(`/tokens/${t.mint}/pools?page=1`);
+  const pools = (pj?.data || []).map((p: any) => {
+    const a = p.attributes || {}, price = Number(a.base_token_price_usd), fdv = Number(a.fdv_usd);
+    const baseIsMint = String(p.relationships?.base_token?.data?.id || "").endsWith(t.mint);
+    return { addr: a.address, created: Date.parse(a.pool_created_at || "") || 0, supply: baseIsMint && price > 0 && fdv > 0 ? fdv / price : 0 };
+  });
+  const list = pools.filter((p: any) => !p.created || p.created <= t1).slice(0, 3);
+  const supply = (pools.find((p: any) => p.supply > 0) || {}).supply || 0;
+  if (!list.length || !supply) return false;
+  const pad = Math.max(900_000, t1 - t0), w0 = Math.min(...ts) - pad, w1 = Math.max(...ts) + pad, spanMin = (w1 - w0) / 60000;
+  const [tf, agg, step] = spanMin <= 900 ? ["minute", 1, 60000] : spanMin <= 15000 ? ["minute", 15, 900000] : ["hour", 4, 14400000];
+  const limit = Math.min(1000, Math.ceil((w1 - w0) / step) + 2);
+  const perPool: number[][][] = [];
+  for (const p of list) {
+    const j = await gtJson(`/pools/${p.addr}/ohlcv/${tf}?aggregate=${agg}&before_timestamp=${Math.ceil(w1 / 1000) + 60}&limit=${limit}&currency=usd&token=${t.mint}`);
+    perPool.push((j?.data?.attributes?.ohlcv_list || []).map((x: any[]) => x.map(Number)).filter((x: number[]) => x[0] * 1000 >= w0 - step && x[0] * 1000 <= w1));
+  }
+  perPool.sort((a, b) => b.length - a.length);                       // the busiest pool wins when both have the same minute
+  const byTs = new Map<number, number[]>();
+  for (const c of perPool) for (const x of c) if (!byTs.has(x[0])) byTs.set(x[0], x);
+  const best = [...byTs.values()].sort((a, b) => a[0] - b[0]);
+  if (!best.length) return false;
+  const filled: number[][] = [];
+  for (const c of best) {
+    const last = filled[filled.length - 1];
+    if (last) for (let k = last[0] + step / 1000; k < c[0] && filled.length < 400; k += step / 1000) filled.push([k, last[4], last[4], last[4], last[4]]);
+    filled.push(c);
+  }
+  const r2 = (n: number) => Math.round(n * supply * 100) / 100;
+  const cs = filled.slice(-400).map((c) => [c[0] * 1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
+  if (cs.length < 12) return false;
+  const chart = { v: 2, src: "gt", q: 3, i: step, w: [cs[0][0], cs[cs.length - 1][0] + step], c: cs, m: marks };
+  const { error } = await db.from("trades").update({ chart }).eq("id", t.id);
+  return !error;
+}
+const styledRow = (t: any) => t.chart?.src === "gt" && Number(t.chart?.q) === 3;
+
 /* ---------- coin images ----------
    Found on pump.fun, DexScreener, the token's on-chain metadata (Token-2022 or Metaplex -> JSON -> image) or Helius,
    then COPIED into our public storage bucket (fast, never disappears with an IPFS gateway, CORS-clean for the share image).
@@ -864,7 +924,16 @@ Deno.serve(async (req) => {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
     if (task === "charts") {
-      let charts = 0; try { if (!Array.isArray(body?.ids)) charts = await buildPumpCharts(deadline - 60_000, null); } catch (e) { console.error("charts", (e as Error).message); }
+      let charts = 0;
+      if (!Array.isArray(body?.ids)) try {                            // reference style for every card, newest first (~10 per pass)
+        const { data: rows } = await db.from("trades").select("id,mint,legs,timestamp_ms,hold_time,chart,chart_tries").not("mint", "is", null).is("deleted_at", null)
+          .lt("timestamp_ms", Date.now() - 150_000).lt("chart_tries", 8).or("chart.is.null,chart->>src.neq.gt,chart->>q.is.null,chart->>q.neq.3")
+          .order("timestamp_ms", { ascending: false }).limit(12);
+        for (const t of rows || []) {
+          if (Date.now() > deadline - 70_000) break;
+          if (await buildGtChart(t)) charts++; else await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
+        }
+      } catch (e) { console.error("gt charts", (e as Error).message); } try { if (!Array.isArray(body?.ids)) charts += await buildPumpCharts(deadline - 60_000, null); } catch (e) { console.error("charts", (e as Error).message); }
       // coins outside pump.fun whose chart is missing / minute-only / too thin: rebuild one from the chain per pass
       try {
         const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x)).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
@@ -903,9 +972,21 @@ Deno.serve(async (req) => {
       if (!ids.length) return new Response('{"error":"id"}', { status: 400, headers: h });
       pumpGap = 700;
       const dl = Date.now() + 55_000;
-      let charts = 0; try { charts = await buildPumpCharts(dl, userId, ids); } catch (e) { console.error("chart", (e as Error).message); }
+      let charts = 0;
+      const styledIds = new Set<string>();
+      try {                                                           // the reference style first: GeckoTerminal minute candles
+        const { data: rows } = await db.from("trades").select("id,mint,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", ids).not("mint", "is", null);
+        for (const t of rows || []) {
+          if (styledRow(t)) { styledIds.add(t.id); charts++; continue; }   // already styled: the client just reloads it
+          if (Date.now() > dl - 20_000) break;
+          if (await buildGtChart(t)) { charts++; styledIds.add(t.id); }
+        }
+      } catch (e) { console.error("gt chart", (e as Error).message); }
+      const rest = ids.filter((x: string) => !styledIds.has(x));
+      if (!rest.length) return new Response(JSON.stringify({ charts }), { headers: h });
+      try { charts += await buildPumpCharts(dl, userId, rest); } catch (e) { console.error("chart", (e as Error).message); }
       try {                                                           // coins outside pump.fun (or thin minute data): candles from the chain
-        const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", ids).not("mint", "is", null);
+        const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", rest).not("mint", "is", null);
         for (const t of rows || []) {
           if (Date.now() > dl - 15_000) break;
           const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.q !== 2 || (t.chart?.c?.length || 0) < 12)) || !covers(t);

@@ -1324,8 +1324,15 @@ async function buildChartsInBrowser(){
   if(chartQueueRunning || !session) return;
   chartQueueRunning = true;
   try{
-    const todo = trades.filter(t=>!styled(t.chart) && t.mint && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
-      .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 40);
+    // the server upgrades every chart to the reference style in its cron passes: pick up what it built
+    const pend = trades.filter(t=>!styled(t.chart) && t.mint).slice(0, 100).map(t=>t.id);
+    if(pend.length){ try{
+      const { data: rows } = await sb.from('trades').select('id,chart').in('id', pend).not('chart','is',null);
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); const c = parseChart(r.chart); if(t && c && (!t.chart || styled(c))) t.chart = c; });
+    }catch(e){} }
+    // the browser only builds charts for cards on screen (GeckoTerminal limits requests per device)
+    const todo = trades.filter(t=>!styled(t.chart) && t.mint && onScreen.has(t.id) && t.timestamp < Date.now()-180000 && chartTries(t.id) < 3)
+      .sort((a,b)=>b.timestamp-a.timestamp).slice(0, 4);
     let dirty = 0;
     while(todo.length){
       if(!session) break;
@@ -1382,14 +1389,16 @@ async function ensureChart(t){
   chartInFlight.add(t.id);
   let ok = false;
   try{
-    try{ ok = await buildOneInBrowser(t); }                            // the reference style: GeckoTerminal minute candles around the trade
-    catch(e){ if(String(e.message) !== '429') throw e; await new Promise(r=>setTimeout(r, 21000)); ok = await buildOneInBrowser(t); }   // rate limit: wait, retry once
-    if(!ok && (!t.chart || t.chart.sparse)){                           // not on GeckoTerminal: real candles built server-side (pump.fun feed / chain)
+    try{                                                               // server: GeckoTerminal minute candles, else pump.fun feed / chain
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
       if(data?.charts){
         const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle();
         const c = parseChart(row?.chart); if(c){ t.chart = c; ok = true; }
       }
+    }catch(e){ /* browser below */ }
+    if(!styled(t.chart)){                                              // fallback: the same candles fetched by the browser
+      try{ ok = (await buildOneInBrowser(t)) || ok; }
+      catch(e){ if(String(e.message) !== '429') throw e; await new Promise(r=>setTimeout(r, 21000)); ok = (await buildOneInBrowser(t)) || ok; }
     }
   }catch(e){ /* keep the entry -> exit line */ }
   finally{ chartInFlight.delete(t.id); }
