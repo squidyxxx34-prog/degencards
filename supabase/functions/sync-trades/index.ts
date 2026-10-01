@@ -708,7 +708,9 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   };
   // sample by TIME, not by count: the window is cut in slots and every slot gets a real swap price, so no stretch of the
   // chart is left without data where people actually traded. Slots whose first pick wasn't a swap get another try.
-  const NB = HELIUS ? 64 : 32, span = Math.max(1, t1 - t0);
+  // ~4 real swaps per candle so every candle has its own open / high / low / close (no flat candles where people traded)
+  const span = Math.max(1, t1 - t0), candleMs = (BUCKETS.find((x) => span / 1000 / x <= 60) || 300) * 1000;
+  const NB = Math.max(16, Math.min(HELIUS ? 240 : 48, Math.ceil(span / candleMs) * (HELIUS ? 4 : 1)));
   const slots: [string, number][][] = Array.from({ length: NB }, () => []);
   for (const e of all) slots[Math.min(NB - 1, Math.max(0, Math.floor(((e[1] - t0) / span) * NB)))].push(e);
   const priced = new Array(NB).fill(false), tried = new Set<string>();
