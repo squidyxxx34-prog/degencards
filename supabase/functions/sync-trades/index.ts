@@ -20,7 +20,7 @@ const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const BACKFILL_DAYS = 30, MAX_SIGS = 30000, MAX_TX_PER_ACCOUNT = HELIUS ? 800 : 500, CONCURRENCY = HELIUS ? 8 : 3;
-const TIME_BUDGET_MS = 95_000, MANUAL_COOLDOWN_MS = 60_000;
+const TIME_BUDGET_MS = 125_000, MANUAL_COOLDOWN_MS = 60_000;
 const freshPump: string[] = [];                                     // pump trades imported during this run -> chart them right away
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -568,13 +568,16 @@ async function buildPumpCharts(deadline: number, userId: string | null, onlyIds:
 /* ---------- second-level candles for ANY coin, straight from the chain ----------
    For coins outside pump.fun (Meteora, Raydium, launchpads…) or whose minute data is too thin: read the coin's pools'
    own transactions around the trade, price each swap from the pool's balance changes (quote / token), bucket ~50 candles. */
-function poolPrice(tx: any, mint: string, solUsd: number): number {
+function poolPrice(tx: any, mint: string, solUsd: number, poolOwner = ""): number {
   if (!tx?.meta || tx.meta.err) return 0;
   const by = new Map<string, Map<string, number>>();
   const add = (list: any[], sign: number) => { for (const b of list || []) { if (!b.owner) continue; const m = by.get(b.owner) || new Map<string, number>(); by.set(b.owner, m);
     m.set(b.mint, (m.get(b.mint) || 0) + sign * Number(b.uiTokenAmount?.uiAmountString ?? 0)); } };
   add(tx.meta.preTokenBalances, -1); add(tx.meta.postTokenBalances, 1);
   let best = 0, bestAmt = 0;
+  const own = poolOwner ? by.get(poolOwner) : null;                  // our pool moved in this tx: its own ratio is the price
+  if (own) { const d = own.get(mint) || 0; let q = (own.get(WSOL) || 0) * solUsd; for (const u of USD_MINTS) q += own.get(u) || 0;
+    if (d && q && Math.sign(q) !== Math.sign(d)) return Math.abs(q / d); }
   for (const [, m] of by) {                                           // the pool: holds the coin AND the quote, moving opposite ways
     const d = m.get(mint) || 0; if (!d) continue;
     let q = (m.get(WSOL) || 0) * solUsd; for (const u of USD_MINTS) q += m.get(u) || 0;
@@ -599,6 +602,7 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
   // Its history is read starting AT the trade (before = the sell/buy tx), not from today, so busy coins stay cheap.
   const buySig = String(t.ext_id || "").split(":")[2] || "";
   const anchors: { acct: string; before?: string }[] = [];
+  let poolOwner = "";
   if (buySig) {
     try {
       const tx = await rpc("getTransaction", [buySig, { encoding: "json", maxSupportedTransactionVersion: 1 }]);
@@ -606,8 +610,9 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
       const d = new Map<number, number>();
       for (const b of tx.meta.preTokenBalances || []) if (b.mint === t.mint) d.set(b.accountIndex, (d.get(b.accountIndex) || 0) - Number(b.uiTokenAmount?.uiAmountString || 0));
       for (const b of tx.meta.postTokenBalances || []) if (b.mint === t.mint) d.set(b.accountIndex, (d.get(b.accountIndex) || 0) + Number(b.uiTokenAmount?.uiAmountString || 0));
-      let vault = "", big = 0; for (const [ix, v] of d) if (v < 0 && -v > big) { big = -v; vault = keys[ix]; }   // the account that GAVE the tokens to the buyer
+      let vault = "", big = 0, vix = -1; for (const [ix, v] of d) if (v < 0 && -v > big) { big = -v; vault = keys[ix]; vix = ix; }   // the account that GAVE the tokens to the buyer
       if (vault) anchors.push({ acct: vault });
+      poolOwner = [...(tx.meta.preTokenBalances || []), ...(tx.meta.postTokenBalances || [])].find((b: any) => b.accountIndex === vix)?.owner || "";
     } catch (_) { /* fall back to listed pools */ }
   }
   try {
@@ -694,13 +699,13 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
         const chunk = list.slice(i, i + 9), tc = Date.now();
         const txs = await Promise.all(chunk.map(([sig]) => readTx(sig)));
         const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
-        txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1])); if (px > 0) { pts.push({ ts: chunk[j][1], px }); ok.add(chunk[j][0]); } });
+        txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solUsdAt(chunk[j][1]), poolOwner); if (px > 0) { pts.push({ ts: chunk[j][1], px }); ok.add(chunk[j][0]); } });
       }
     } else {
       for (const [sig, ts] of list) {
         if (Date.now() > deadline - 4_000) break;
         const t0r = Date.now();
-        const px = poolPrice(await readTx(sig), t.mint, solUsdAt(ts)); if (px > 0) { pts.push({ ts, px }); ok.add(sig); }
+        const px = poolPrice(await readTx(sig), t.mint, solUsdAt(ts), poolOwner); if (px > 0) { pts.push({ ts, px }); ok.add(sig); }
         const wait = 280 - (Date.now() - t0r); if (wait > 0) await sleep(wait);
       }
     }
@@ -870,7 +875,7 @@ Deno.serve(async (req) => {
         const { data: rows } = await q;
         for (const t of rows || []) {
           if (Date.now() > deadline - 30_000) break;                    // as many as fit in this pass
-          const ok = await buildChainChart(t, Math.min(deadline, Date.now() + 45_000));
+          const ok = await buildChainChart(t, Math.min(deadline, Date.now() + 100_000));
           if (ok) charts++; else await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
         }
       } catch (e) { console.error("chain charts", (e as Error).message); }
