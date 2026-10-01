@@ -823,14 +823,18 @@ Deno.serve(async (req) => {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
     if (task === "charts") {
-      let charts = 0; try { charts = await buildPumpCharts(deadline - 45_000, null); } catch (e) { console.error("charts", (e as Error).message); }
+      let charts = 0; try { if (!Array.isArray(body?.ids)) charts = await buildPumpCharts(deadline - 60_000, null); } catch (e) { console.error("charts", (e as Error).message); }
       // coins outside pump.fun whose chart is missing / minute-only / too thin: rebuild one from the chain per pass
       try {
-        const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries").not("mint", "is", null)
+        const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x)).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+        let q = db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries").not("mint", "is", null)
           .not("mint", "like", "%pump").is("deleted_at", null).lt("chart_tries", 3).lt("timestamp_ms", Date.now() - 150_000)
-          .or("chart.is.null,chart->>q.is.null,chart->>q.eq.1").order("timestamp_ms", { ascending: false }).limit(1);
+          .or("chart.is.null,chart->>q.is.null,chart->>q.eq.1").order("timestamp_ms", { ascending: false }).limit(6);
+        q = ids.length ? q.in("id", ids) : q.gt("timestamp_ms", Date.now() - 7 * 864e5);     // recent trades first (older ones: when their card is opened)
+        const { data: rows } = await q;
         for (const t of rows || []) {
-          const ok = await buildChainChart(t, Math.min(deadline, Date.now() + 60_000));
+          if (Date.now() > deadline - 30_000) break;                    // as many as fit in this pass
+          const ok = await buildChainChart(t, Math.min(deadline, Date.now() + 45_000));
           if (ok) charts++; else await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
         }
       } catch (e) { console.error("chain charts", (e as Error).message); }
