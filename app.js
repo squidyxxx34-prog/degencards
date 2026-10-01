@@ -351,7 +351,7 @@ function cleanCandles(raw, iv, marks){
    close through its real high and low (seeded, so cards, detail and videos are identical). Every real OHLC is kept
    exactly: no new high, no new low, same direction. Flat stretches (nobody traded) stay flat. */
 function densify(cs, iv){
-  const k = Math.max(1, Math.min(4, Math.round(120 / Math.max(1, cs.length))));
+  const k = Math.max(1, Math.min(4, Math.round(80 / Math.max(1, cs.length))));
   if(k === 1) return { c: cs, i: iv };
   const out = [], sub = iv / k;
   for(const [ts,o,h,l,c] of cs){
@@ -418,7 +418,7 @@ function miniChart(t, big){
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
-    const bw = Math.max(0.35, Math.min((iv/(x1-x0))*100*0.7, big ? 3.2 : 4.5));   // few candles: thin bodies, not blocks
+    const bw = Math.max(0.5, Math.min((iv/(x1-x0))*100*0.78, big ? 3.2 : 4.5));   // few candles: thin bodies, not blocks
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
