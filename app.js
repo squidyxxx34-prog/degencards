@@ -310,7 +310,7 @@ function parseChart(c){
   const w = Array.isArray(c.w) && okN(+c.w[0]) && okN(+c.w[1]) && +c.w[1] > +c.w[0] ? [+c.w[0], +c.w[1]] : null;
   if(c.v === 2){
     const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
-    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : 0 } : null;
+    return cs.length ? { v:2, c:cs, m, w, i: okN(+c.i) && +c.i>0 ? +c.i : 60000, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cs.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -1195,7 +1195,7 @@ async function buildOneInBrowser(t){
     }catch(e){ /* keep the minute candles */ }
   }
   const cs = filled.slice(-400).map(c=>[c[0]*1000, r2(c[1]), r2(c[2]), r2(c[3]), r2(c[4])]);
-  const chart = { v:2, src:'gt', q:2, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
+  const chart = { v:2, src:'gt', q: cs.length >= 12 ? 2 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
   const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
   if(error){ bumpTries(t.id); return false; }
   t.chart = parseChart(chart); return true;
@@ -1258,11 +1258,11 @@ async function warmCharts(){
 /* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
 const chartInFlight = new Set();
 async function ensureChart(t){
-  if(!t.mint || (t.chart && t.chart.v === 2) || chartInFlight.has(t.id)) return;
+  if(!t.mint || (t.chart && t.chart.v === 2 && !thinChart(t)) || chartInFlight.has(t.id)) return;
   chartInFlight.add(t.id);
   let ok = false;
   try{
-    if(t.mint.endsWith('pump')){                                       // second-level candles: the server reads pump.fun for this one trade
+    if(t.mint.endsWith('pump') || thinChart(t) || !t.chart){           // second-level candles built server-side (pump.fun feed, or the chain for other coins)
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
       if(data?.charts){
         const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle();
@@ -1358,8 +1358,9 @@ document.getElementById('btnCreate').addEventListener('click', async ()=>{
 /* ---------- detail modal ---------- */
 const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
+const thinChart = t => !!(t.chart && t.chart.v === 2 && t.chart.src === 'gt' && t.mint && !t.mint.endsWith('pump') && (t.chart.q !== 2 || t.chart.c.length < 12));
 function chartState(t){
-  if(t.chart && t.chart.v === 2) return 'ready';
+  if(t.chart && t.chart.v === 2 && !(thinChart(t) && chartTries(t.id) < 3)) return 'ready';
   if(!t.mint) return 'manual';
   if(chartInFlight.has(t.id)) return 'loading';
   return chartTries(t.id) < 3 ? 'loading' : 'none';

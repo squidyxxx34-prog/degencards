@@ -608,23 +608,51 @@ async function buildChainChart(t: any, deadline: number): Promise<boolean> {
     for (const p of (j?.data || []).slice(0, 3)) if (!p?.attributes?.pool_created_at || Date.parse(p.attributes.pool_created_at) <= t1) anchors.push({ acct: p.attributes.address });
   } catch (_) { /* vault only */ }
   if (!anchors.length) return false;
-  const sup = Number((await rpc("getTokenSupply", [t.mint]))?.value?.uiAmountString || 0);
+  let sup = 0; try { sup = Number((await rpc("getTokenSupply", [t.mint]))?.value?.uiAmountString || 0); } catch (_) { /* below */ }
   if (!sup) return false;
   if (!priceSeries || priceSeries[0][0] > t0) await loadSolPrices(t0);
   const sigs = new Map<string, number>();
-  for (const { acct } of anchors) {
-    // jump near the trade first: page backwards from "now" only until we pass t1, then collect until t0
+  const getSigs = async (acct: string, opts: any): Promise<any[]> => {
+    for (let k = 0; k < 3; k++) { try { return (await rpc("getSignaturesForAddress", [acct, { limit: 1000, ...opts }])) || []; } catch (_) { await sleep(1500 * (k + 1)); } }
+    return [];
+  };
+  const keep = (list: any[]) => { for (const s of list) { const ts = (s.blockTime || 0) * 1000; if (!s.err && ts >= t0 && ts <= t1) sigs.set(s.signature, ts); } };
+  // anchor the reads ON the trade: our own buy / sell signatures are in the pool's history, so we ask for the
+  // swaps just before the buy, between buy and sell, and just after the sell — 2-3 pages, however busy the coin is now
+  const wallet = String(t.ext_id || "").split(":")[0];
+  let sellSig = "";
+  if (wallet && B58.test(wallet)) {
     let before: string | undefined;
-    for (let page = 0; page < 12 && Date.now() < deadline - 25_000; page++) {
-      const opts: any = { limit: 1000 }; if (before) opts.before = before;
-      const list = await rpc("getSignaturesForAddress", [acct, opts]);
-      if (!list?.length) break;
-      let done = false;
-      for (const s of list) { const ts = (s.blockTime || 0) * 1000; if (ts > t1 || s.err) continue; if (ts < t0) { done = true; break; } sigs.set(s.signature, ts); }
-      if (done || list.length < 1000) break;
+    for (let page = 0; page < 6 && !sellSig; page++) {
+      const list = await getSigs(wallet, before ? { before } : {});
+      if (!list.length) break;
+      for (const s of list) if (Math.abs((s.blockTime || 0) * 1000 - end) <= 1000 && !s.err) { sellSig = s.signature; break; }
+      if ((list[list.length - 1].blockTime || 0) * 1000 < end - 5000) break;
       before = list[list.length - 1].signature;
     }
-    if (sigs.size > 40) break;                                        // the trade's own pool already gives plenty
+  }
+  const vault = anchors[0]?.acct;
+  if (vault && buySig) {
+    keep(await getSigs(vault, { before: buySig }));                                   // before the buy (stops at t0)
+    if (sellSig) keep(await getSigs(vault, { before: sellSig, until: buySig }));     // during the trade
+    if (sellSig) {                                                                   // after the sell: only if the pool's recent history reaches back that far
+      const list = await getSigs(vault, { until: sellSig });
+      if (list.length < 1000) keep(list);
+    }
+    sigs.set(buySig, start); if (sellSig) sigs.set(sellSig, end);
+  }
+  if (sigs.size < 10) {                                                              // no anchor (old data): plain backwards paging on the listed pools
+    for (const { acct } of anchors.slice(vault && buySig ? 1 : 0)) {
+      let before: string | undefined;
+      for (let page = 0; page < 6 && Date.now() < deadline - 25_000; page++) {
+        const list = await getSigs(acct, before ? { before } : {});
+        if (!list.length) break;
+        keep(list);
+        if ((list[list.length - 1].blockTime || 0) * 1000 < t0 || list.length < 1000) break;
+        before = list[list.length - 1].signature;
+      }
+      if (sigs.size > 40) break;
+    }
   }
   let all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
   const N = HELIUS ? 200 : 60;
@@ -795,7 +823,17 @@ Deno.serve(async (req) => {
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
     if (task === "charts") {
-      let charts = 0; try { charts = await buildPumpCharts(deadline, null); } catch (e) { console.error("charts", (e as Error).message); }
+      let charts = 0; try { charts = await buildPumpCharts(deadline - 45_000, null); } catch (e) { console.error("charts", (e as Error).message); }
+      // coins outside pump.fun whose chart is missing / minute-only / too thin: rebuild one from the chain per pass
+      try {
+        const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries").not("mint", "is", null)
+          .not("mint", "like", "%pump").is("deleted_at", null).lt("chart_tries", 3).lt("timestamp_ms", Date.now() - 150_000)
+          .or("chart.is.null,chart->>q.is.null,chart->>q.eq.1").order("timestamp_ms", { ascending: false }).limit(1);
+        for (const t of rows || []) {
+          const ok = await buildChainChart(t, Math.min(deadline, Date.now() + 60_000));
+          if (ok) charts++; else await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
+        }
+      } catch (e) { console.error("chain charts", (e as Error).message); }
       return new Response(JSON.stringify({ charts }), { headers: h });
     }
     if (task === "images") {
@@ -825,7 +863,7 @@ Deno.serve(async (req) => {
         const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart").eq("user_id", userId).in("id", ids).not("mint", "is", null);
         for (const t of rows || []) {
           if (Date.now() > dl - 15_000) break;
-          const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.c?.length || 0) < 12);
+          const weak = !t.chart || t.chart?.v !== 2 || (t.chart?.src === "gt" && (t.chart?.q !== 2 || (t.chart?.c?.length || 0) < 12));
           if (!weak || String(t.mint).endsWith("pump")) continue;
           if (await buildChainChart(t, dl)) charts++;
         }
