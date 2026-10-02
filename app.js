@@ -1761,11 +1761,24 @@ async function reload(){
   renderAll();
 }
 
+/* first load: quiet skeletons in place of the stats and cards, so the empty Home never looks broken */
+let firstLoadDone = false;
+function showLoading(){
+  const bar = w => `<i class="sk" style="width:${w}%"></i>`;
+  document.getElementById('statsRow').innerHTML = Array.from({length:5}, ()=>`<div class="stat">${bar(55)}${bar(80)}</div>`).join('');
+  document.getElementById('homeGrid').innerHTML = Array.from({length:4}, ()=>`<div class="card sk-card" aria-hidden="true">
+    <div class="sk-row">${bar(30)}${bar(18)}</div><i class="sk sk-coin"></i>${bar(40)}${bar(70)}${bar(30)}
+    <div class="chartbox skel" style="height:66px">${Array.from({length:16}, (_,k)=>`<i style="height:${(18 + 30*Math.abs(Math.sin(k*1.7))).toFixed(0)}%;animation-delay:${k*60}ms"></i>`).join('')}</div>${bar(100)}</div>`).join('');
+  document.getElementById('xpLabel').textContent = 'Loading…';
+  document.getElementById('homeLoading').hidden = false;
+}
 async function showApp(){
   scrubUrl();
   document.getElementById('landing').hidden = true;
   document.getElementById('app').hidden = false;
-  await reload();
+  if(!firstLoadDone) showLoading();
+  try{ await reload(); }
+  finally{ firstLoadDone = true; document.getElementById('homeLoading').hidden = true; }
   maybeAutoSync();
   warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself

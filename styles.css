@@ -548,3 +548,16 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 /* modern chart: soft card background, glowing candles */
 .chartbox.modern{background:radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.035), transparent 70%);border-radius:12px;}
 .chartbox.modern svg.cs{filter:drop-shadow(0 0 4px rgba(24,201,100,.10));}
+
+/* first-load skeletons */
+.sk{display:block;height:9px;border-radius:5px;background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.12),rgba(255,255,255,.05));background-size:200% 100%;animation:skShine 1.4s linear infinite;margin:6px auto;}
+.stat .sk{margin:6px 0;}
+.sk-card{cursor:default;pointer-events:none;}
+.sk-row{display:flex;justify-content:space-between;gap:8px;}
+.sk-row .sk{margin:0;}
+.sk-coin{width:46px !important;height:46px;border-radius:12px;margin:12px auto 8px;}
+.home-loading{display:inline-flex;align-items:center;gap:6px;margin-left:10px;font:600 10px var(--mono);letter-spacing:.06em;color:var(--tx2);text-transform:uppercase;vertical-align:middle;}
+.home-loading[hidden]{display:none;}
+.hl-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:skelPulse .8s ease-in-out infinite alternate;}
+@keyframes skShine{from{background-position:200% 0;}to{background-position:-200% 0;}}
+@media(prefers-reduced-motion:reduce){.sk,.hl-dot{animation:none;}}
