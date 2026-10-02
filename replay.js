@@ -79,6 +79,7 @@ function prep(t){
   const mcOf = m => m[2] > 0 ? m[2] : at(m[0]);
   const bm = buys[0] || [t.timestamp - t.holdTime*1000, 'b', t.entryMc];
   const sm = sells[sells.length-1] || [t.timestamp, 's', t.exitMc];
+  // several fills: the replay shows only the first BUY and the last SELL
   const ib = idxOf(bm[0]), is = Math.max(ib, idxOf(sm[0]));
   const buyMc = mcOf(bm) || t.entryMc || 1, sellMc = mcOf(sm) || t.exitMc || buyMc;
   const size = t.roi ? Math.abs(t.pnl / (t.roi / 100)) : 0;
@@ -87,7 +88,7 @@ function prep(t){
   w[ib] += 4; w[is] += 4;
   const cum = [0]; w.forEach(x => cum.push(cum[cum.length-1] + x));
   const total = cum[cum.length-1];
-  const p = { cs, iv, marks, ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
+  const p = { cs, iv, marks: [bm, sm], ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
   prepCache.set(t, p); return p;
 }
 /* replay time (0..T_REPLAY) -> revealed candles (float 0..n) */
