@@ -454,11 +454,20 @@ function markersHtml(marks, X, Y, big){
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */
+function mergeCandles(cs, iv, max){
+  if(cs.length <= max) return [cs, iv];
+  const k = Math.ceil(cs.length / max), out = [];
+  for(let i = 0; i < cs.length; i += k){
+    const g = cs.slice(i, i+k);
+    out.push([g[0][0], g[0][1], Math.max(...g.map(c=>c[2])), Math.min(...g.map(c=>c[3])), g[g.length-1][4]]);
+  }
+  return [out, iv*k];
+}
 function miniChart(t, big){
   const h = big ? 170 : 66;
   const ch = t.chart;
   if(ch && ch.v === 2){
-    const cs = ch.c, iv = ch.i;
+    const [cs, iv] = mergeCandles(ch.c, ch.i, big ? 140 : 48);
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
     if(x1 <= x0) x1 = x0 + iv;
     const ys =  [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
@@ -528,7 +537,21 @@ function renderCardHTML(t, meta){
 }
 function cardStyle(meta){ return `--glow:${meta.color.glow}; border-color:${meta.color.border};`; }
 
-function renderGrid(){
+const GRID_STEP = 24;
+let gridLimit = GRID_STEP, gridList = [];
+const cardHTML = t => `<div class="card" data-r="${t.meta.rarity}" data-id="${t.id}" style="${cardStyle(t.meta)}">${renderCardHTML(t,t.meta)}</div>`;
+function bindCards(root){ root.querySelectorAll('.card:not([data-b])').forEach(el=>{ el.dataset.b = 1; el.addEventListener('click',()=>openDetail(el.dataset.id)); if(chartObserver) chartObserver.observe(el); }); }
+const gridMore = 'IntersectionObserver' in window ? new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) growGrid(); }, { rootMargin:'900px 0px' }) : null;
+function growGrid(){
+  const grid = document.getElementById('grid'), more = document.getElementById('gridMore');
+  if(!more || gridLimit >= gridList.length) return;
+  const next = gridList.slice(gridLimit, gridLimit + GRID_STEP); gridLimit += next.length;
+  more.insertAdjacentHTML('beforebegin', next.map(cardHTML).join(''));
+  bindCards(grid);
+  if(gridLimit >= gridList.length){ gridMore?.unobserve(more); more.remove(); }
+}
+function renderGrid(reset){
+  if(reset) gridLimit = GRID_STEP;
   const all = computedTrades();
   let filtered = all;
   if(activeFilter==="win") filtered=all.filter(t=>t.pnl>=0);
@@ -550,8 +573,11 @@ function renderGrid(){
     document.getElementById('emptyCreate')?.addEventListener('click', openNewModal);
     return;
   }
-  grid.innerHTML = filtered.map(t=>`<div class="card" data-r="${t.meta.rarity}" data-id="${t.id}" style="${cardStyle(t.meta)}">${renderCardHTML(t,t.meta)}</div>`).join('');
-  grid.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  gridList = filtered; gridLimit = Math.min(Math.max(gridLimit, GRID_STEP), filtered.length);
+  grid.innerHTML = filtered.slice(0, gridLimit).map(cardHTML).join('') + (gridLimit < filtered.length ? '<div id="gridMore" class="grid-more" aria-hidden="true"></div>' : '');
+  bindCards(grid);
+  const more = document.getElementById('gridMore');
+  if(more){ if(gridMore) gridMore.observe(more); else { gridLimit = filtered.length; renderGrid(); } }
 }
 
 function renderStatsRow(){
@@ -952,8 +978,8 @@ function renderHome(){
     document.getElementById('homeEmptyCreate')?.addEventListener('click', openNewModal);
     return;
   }
-  grid.innerHTML = all.map(t=>`<div class="card" data-r="${t.meta.rarity}" data-id="${t.id}" style="${cardStyle(t.meta)}">${renderCardHTML(t,t.meta)}</div>`).join('');
-  grid.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  grid.innerHTML = all.map(cardHTML).join('');
+  bindCards(grid);
 }
 function goToView(v){
   view = v;
@@ -1063,7 +1089,7 @@ function renderRecover(){
     act(store.purge.bind(store), [...binSel], `${n} trade${n>1?'s':''} permanently deleted`);
   });
 }
-function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); observeCards(); }
+function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
 
 /* ---------- auto-import (server side) ----------
    The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
@@ -1341,14 +1367,17 @@ async function buildChartsInBrowser(){
       const k = Math.max(0, todo.findIndex(x=>onScreen.has(x.id)));   // cards on screen first
       const t = todo.splice(k, 1)[0];
       if(styled(t.chart)) continue;                                   // built meanwhile (card opened)
-      try{ if(await buildOneInBrowser(t)){ dirty++; if(dirty % 4 === 0) renderAll(); } if(!styled(t.chart)) bumpTries(t.id); }
+      try{ if(await buildOneInBrowser(t)){ dirty++; refreshCharts([t.id]); } if(!styled(t.chart)) bumpTries(t.id); }
       catch(e){ if(String(e.message)==='429') break; bumpTries(t.id); }
     }
-    if(dirty) renderAll();
   } finally { chartQueueRunning = false; }
 }
 /* ultra-fast charts: everything missing is requested as soon as the app opens, cards on screen first.
    pump.fun coins -> the server builds them in batches of 10 (second candles); other coins -> the browser queue. */
+function refreshCharts(ids){
+  ids.forEach(id=>{ const t = trades.find(x=>x.id===id); if(!t) return;
+    document.querySelectorAll(`.card[data-id="${id}"] .mini`).forEach(el=>{ el.innerHTML = miniChart(t); }); });
+}
 const onScreen = new Set();
 const chartObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
   let add = false;
@@ -1373,10 +1402,10 @@ async function warmCharts(){
       try{
         const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', ids: batch.map(t=>t.id) } });
         const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
-        let changed = 0;
-        (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c){ t.chart = c; changed++; } });
+        let changed = 0; const upd = [];
+        (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c){ t.chart = c; changed++; upd.push(t.id); } });
         batch.forEach(t=>chartInFlight.delete(t.id));
-        if(changed) renderAll();
+        if(changed) refreshCharts(upd);
         if(!data?.charts && !changed) break;                           // pump.fun is throttling: the browser fallback / cron will finish
       }catch(e){ batch.forEach(t=>chartInFlight.delete(t.id)); break; }
     }
@@ -1406,7 +1435,7 @@ async function ensureChart(t){
   finally{ chartInFlight.delete(t.id); }
   if(thinChart(t)) bumpTries(t.id);
   if(ok){
-    renderAll();
+    refreshCharts([t.id]);
     if(detailOverlay.classList.contains('show') && detailOverlay.dataset.id === t.id) openDetail(t.id, true);
   } else if(detailOverlay.classList.contains('show') && detailOverlay.dataset.id === t.id){ bumpTries(t.id); openDetail(t.id, true); }
 }
@@ -1431,9 +1460,9 @@ document.getElementById('homeSeeAll').addEventListener('click', ()=>goToView('co
 document.getElementById('filterRow').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
   document.querySelectorAll('#filterRow .chip').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); activeFilter=b.dataset.f; renderGrid();
+  b.classList.add('active'); activeFilter=b.dataset.f; renderGrid(true);
 });
-document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(); });
+document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(true); });
 document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 
