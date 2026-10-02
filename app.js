@@ -1255,8 +1255,8 @@ function gtGet(path){                                                   // one r
 }
 /* failed chart attempts per trade, per device: they expire after 6 h (a source can be down or rate-limited for a while,
    the chart must still come back later instead of being given up for good) */
-function chartTries(id){ try{ const v = JSON.parse(localStorage.getItem('dc_ct3_'+id)||'null'); return v && Date.now() - v.at < 6*3600e3 ? v.n : 0; }catch(e){ return 0; } }
-function bumpTries(id){ try{ localStorage.setItem('dc_ct3_'+id, JSON.stringify({ n: chartTries(id)+1, at: Date.now() })); }catch(e){} }
+function chartTries(id){ try{ const v = JSON.parse(localStorage.getItem('dc_ct4_'+id)||'null'); return v && Date.now() - v.at < 6*3600e3 ? v.n : 0; }catch(e){ return 0; } }
+function bumpTries(id){ try{ localStorage.setItem('dc_ct4_'+id, JSON.stringify({ n: chartTries(id)+1, at: Date.now() })); }catch(e){} }
 const gtPools = new Map();
 async function buildOneInBrowser(t){
   const end = t.timestamp, start = end - (t.holdTime||0)*1000;
