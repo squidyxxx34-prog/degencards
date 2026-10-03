@@ -334,9 +334,16 @@ function cleanCandles(raw, iv, marks){
   const W = 5, BODY = Math.log(4);
   const ref = mids.map((_,i)=>{ const r = med(mids.slice(Math.max(0,i-W), i+W+1)); return Number.isFinite(r) ? r : gmed; });
   // bodies: a price more than 4x away from its neighbourhood is a bad read
+  // ...unless the market really went there: the price chains with the next / previous candle (close = next open), or
+  // the wallet's own fills (exact) sit at that level — a launch pump or a rug is real, it must stay on the chart
+  const near = (u, v) => pos(u) && pos(v) && Math.abs(lg(u) - lg(v)) < 0.03;
+  const fillAt = (i, v) => (marks||[]).some(m=>m[2] > 0 && m[0] >= out[i][0] - iv && m[0] < out[i][0] + 2*iv && Math.abs(lg(m[2]) - lg(v)) < Math.log(1.6));
+  const isReal = (i, j) => { const v = out[i][j];
+    return (j === 4 && out[i+1] && !out[i+1][5] && near(v, out[i+1][1])) || (j === 1 && out[i-1] && !out[i-1][5] && near(v, out[i-1][4])) || fillAt(i, v); };
+  const keep = out.map((_,i)=>[1,4].map(j=>pos(out[i][j]) && isReal(i, j)));
   for(let i=0;i<out.length;i++){
     const r = Math.exp(ref[i]);
-    for(const j of [1,4]) if(!pos(out[i][j]) || Math.abs(lg(out[i][j]) - ref[i]) > BODY) out[i][j] = r;
+    [1,4].forEach((j,n)=>{ if(!pos(out[i][j]) || (!keep[i][n] && Math.abs(lg(out[i][j]) - ref[i]) > BODY)) out[i][j] = r; });
   }
   for(let i=1;i<out.length;i++) if(out[i][5]) out[i][1] = out[i][2] = out[i][3] = out[i][4] = out[i-1][4];  // fillers follow cleaned closes
   // wicks: never further than the nearby bodies allow (plus the user's own fills, which are exact)
@@ -426,10 +433,23 @@ function parseChart(c){
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
         const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
-        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: tc.length };
+        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: tc.length };
       }
     }
-    return cl.length ? { v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, n: cl.length } : null;
+    let cc = dn.c, ww = w;
+    if(cc.length > 8 && m.length){
+      const span = Math.max(...cc.map(x=>x[2])) - Math.min(...cc.map(x=>x[3])) || 1;
+      const dead = x => (x[2] - x[3]) / span < 0.02;
+      const f0 = Math.min(...m.map(x=>x[0])), f1 = Math.max(...m.map(x=>x[0])), KEEP = 3;
+      let a = 0, b = cc.length - 1;
+      while(a < b && cc[a][0] + dn.i <= f0 && dead(cc[a]) && cc.slice(a, a+KEEP+1).every(dead)) a++;
+      while(b > a && cc[b][0] > f1 && dead(cc[b]) && cc.slice(Math.max(a, b-KEEP), b+1).every(dead)) b--;
+      if(a > 0 || b < cc.length - 1){
+        a = Math.max(0, a - (a ? KEEP : 0)); b = Math.min(cc.length - 1, b + (b < cc.length - 1 ? KEEP : 0));
+        cc = cc.slice(a, b + 1); ww = [Math.min(cc[0][0], f0), Math.max(cc[cc.length-1][0] + dn.i, f1)];
+      }
+    }
+    return cl.length ? { v:2, c:cc, m, m0:m, w:ww, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: cl.length } : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -1437,8 +1457,27 @@ async function warmCharts(){
         if(!data?.charts && !changed) break;                           // pump.fun is throttling: the browser fallback / cron will finish
       }catch(e){ batch.forEach(t=>chartInFlight.delete(t.id)); break; }
     }
+    await fineCharts();
   } finally { warmBusy = false; }
   buildChartsInBrowser();
+}
+/* very short trade on a pump.fun coin with an empty minute chart around it: second-level candles from the server */
+const fineAsked = new Set();
+async function fineCharts(only){
+  for(let round = 0; round < 6; round++){
+    const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.mint.endsWith('pump') && t.chart && t.chart.src === 'gt' && t.chart.coarse && (t.chartTries||0) < 3 && !fineAsked.has(t.id));
+    if(!todo.length) return;
+    todo.sort((a,b)=>(onScreen.has(b.id)-onScreen.has(a.id)) || (b.timestamp-a.timestamp));
+    const batch = todo.slice(0, 6); batch.forEach(t=>fineAsked.add(t.id));
+    try{
+      const { data } = await sb.functions.invoke('pump-chart', { body:{ ids: batch.map(t=>t.id) } });
+      const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
+      const upd = [];
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.src === 'pump'){ t.chart = c; upd.push(t.id); } });
+      if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
+      if(!data?.charts) return;                                       // pump.fun throttling or nothing better: try again next visit
+    }catch(e){ return; }
+  }
 }
 
 /* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
@@ -1550,7 +1589,7 @@ const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
 const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
-const styled = ch => !!(ch && ch.v === 2 && ch.src === 'gt' && ch.q === 3);
+const styled = ch => !!(ch && ch.v === 2 && ((ch.src === 'gt' && ch.q === 3) || (ch.src === 'pump' && ch.fine)));
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && (!styled(t.chart) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
@@ -1562,6 +1601,7 @@ const fmtClock = ts => new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',m
 const fmtDelta = ms => { const s = Math.round(ms/1000); return s < 60 ? `+${s}s` : `+${Math.floor(s/60)}m ${s%60}s`; };
 function openDetail(id, refresh){
   const t = trades.find(x=>x.id===id); if(!t) return;
+  if(!refresh && t.chart && t.chart.coarse) fineCharts([t.id]);       // opened: its second-level candles first
   const keepScroll = refresh ? detailOverlay.querySelector('.modal').scrollTop : 0;
   const meta = generateTradeCard(t, trades);
   const win = t.pnl >= 0, cls = win ? 'pos' : 'neg';

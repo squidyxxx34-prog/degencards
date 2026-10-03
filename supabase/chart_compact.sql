@@ -22,3 +22,8 @@ drop trigger if exists trades_compact_chart on public.trades;
 create trigger trades_compact_chart before insert or update of chart on public.trades
   for each row execute function public.compact_chart();
 update public.trades set chart_tries = 0 where chart is null and mint is not null and deleted_at is null;
+
+-- 2026-10-03: compact_chart() also (1) flags GeckoTerminal charts of very short trades with an empty market around them
+-- (chart.coarse: all fills in <= 2 minute candles and < 12 candles that move >= 2% of the range) so pump.fun coins get
+-- second-level candles from the pump-chart edge function, and (2) never lets a minute chart overwrite those
+-- ({ src: "pump", fine: 1 }). Full function body: see migrations chart_keep_fine_pump in Supabase.
