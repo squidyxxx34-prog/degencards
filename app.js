@@ -408,6 +408,34 @@ function regroup(cs, iv){
   }
   return best;
 }
+/* every chart, every coin: about as many candles as a lively one (~32), never a flat candle.
+   Minutes where nobody traded are dropped, the rest merged into ~32 candles drawn side by side (quiet stretches don't
+   take room), and B / S placed at their exact moment inside the candle they fall in. */
+const EVEN_N = 32;
+function evenCandles(ch){
+  const src = ch.c, iv = ch.i;
+  if(!src || src.length < 2) return ch;
+  const H = Math.max(...src.map(x=>x[2])), L = Math.min(...src.map(x=>x[3])), R = H - L || 1;
+  const flat = x => (x[2] - x[3]) / R < 0.012;                      // under ~1% of the chart's height: reads as a flat line
+  let cs = src.filter(x=>!flat(x));
+  if(cs.length < 2) cs = src.slice();
+  if(cs.length > EVEN_N + 8){                                       // merge consecutive candles into ~32
+    const out = [], k = cs.length / EVEN_N;
+    for(let g = 0; g < EVEN_N; g++){
+      const b = cs.slice(Math.round(g*k), Math.round((g+1)*k)); if(!b.length) continue;
+      out.push([b[0][0], b[0][1], Math.max(...b.map(x=>x[2])), Math.min(...b.map(x=>x[3])), b[b.length-1][4], b[b.length-1][0] + iv]);
+    }
+    cs = out;
+  } else cs = cs.map((x,j)=>[x[0], x[1], x[2], x[3], x[4], ch.fine && cs[j+1] ? cs[j+1][0] : x[0] + iv]);
+  for(let j = 1; j < cs.length; j++){ cs[j][1] = cs[j-1][4]; cs[j][2] = Math.max(cs[j][2], cs[j][1]); cs[j][3] = Math.min(cs[j][3], cs[j][1]); }   // no gaps between candles
+  const T = 1000, pos = ts => {                                      // real time -> slot on the even axis
+    if(ts <= cs[0][0]) return 0;
+    for(let j = 0; j < cs.length; j++){ const a = cs[j][0], b = cs[j][5];
+      if(ts < b || j === cs.length-1 || ts < cs[j+1][0]) return (j + Math.min(1, Math.max(0, (ts - a) / Math.max(1, b - a)))) * T; }
+    return cs.length * T;
+  };
+  return { ...ch, c: cs.map((x,j)=>[j*T, x[1], x[2], x[3], x[4]]), m: (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]), w: [0, cs.length*T], i: T, iv0: T, even: true };
+}
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
@@ -416,6 +444,10 @@ function parseChart(c){
   if(c.v === 2){
     const cs = Array.isArray(c.c) ? c.c.filter(x=>Array.isArray(x) && x.length>=5 && x.slice(0,5).every(v=>okN(+v))).map(x=>x.slice(0,5).map(Number)).slice(0,400) : [];
     const iv0 = okN(+c.i) && +c.i>0 ? +c.i : 60000;
+    if(c.fine && cs.length >= 2){                                    // candles of real consecutive swaps: drawn as they are
+      const fc = cs.slice().sort((a,b)=>a[0]-b[0]);
+      return evenCandles({ v:2, c:fc, m, m0:m, w, iv0, i: iv0, src: c.src==='pump' ? 'pump' : 'chain', q: 2, fine: true, coarse: false, n: fc.length });
+    }
     if(c.src === 'gt' && cs.length && m.some(x=>x[2] > 0)){             // GeckoTerminal prices in its own supply (fdv/price): when every fill
       const r = m.filter(x=>x[2] > 0).map(x=>{ const k = cs.find(y=>x[0] < y[0] + iv0) || cs[cs.length-1]; return x[2] / ((k[2]+k[3])/2); }).sort((p,q)=>p-q);
       const med = r[r.length>>1];                                      // sits off the candles the same way, rescale them to the on-chain market cap
@@ -433,23 +465,10 @@ function parseChart(c){
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
         const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
-        return { v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: tc.length };
+        return evenCandles({ v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: tc.length });
       }
     }
-    let cc = dn.c, ww = w;
-    if(cc.length > 8 && m.length){
-      const span = Math.max(...cc.map(x=>x[2])) - Math.min(...cc.map(x=>x[3])) || 1;
-      const dead = x => (x[2] - x[3]) / span < 0.02;
-      const f0 = Math.min(...m.map(x=>x[0])), f1 = Math.max(...m.map(x=>x[0])), KEEP = 3;
-      let a = 0, b = cc.length - 1;
-      while(a < b && cc[a][0] + dn.i <= f0 && dead(cc[a]) && cc.slice(a, a+KEEP+1).every(dead)) a++;
-      while(b > a && cc[b][0] > f1 && dead(cc[b]) && cc.slice(Math.max(a, b-KEEP), b+1).every(dead)) b--;
-      if(a > 0 || b < cc.length - 1){
-        a = Math.max(0, a - (a ? KEEP : 0)); b = Math.min(cc.length - 1, b + (b < cc.length - 1 ? KEEP : 0));
-        cc = cc.slice(a, b + 1); ww = [Math.min(cc[0][0], f0), Math.max(cc[cc.length-1][0] + dn.i, f1)];
-      }
-    }
-    return cl.length ? { v:2, c:cc, m, m0:m, w:ww, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: cl.length } : null;
+    return cl.length ? evenCandles({ v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: cl.length }) : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -524,11 +543,12 @@ function miniChart(t, big){
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
     const bw = Math.max(0.5, (iv/(x1-x0))*100*0.9);                   // candles side by side, like a trading chart
+    const minB = big ? 2.6 : 4;                                       // a candle always reads as a candle, never as a flat line
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
       return `<line x1="${cx.toFixed(2)}" x2="${cx.toFixed(2)}" y1="${Y(hi).toFixed(2)}" y2="${Y(lo).toFixed(2)}" stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"/>`+
-             `<rect x="${(cx-bw/2).toFixed(2)}" y="${top.toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(0.8, bot-top).toFixed(2)}" fill="${col}"/>`;
+             `<rect x="${(cx-bw/2).toFixed(2)}" y="${(Math.min(top, (top+bot)/2 - minB/2)).toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(minB, bot-top).toFixed(2)}" fill="${col}"/>`;
     }).join('');
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
     const marks = ch.m.map(m=>[m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);   // the wallet's own fill: exact market cap
@@ -1461,21 +1481,21 @@ async function warmCharts(){
   } finally { warmBusy = false; }
   buildChartsInBrowser();
 }
-/* very short trade on a pump.fun coin with an empty minute chart around it: second-level candles from the server */
+/* a chart with too few candles that move (empty minutes around the trade): rebuilt from the pool's real swaps */
 const fineAsked = new Set();
 async function fineCharts(only){
   for(let round = 0; round < 6; round++){
-    const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.mint.endsWith('pump') && t.chart && t.chart.src === 'gt' && t.chart.coarse && (t.chartTries||0) < 3 && !fineAsked.has(t.id));
+    const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.chart && t.chart.coarse && !t.chart.fine && (t.chartTries||0) < 8 && !fineAsked.has(t.id));
     if(!todo.length) return;
     todo.sort((a,b)=>(onScreen.has(b.id)-onScreen.has(a.id)) || (b.timestamp-a.timestamp));
-    const batch = todo.slice(0, 6); batch.forEach(t=>fineAsked.add(t.id));
+    const batch = todo.slice(0, 3); batch.forEach(t=>fineAsked.add(t.id));
     try{
-      const { data } = await sb.functions.invoke('pump-chart', { body:{ ids: batch.map(t=>t.id) } });
+      const { data } = await sb.functions.invoke('fine-chart', { body:{ ids: batch.map(t=>t.id) } });
       const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
       const upd = [];
-      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.src === 'pump'){ t.chart = c; upd.push(t.id); } });
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine){ t.chart = c; upd.push(t.id); } });
       if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
-      if(!data?.charts) return;                                       // pump.fun throttling or nothing better: try again next visit
+      if(!data?.charts && !only) return;                              // nothing better found: try again next visit
     }catch(e){ return; }
   }
 }
@@ -1589,7 +1609,7 @@ const detailOverlay = document.getElementById('detailOverlay');
 /* ---------- trade detail ---------- */
 const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length || !ch.c.length) return true;      // candles must span the whole trade
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
-const styled = ch => !!(ch && ch.v === 2 && ((ch.src === 'gt' && ch.q === 3) || (ch.src === 'pump' && ch.fine)));
+const styled = ch => !!(ch && ch.v === 2 && ((ch.src === 'gt' && ch.q === 3) || ch.fine));
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && (!styled(t.chart) || !coversFills(t.chart)));
 function chartState(t){
   if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
