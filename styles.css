@@ -563,3 +563,8 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .hl-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:skelPulse .8s ease-in-out infinite alternate;}
 @keyframes skShine{from{background-position:200% 0;}to{background-position:-200% 0;}}
 @media(prefers-reduced-motion:reduce){.sk,.hl-dot{animation:none;}}
+
+/* fill rounds: one per group, the other fills of the group are small anchors on a bracket */
+.mk-dot{width:12px !important;height:12px !important;border-width:2px !important;}
+.chartbox.big .mk-dot{width:14px !important;height:14px !important;}
+.chartbox.big .mk-anchor{width:7px;height:7px;}

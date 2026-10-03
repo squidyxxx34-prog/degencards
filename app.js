@@ -439,28 +439,38 @@ const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFix
 const CH_TOP = 24;   // % of the chart height reserved for the markers
 function markersHtml(marks, X, Y, big){
   const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) })).sort((p,q)=>p.x-q.x);
-  const gap = big ? 7 : 12;                                          // ~ one top round apart (they are ~30 px)
-  // fills of the same side close together in time: one marker with a count (S x9) and one drop line, instead of a fan of lines
+  const W = big ? 330 : 150, H = big ? 170 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
+  const pct = px => px / W * 100;
+  // fills of the same side close together in time: one marker with a count (S x9), one round, one straight drop line
+  const gap = pct(mkPx * 1.6);
   const groups = [];
   pos.forEach(m=>{ const g = groups[groups.length-1];
     if(g && g.kind === m.kind && m.x - g.items[g.items.length-1].x < gap) g.items.push(m); else groups.push({ kind: m.kind, items: [m] }); });
-  groups.forEach(g=>{ const n = g.items.length;
-    g.x = g.items.reduce((a,m)=>a+m.x,0)/n;
-    g.y = g.kind === 's' ? Math.min(...g.items.map(m=>m.y)) : Math.max(...g.items.map(m=>m.y));   // line to the best fill of the group
-    g.n = n; });
-  // markers that would still touch at the top: spread them sideways in time order, the drop line stays on the real time
-  const wide = g => g.n > 1 ? (big ? 1.9 : 1.6) : 1;                   // a counted pill is wider than a round
-  groups.forEach((g,i)=>{ g.mx = g.x; const p = groups[i-1]; if(p){ const d = gap * (wide(p) + wide(g)) / 2; if(g.mx - p.mx < d) g.mx = p.mx + d; } });
-  const over = Math.max(0, groups.length ? groups[groups.length-1].mx - 100 + (wide(groups[groups.length-1]) - 1) * gap / 2 : 0);
-  groups.forEach(g=>{ g.mx = Math.max(0, g.mx - over); });
-  const mkPx = big ? 20 : 16, hPx = big ? 170 : 66, mb = (mkPx / hPx) * 100;          // marker bottom, in % of height
+  groups.forEach(g=>{ g.n = g.items.length;
+    const best = g.kind === 's' ? g.items.reduce((a,m)=>m.y < a.y ? m : a) : g.items.reduce((a,m)=>m.y > a.y ? m : a);   // best fill of the group
+    g.x = best.x; g.y = best.y; g.best = best; g.w = pct(g.n > 1 ? mkPx + 22 : mkPx) + pct(4); });
+  // labels that would touch: a second row just below (big chart), the line stays vertical on the real time;
+  // only when both rows are taken does a label slide sideways
+  const rows = big ? 2 : 1, placed = [];
+  groups.forEach(g=>{
+    const half = g.w / 2; g.mx = Math.min(100 - half, Math.max(half, g.x));
+    const free = r => !placed.some(p=>p.row === r && Math.abs(p.mx - g.mx) < (p.w + g.w) / 2);
+    g.row = [...Array(rows).keys()].find(free);
+    if(g.row === undefined){
+      if(!big){ g.hide = true; return; }                              // small card: no room, the round alone shows the fill
+      g.row = 0; const p = placed.filter(p=>p.row === 0).pop(); g.mx = Math.min(100 - half, p.mx + (p.w + g.w) / 2);
+    }
+    placed.push(g);
+  });
+  const rowTop = r => r * (mkPx + 3);                                 // px from the top
   const col = k => k==='b' ? '#18c964' : '#ff3b4e';
-  // a group's other fills: a thin bracket joining them, so it reads as one block
-  const brackets = groups.filter(g=>g.n > 1).map(g=>{ const xs = g.items.map(m=>m.x); return `<line x1="${Math.min(...xs).toFixed(2)}" y1="${g.y.toFixed(2)}" x2="${Math.max(...xs).toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-opacity=".55" stroke-width="2" vector-effect="non-scaling-stroke"/>`; }).join('');
-  const lines = groups.map(g=>`<line x1="${g.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${g.x.toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
+  const brackets = groups.filter(g=>g.n > 1).map(g=>{ const xs = g.items.map(m=>m.x); return `<line x1="${Math.min(...xs).toFixed(2)}" y1="${g.y.toFixed(2)}" x2="${Math.max(...xs).toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-opacity=".5" stroke-width="2" vector-effect="non-scaling-stroke"/>`; }).join('');
+  const lines = groups.filter(g=>!g.hide).map(g=>{ const y0 = (rowTop(g.row) + mkPx) / H * 100;
+    return `<line x1="${g.mx.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${g.x.toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`; }).join('');
   return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${brackets}${lines}</svg>` +
-    pos.map(m=>`<span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
-    groups.map(g=>`<span class="mk mk-top mk-${g.kind}${g.n>1?' mk-n':''}" style="left:${g.mx.toFixed(2)}%">${g.kind==='b'?'B':'S'}${g.n>1?`<small>\u00d7${g.n}</small>`:''}</span>`).join('');
+    groups.flatMap(g=>g.items.filter(m=>m !== g.best)).map(m=>`<span class="mk-anchor mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
+    groups.map(g=>`<span class="mk-dot mk-${g.kind}" style="left:${g.x.toFixed(2)}%;top:${g.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
+    groups.filter(g=>!g.hide).map(g=>`<span class="mk mk-top mk-${g.kind}${g.n>1?' mk-n':''}" style="left:${g.mx.toFixed(2)}%;top:${rowTop(g.row)}px">${g.kind==='b'?'B':'S'}${g.n>1?`<small>\u00d7${g.n}</small>`:''}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */
