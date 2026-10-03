@@ -439,7 +439,7 @@ const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFix
 const CH_TOP = 24;   // % of the chart height reserved for the markers
 function markersHtml(marks, X, Y, big){
   const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) })).sort((p,q)=>p.x-q.x);
-  const W = big ? 330 : 150, H = big ? 170 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
+  const W = big ? 330 : 140, H = big ? 170 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
   const pct = px => px / W * 100;
   // fills of the same side close together in time: one marker with a count (S x9), one round, one straight drop line
   const gap = pct(mkPx * 1.6);
@@ -456,21 +456,29 @@ function markersHtml(marks, X, Y, big){
     const half = g.w / 2; g.mx = Math.min(100 - half, Math.max(half, g.x));
     const free = r => !placed.some(p=>p.row === r && Math.abs(p.mx - g.mx) < (p.w + g.w) / 2);
     g.row = [...Array(rows).keys()].find(free);
-    if(g.row === undefined){
-      if(!big){ g.hide = true; return; }                              // small card: no room, the round alone shows the fill
-      g.row = 0; const p = placed.filter(p=>p.row === 0).pop(); g.mx = Math.min(100 - half, p.mx + (p.w + g.w) / 2);
+    if(g.row === undefined){                                         // no room: slide right of the previous label
+      g.row = 0; const p = placed.filter(p=>p.row === 0).pop(); g.mx = p.mx + (p.w + g.w) / 2;
     }
     placed.push(g);
   });
+  // labels pushed past the right edge come back inside, pushing their neighbours left (every label stays visible)
+  const r0 = placed.filter(p=>p.row === 0);
+  for(let i = r0.length - 1; i >= 0; i--){
+    const g = r0[i], nx = r0[i+1];
+    let lim = 100 - g.w / 2; if(nx) lim = Math.min(lim, nx.mx - (nx.w + g.w) / 2);
+    if(g.mx > lim) g.mx = lim;
+  }
+  for(let i = 0; i < r0.length; i++){ const g = r0[i], pv = r0[i-1];  // too crowded: never off the left edge
+    let lo = g.w / 2; if(pv) lo = Math.max(lo, pv.mx + (pv.w + g.w) / 2 * 0.6); if(g.mx < lo) g.mx = lo; }
   const rowTop = r => r * (mkPx + 3);                                 // px from the top
   const col = k => k==='b' ? '#18c964' : '#ff3b4e';
   const brackets = groups.filter(g=>g.n > 1).map(g=>{ const xs = g.items.map(m=>m.x); return `<line x1="${Math.min(...xs).toFixed(2)}" y1="${g.y.toFixed(2)}" x2="${Math.max(...xs).toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-opacity=".5" stroke-width="2" vector-effect="non-scaling-stroke"/>`; }).join('');
-  const lines = groups.filter(g=>!g.hide).map(g=>{ const y0 = (rowTop(g.row) + mkPx) / H * 100;
+  const lines = groups.map(g=>{ const y0 = (rowTop(g.row) + mkPx) / H * 100;
     return `<line x1="${g.mx.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${g.x.toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`; }).join('');
   return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${brackets}${lines}</svg>` +
     groups.flatMap(g=>g.items.filter(m=>m !== g.best)).map(m=>`<span class="mk-anchor mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
     groups.map(g=>`<span class="mk-dot mk-${g.kind}" style="left:${g.x.toFixed(2)}%;top:${g.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
-    groups.filter(g=>!g.hide).map(g=>`<span class="mk mk-top mk-${g.kind}${g.n>1?' mk-n':''}" style="left:${g.mx.toFixed(2)}%;top:${rowTop(g.row)}px">${g.kind==='b'?'B':'S'}${g.n>1?`<small>\u00d7${g.n}</small>`:''}</span>`).join('');
+    groups.map(g=>`<span class="mk mk-top mk-${g.kind}${g.n>1?' mk-n':''}" style="left:${g.mx.toFixed(2)}%;top:${rowTop(g.row)}px">${g.kind==='b'?'B':'S'}${g.n>1?`<small>\u00d7${g.n}</small>`:''}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */
