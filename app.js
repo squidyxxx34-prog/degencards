@@ -438,19 +438,29 @@ const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFix
 /* B / S pinned at the top of the chart, a dashed drop line down to the exact fill point on the candles */
 const CH_TOP = 24;   // % of the chart height reserved for the markers
 function markersHtml(marks, X, Y, big){
-  const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) }));
-  // markers that would touch at the top: spread them sideways (B left, S right), the drop line stays on the real time
+  const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) })).sort((p,q)=>p.x-q.x);
   const gap = big ? 7 : 12;                                          // ~ one top round apart (they are ~30 px)
-  const sorted = [...pos].sort((p,q)=>p.x-q.x || (p.kind==='b'?-1:1));
-  sorted.forEach((m,i)=>{ m.mx = m.x; if(i && m.mx - sorted[i-1].mx < gap) m.mx = sorted[i-1].mx + gap; });
-  const over = Math.max(0, sorted.length ? sorted[sorted.length-1].mx - 100 : 0);
-  sorted.forEach(m=>{ m.mx = Math.max(0, m.mx - over); });
+  // fills of the same side close together in time: one marker with a count (S x9) and one drop line, instead of a fan of lines
+  const groups = [];
+  pos.forEach(m=>{ const g = groups[groups.length-1];
+    if(g && g.kind === m.kind && m.x - g.items[g.items.length-1].x < gap) g.items.push(m); else groups.push({ kind: m.kind, items: [m] }); });
+  groups.forEach(g=>{ const n = g.items.length;
+    g.x = g.items.reduce((a,m)=>a+m.x,0)/n;
+    g.y = g.kind === 's' ? Math.min(...g.items.map(m=>m.y)) : Math.max(...g.items.map(m=>m.y));   // line to the best fill of the group
+    g.n = n; });
+  // markers that would still touch at the top: spread them sideways in time order, the drop line stays on the real time
+  const wide = g => g.n > 1 ? (big ? 1.9 : 1.6) : 1;                   // a counted pill is wider than a round
+  groups.forEach((g,i)=>{ g.mx = g.x; const p = groups[i-1]; if(p){ const d = gap * (wide(p) + wide(g)) / 2; if(g.mx - p.mx < d) g.mx = p.mx + d; } });
+  const over = Math.max(0, groups.length ? groups[groups.length-1].mx - 100 + (wide(groups[groups.length-1]) - 1) * gap / 2 : 0);
+  groups.forEach(g=>{ g.mx = Math.max(0, g.mx - over); });
   const mkPx = big ? 20 : 16, hPx = big ? 170 : 66, mb = (mkPx / hPx) * 100;          // marker bottom, in % of height
-  // the fill itself: a small white dot ringed in its color, exactly on the price; the lettered round lives at the top only
-  const lines = pos.map(m=>`<line x1="${m.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${m.x.toFixed(2)}" y2="${m.y.toFixed(2)}" stroke="${m.kind==='b'?'#18c964':'#ff3b4e'}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
-  return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>` + pos.map(m=>`
-    <span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true"></span>
-    <span class="mk mk-top mk-${m.kind}" style="left:${m.mx.toFixed(2)}%">${m.kind==='b'?'B':'S'}</span>`).join('');
+  const col = k => k==='b' ? '#18c964' : '#ff3b4e';
+  // a group's other fills: a thin bracket joining them, so it reads as one block
+  const brackets = groups.filter(g=>g.n > 1).map(g=>{ const xs = g.items.map(m=>m.x); return `<line x1="${Math.min(...xs).toFixed(2)}" y1="${g.y.toFixed(2)}" x2="${Math.max(...xs).toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-opacity=".55" stroke-width="2" vector-effect="non-scaling-stroke"/>`; }).join('');
+  const lines = groups.map(g=>`<line x1="${g.mx.toFixed(2)}" y1="${mb.toFixed(2)}" x2="${g.x.toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`).join('');
+  return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${brackets}${lines}</svg>` +
+    pos.map(m=>`<span class="mk-dot mk-${m.kind}" style="left:${m.x.toFixed(2)}%;top:${m.y.toFixed(2)}%" aria-hidden="true"></span>`).join('') +
+    groups.map(g=>`<span class="mk mk-top mk-${g.kind}${g.n>1?' mk-n':''}" style="left:${g.mx.toFixed(2)}%">${g.kind==='b'?'B':'S'}${g.n>1?`<small>\u00d7${g.n}</small>`:''}</span>`).join('');
 }
 /* real candles: market cap, first fill - 2 min to last fill + 2 min (clipped to the coin's first trade).
    pump.fun coins: second-level candles + exact fills; others: minute candles. */

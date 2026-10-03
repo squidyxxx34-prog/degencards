@@ -259,6 +259,8 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 /* markers on top + dashed drop lines */
 .mk.mk-top{top:0;transform:translate(-50%,0);width:16px;height:16px;font-size:9px;}
 .chartbox.big .mk.mk-top{width:20px;height:20px;font-size:10px;}
+.mk.mk-top.mk-n{width:auto;padding:0 6px;border-radius:999px;gap:1px;}
+.mk.mk-n small{font:800 .85em/1 var(--mono);opacity:.9;}
 .mk-line{position:absolute;width:0;border-left:1.5px dashed;transform:translateX(-50%);opacity:.9;pointer-events:none;}
 .mk-line-b{border-color:#18c964;}
 .mk-line-s{border-color:#ff3b4e;}
