@@ -13,7 +13,7 @@ const ORIGIN = "https://degencards.vercel.app";
 const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
-const N = 32, MAX_READS = HELIUS ? 140 : 70, PER_S = HELIUS ? 9 : 3;
+const N = 32, MAX_READS = HELIUS ? 220 : 70, PER_S = HELIUS ? 9 : 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rpc(method: string, params: unknown[]): Promise<any> {
@@ -135,8 +135,8 @@ async function build(t: any, deadline: number): Promise<string> {
   const clean = pts.filter((p, i) => { const nb = pts.slice(Math.max(0, i - 3), i + 4).filter((q) => q !== p).map((q) => q.mc).sort((a, b) => a - b);
     const m = nb[nb.length >> 1]; return !m || (p.mc < m * 3 && p.mc > m / 3); });
   // consecutive swaps -> ~32 candles, each with real movement
-  const n = Math.min(N, Math.floor(clean.length / 2));
-  if (n < 12) return `only ${clean.length} prices`;
+  const n = Math.min(N, clean.length - 1);                           // each candle: at least one new real price
+  if (n < 16) return `only ${clean.length} prices`;
   const candles: number[][] = []; let prev = clean[0].mc;
   for (let g = 0; g < n; g++) {
     const grp = clean.slice(Math.round(g * clean.length / n), Math.round((g + 1) * clean.length / n)); if (!grp.length) continue;
@@ -174,7 +174,8 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     let res = "";
     try { res = await build(t, deadline); } catch (e) { res = (e as Error).message; }
     console.log(`fine chart ${t.id}: ${res}`);
-    if (res === "ok") charts++; else await db.from("trades").update({ chart_tries: (t.chart_tries || 0) + 1 }).eq("id", t.id);
+    const final = /^(only |no buy signature|no pool)/.test(res);         // the chain really doesn't have more: stop asking
+    if (res === "ok") charts++; else await db.from("trades").update({ chart_tries: final ? 8 : (t.chart_tries || 0) + 1 }).eq("id", t.id);
   }
   return new Response(JSON.stringify({ charts }), { headers: h });
 });

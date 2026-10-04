@@ -533,7 +533,7 @@ function mergeCandles(cs, iv, max){
 function miniChart(t, big){
   const h = big ? 170 : 66;
   const ch = t.chart;
-  if(ch && ch.v === 2){
+  if(ch && ch.v === 2 && !pendingFine(t)){
     const [cs, iv] = mergeCandles(ch.c, ch.i, big ? 140 : 48);
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
     if(x1 <= x0) x1 = x0 + iv;
@@ -1484,7 +1484,7 @@ async function warmCharts(){
 /* a chart with too few candles that move (empty minutes around the trade): rebuilt from the pool's real swaps */
 const fineAsked = new Set();
 async function fineCharts(only){
-  for(let round = 0; round < 6; round++){
+  for(let round = 0; round < 40; round++){
     const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.chart && t.chart.coarse && !t.chart.fine && (t.chartTries||0) < 8 && !fineAsked.has(t.id));
     if(!todo.length) return;
     todo.sort((a,b)=>(onScreen.has(b.id)-onScreen.has(a.id)) || (b.timestamp-a.timestamp));
@@ -1493,10 +1493,9 @@ async function fineCharts(only){
       const { data } = await sb.functions.invoke('fine-chart', { body:{ ids: batch.map(t=>t.id) } });
       const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
       const upd = [];
-      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine){ t.chart = c; upd.push(t.id); } });
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine) t.chart = c; else t.chartTries = 8; upd.push(t.id); });   // not rebuilt this time: show the minute chart for now   // fine chart, or the minute one once it gave up
       if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
-      if(!data?.charts && !only) return;                              // nothing better found: try again next visit
-    }catch(e){ return; }
+    }catch(e){ batch.forEach(t=>{ t.chartTries = 8; }); refreshCharts(batch.map(t=>t.id)); return; }   // unreachable: show what we have
   }
 }
 
@@ -1611,7 +1610,9 @@ const coversFills = ch => { const ts = (ch.m||[]).map(m=>m[0]); if(!ts.length ||
   const iv = ch.iv0 || ch.i; return ch.c[0][0] <= Math.min(...ts) + iv && ch.c[ch.c.length-1][0] + iv >= Math.max(...ts) - iv; };
 const styled = ch => !!(ch && ch.v === 2 && ((ch.src === 'gt' && ch.q === 3) || ch.fine));
 const thinChart = t => !!(t.chart && t.chart.v === 2 && t.mint && (!styled(t.chart) || !coversFills(t.chart)));
+const pendingFine = t => !!(t.chart && t.chart.coarse && !t.chart.fine && t.mint && (t.chartTries||0) < 8);   // being rebuilt from real swaps
 function chartState(t){
+  if(pendingFine(t)) return 'loading';
   if(t.chart && t.chart.v === 2) return 'ready';                     // a thin chart still shows; its upgrade runs in the background
   if(!t.mint) return 'manual';
   if(chartInFlight.has(t.id)) return 'loading';
