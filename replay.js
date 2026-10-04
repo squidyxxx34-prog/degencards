@@ -88,7 +88,15 @@ function prep(t){
   w[ib] += 4; w[is] += 4;
   const cum = [0]; w.forEach(x => cum.push(cum[cum.length-1] + x));
   const total = cum[cum.length-1];
-  const p = { cs, iv, marks: [bm, sm], ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
+  // milestones while holding: first candle that reaches 2x, 3x, 5x... (or -25 %, -50 %, -75 %) -> stamp + camera kick + sound
+  const ups = [2, 3, 5, 10, 20, 50, 100], dns = [0.75, 0.5, 0.25], hit = new Set(), mls = [];
+  for(let i = ib + 1; i < is; i++){
+    const c = cs[i];
+    ups.forEach(th => { if(!hit.has(th) && c[2] / buyMc >= th){ hit.add(th); mls.push({ i, up: true, txt: th + 'X', emo: th >= 10 ? '\u{1F48E}' : th >= 5 ? '\u{1F525}' : '\u{1F680}' }); } });
+    dns.forEach(th => { if(!hit.has(th) && c[3] / buyMc <= th){ hit.add(th); mls.push({ i, up: false, txt: '-' + Math.round((1 - th) * 100) + '%', emo: th <= 0.5 ? '\u{1F480}' : '\u{1F62C}' }); } });
+  }
+  const miles = mls.filter((m, k) => !mls[k+1] || mls[k+1].i !== m.i).slice(-4);   // same candle: keep the biggest; at most 4
+  const p = { cs, iv, marks: [bm, sm], miles, ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
   prepCache.set(t, p); return p;
 }
 /* replay time (0..T_REPLAY) -> revealed candles (float 0..n) */
@@ -313,6 +321,13 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const P = prep(t), win = t.pnl >= 0, col = win ? GREEN : RED;
   const r = revealAt(P, ms), full = Math.floor(r), frac = r - full;
   bg(ctx, W, H, u, col, ms);
+  // camera kick on BUY, SELL and every milestone: punch-in zoom + short shake
+  const tb0 = revealTimeOf(P, P.ib), ts0 = revealTimeOf(P, P.is), mt = P.miles.map(m => revealTimeOf(P, m.i));
+  const kick = Math.max(0, ...[tb0, ts0 + 500, ...mt].map(e => ms >= e ? 1 - seg(ms, e, e + 380) : 0)) * FX;
+  const pop = Math.max(0, ...mt.map(e => ms >= e ? 1 - seg(ms, e, e + 450) : 0));
+  ctx.save();
+  if(kick > 0){ const Rk = rng(seed + Math.floor(ms / 33)), z = 1 + 0.045 * kick, sh = 22 * u * kick * kick;
+    ctx.translate(W/2 + (Rk()-.5)*sh, H/2 + (Rk()-.5)*sh); ctx.scale(z, z); ctx.translate(-W/2, -H/2); }
   // plot area
   const top = (SAFE_T + 230)*u, bottom = H - (SAFE_B + 120)*u, left = 64*u, right = W - (SAFE_R + 70)*u, pw = right - left, ph = bottom - top;
   // visible window: the last K candles, the camera slides smoothly
@@ -411,7 +426,8 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.textAlign = 'right'; ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fillText(closed ? L.pnl : L.live, W - 64*u, (SAFE_T + 18)*u);
     ctx.font = `900 ${64*u}px ${MONO}`; ctx.fillStyle = live >= 0 ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20*u*FX;
-    ctx.fillText(opt.hideUsd ? pctS(P.size ? live / P.size * 100 : 0) : money(live), W - 64*u, (SAFE_T + 80)*u); ctx.shadowBlur = 0;
+    ctx.save(); ctx.translate(W - 64*u, (SAFE_T + 80)*u); ctx.scale(1 + 0.22 * pop, 1 + 0.22 * pop);
+    ctx.fillText(opt.hideUsd ? pctS(P.size ? live / P.size * 100 : 0) : money(live), 0, 0); ctx.restore(); ctx.shadowBlur = 0;
     if(!opt.hideUsd && O.showInvested){ ctx.font = `700 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(L.invested, W - 64*u, (SAFE_T + 124)*u);
       ctx.font = `800 ${34*u}px ${MONO}`; ctx.fillStyle = '#fff'; ctx.fillText(plain(P.size), W - 64*u, (SAFE_T + 164)*u); }
   }
@@ -451,6 +467,29 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     fillCentered(ctx, opt.hideUsd ? pctS(t.roi) : money(t.pnl), 0, 0);
     if(!opt.hideUsd){ ctx.font = `900 ${64*u}px ${MONO}`; fillCentered(ctx, pctS(t.roi), 0, 125*u); }
     ctx.restore(); ctx.textBaseline = 'alphabetic';
+  }
+  // milestone stamps: 2X / 5X / -50 % slam in tilted, glitch while landing, then fly off
+  P.miles.forEach((m, k) => {
+    const e = mt[k], f = seg(ms, e, e + 1150); if(f <= 0 || f >= 1) return;
+    const c2 = m.up ? GREEN : RED, land = easeOutBack(seg(f, 0, 0.22)), sc = 2.4 - 1.4 * land, out = seg(f, 0.8, 1);
+    ctx.save(); ctx.translate(W*0.4, top + ph * 0.3 - out * 160*u); ctx.rotate((m.up ? -8 : 8) * Math.PI / 180); ctx.scale(sc, sc);
+    ctx.globalAlpha = clamp01(f * 10) * (1 - out); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${200*u}px ${MONO}`; const tw = ctx.measureText(m.txt).width;
+    rrect(ctx, -tw/2 - 50*u, -125*u, tw + 100*u, 250*u, 40*u); ctx.fillStyle = 'rgba(5,7,10,0.72)'; ctx.fill();
+    ctx.lineWidth = 8*u; ctx.strokeStyle = c2; ctx.stroke();
+    ctx.shadowColor = c2; ctx.shadowBlur = 40*u*FX;
+    glitchText(ctx, m.txt, 0, 0, u, c2, FX === 1 && f < 0.3 && Math.floor(ms / 60) % 2 ? 9 : 0); ctx.shadowBlur = 0;
+    ctx.font = `${110*u}px ${SANS}`; fillCentered(ctx, m.emo, tw/2 + 60*u, -110*u);
+    ctx.restore();
+    if(f < 0.08 && FX > 0){ ctx.fillStyle = hexA(c2, 0.28 * (1 - f / 0.08)); ctx.fillRect(0,0,W,H); }
+  });
+  ctx.restore();
+  // heartbeat on the edges while holding: beats with the kick, stronger the further the PnL moves
+  if(holding && FX > 0){
+    const beat = Math.max(0, 1 - ((ms % 500) / 500) * 3.5), amp = Math.min(1, Math.abs(P.size ? live / P.size : 0)) * 0.6 + 0.15;
+    const hb = ctx.createRadialGradient(W/2, H/2, W*0.45, W/2, H/2, H*0.72);
+    hb.addColorStop(0, 'rgba(0,0,0,0)'); hb.addColorStop(1, hexA(live >= 0 ? GREEN : RED, 0.45 * beat * amp * FX));
+    ctx.fillStyle = hb; ctx.fillRect(0,0,W,H);
   }
   footer(ctx, W, H, u, 1);
 }
@@ -575,6 +614,12 @@ function soundtrack(ac, out, t0, t, opt){
   const tb = O_REPLAY + revealTimeOf(P, P.ib), ts = O_REPLAY + revealTimeOf(P, P.is);
   const bv = chill ? 0.05 : 0.09;
   [0, 110, 220].forEach((d, i) => tone(S(tb - 200 + d), 880 + i*220, 0, 0.07, chill ? 'sine' : 'square', bv)); impact(S(tb + 80), 0.6); if(hype) tone(S(tb + 80), 220, 440, 0.35, 'sawtooth', 0.05);
+  // milestones: short riser into a hit + a rising stab (higher for each new level, down-sweep for losses)
+  P.miles.forEach((m, k) => { const at = O_REPLAY + revealTimeOf(P, m.i);
+    if(!minimal) noise(S(at - 280), 0.3, 800, 6000, chill ? 0.06 : 0.16, 0.9);
+    impact(S(at), 0.7);
+    if(m.up) [0, 70, 140].forEach((d, j) => tone(S(at + d), 523 * Math.pow(1.26, k + j), 0, 0.18, chill ? 'sine' : 'square', chill ? 0.05 : 0.08));
+    else tone(S(at), 520, 130, 0.5, 'sawtooth', 0.07); });
   // SELL: lock-on, then cash chime (win) or down-sweep (loss) + boom
   [0, 110, 220].forEach((d, i) => tone(S(ts - 200 + d), 1100 + i*220, 0, 0.07, chill ? 'sine' : 'square', bv));
   const burst = ts + 500;
