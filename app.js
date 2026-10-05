@@ -488,30 +488,19 @@ function markersHtml(marks, X, Y, big){
   groups.forEach(g=>{ g.n = g.items.length;
     const best = g.kind === 's' ? g.items.reduce((a,m)=>m.y < a.y ? m : a) : g.items.reduce((a,m)=>m.y > a.y ? m : a);   // best fill of the group
     g.x = best.x; g.y = best.y; g.best = best; g.w = pct(g.n > 1 ? mkPx + 22 : mkPx) + pct(4); });
-  // labels that would touch: a second row just below (big chart), the line stays vertical on the real time;
-  // only when both rows are taken does a label slide sideways
-  const rows = big ? 2 : 1, placed = [];
-  groups.forEach(g=>{
-    const half = g.w / 2; g.mx = Math.min(100 - half, Math.max(half, g.x));
-    const free = r => !placed.some(p=>p.row === r && Math.abs(p.mx - g.mx) < (p.w + g.w) / 2);
-    g.row = [...Array(rows).keys()].find(free);
-    if(g.row === undefined){                                         // no room: slide right of the previous label
-      g.row = 0; const p = placed.filter(p=>p.row === 0).pop(); g.mx = p.mx + (p.w + g.w) / 2;
-    }
-    placed.push(g);
-  });
-  // labels pushed past the right edge come back inside, pushing their neighbours left (every label stays visible)
-  const r0 = placed.filter(p=>p.row === 0);
-  for(let i = r0.length - 1; i >= 0; i--){
-    const g = r0[i], nx = r0[i+1];
-    let lim = 100 - g.w / 2; if(nx) lim = Math.min(lim, nx.mx - (nx.w + g.w) / 2);
-    if(g.mx > lim) g.mx = lim;
-  }
-  for(let i = 0; i < r0.length; i++){ const g = r0[i], pv = r0[i-1];  // too crowded: never off the left edge
-    let lo = g.w / 2; if(pv) lo = Math.max(lo, pv.mx + (pv.w + g.w) / 2 * 0.6); if(g.mx < lo) g.mx = lo; }
+  // top labels on ONE row: overlapping labels form a block centred on their real times (smallest total shift, both
+  // directions), blocks kept inside the chart; the drop line leans a little instead of a label jumping to a 2nd row
+  const pad = pct(3), blocks = [];
+  const layout = bl => { let off = 0; const o = bl.items.map(g=>{ const v = off + g.w/2; off += g.w + pad; return v; }); bl.tw = off - pad;
+    bl.s = bl.items.reduce((a,g,i)=>a + g.x - o[i], 0) / bl.items.length; bl.s = Math.min(100 - bl.tw, Math.max(0, bl.s)); bl.o = o; };
+  groups.forEach(g=>{ g.row = 0; let bl = { items:[g] }; layout(bl);
+    while(blocks.length){ const p = blocks[blocks.length-1]; if(p.s + p.tw + pad <= bl.s) break; blocks.pop(); bl = { items: p.items.concat(bl.items) }; layout(bl); }
+    blocks.push(bl); });
+  blocks.forEach(bl => bl.items.forEach((g,i)=>{ g.mx = bl.s + bl.o[i]; }));
   const rowTop = r => r * (mkPx + 3);                                 // px from the top
   const col = k => k==='b' ? '#18c964' : '#ff3b4e';
-  const brackets = groups.filter(g=>g.n > 1).map(g=>{ const xs = g.items.map(m=>m.x); return `<line x1="${Math.min(...xs).toFixed(2)}" y1="${g.y.toFixed(2)}" x2="${Math.max(...xs).toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-opacity=".5" stroke-width="2" vector-effect="non-scaling-stroke"/>`; }).join('');
+  // a group's fills joined in time order by a thin line: reads as one position built in several fills
+  const brackets = groups.filter(g=>g.n > 1).map(g=>`<polyline points="${g.items.map(m=>m.x.toFixed(2)+','+m.y.toFixed(2)).join(' ')}" fill="none" stroke="${col(g.kind)}" stroke-opacity=".55" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join('');
   const lines = groups.map(g=>{ const y0 = (rowTop(g.row) + mkPx) / H * 100;
     return `<line x1="${g.mx.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${g.x.toFixed(2)}" y2="${g.y.toFixed(2)}" stroke="${col(g.kind)}" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`; }).join('');
   return `<svg class="mk-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${brackets}${lines}</svg>` +
