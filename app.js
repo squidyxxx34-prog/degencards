@@ -1933,8 +1933,70 @@ function showLanding(){
 let appShown = false;
 function onSession(sess){
   session = sess;
-  if(session){ if(!appShown){ appShown = true; showApp(); } }
+  if(session){ if(!appShown){ appShown = true; showApp(); } proOnSession(); }
   else { appShown = false; showLanding(); }
+}
+/* ---------- PRO (Whop) ----------
+   PRO_LIVE stays false until the Whop plans exist and WHOP_API_KEY / WHOP_PLAN_* are set on the `whop` edge function:
+   until then nothing is locked and the PRO block is hidden. The PRO state comes only from public.subscriptions (server-written). */
+const PRO_LIVE = false;
+const PRO_OK = new Set(['active','trialing','completed','canceling','past_due']);
+window.dcPro = { enabled: PRO_LIVE, active: false, sub: null, open: () => openPro() };
+function renderPro(){
+  const blk = document.getElementById('proBlock'); if(!blk) return;
+  blk.style.display = PRO_LIVE ? '' : 'none'; if(!PRO_LIVE) return;
+  const p = window.dcPro, s = p.sub, st = document.getElementById('proState'), sub = document.getElementById('proSub'), btn = document.getElementById('btnPro');
+  const when = s && s.renews_at ? new Date(s.renews_at).toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' }) : '';
+  if(p.active){
+    st.innerHTML = 'PRO <span class="pro-tag">ACTIVE</span>';
+    sub.textContent = s.status === 'canceling' ? (when ? `Cancelled — PRO until ${when}` : 'Cancelled — PRO until the end of the period')
+      : s.status === 'past_due' ? 'Payment failed — update your card on Whop to keep PRO' : (when ? `Renews ${when}` : 'Renews automatically');
+    btn.textContent = 'MANAGE'; btn.classList.remove('pro-btn');
+  } else {
+    st.textContent = 'Free plan';
+    sub.textContent = 'Every replay theme, background, sell effect, intro, hook and the short-logo ending.';
+    btn.textContent = 'GO PRO'; btn.classList.add('pro-btn');
+  }
+}
+async function loadPro(force){
+  if(!PRO_LIVE || !session) return;
+  const { data } = await sb.from('subscriptions').select('*').maybeSingle();
+  window.dcPro.sub = data || null; window.dcPro.active = !!(data && PRO_OK.has(data.status) && (!data.renews_at || new Date(data.renews_at) > new Date(Date.now() - 3*864e5)));
+  renderPro(); window.dispatchEvent(new Event('dc-pro'));
+  // back from checkout, or an existing row: read the membership back from Whop (renewals, cancellations)
+  if(force || data){
+    try{
+      const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
+      if(r && 'pro' in r){
+        const was = window.dcPro.active; window.dcPro.active = !!r.pro; window.dcPro.sub = r.sub || window.dcPro.sub;
+        renderPro(); window.dispatchEvent(new Event('dc-pro'));
+        if(force && r.pro && !was) showToast('Welcome to PRO — every replay style is unlocked');
+        else if(force && !r.pro) showToast('Payment not found yet — it can take a minute, reopen the app');
+      }
+    }catch(e){}
+  }
+}
+function openPro(){ if(!PRO_LIVE) return; document.getElementById('proNote').textContent = ''; document.getElementById('proOverlay').classList.add('show'); }
+document.getElementById('btnPro').addEventListener('click', ()=>{
+  const s = window.dcPro.sub;
+  if(window.dcPro.active) window.open((s && s.manage_url) || 'https://whop.com/@me/settings/memberships/', '_blank', 'noopener');
+  else openPro();
+});
+document.querySelectorAll('.pro-plan').forEach(b => b.addEventListener('click', async ()=>{
+  const note = document.getElementById('proNote'), all = document.querySelectorAll('.pro-plan');
+  all.forEach(x => x.disabled = true); note.textContent = 'Opening secure checkout…';
+  try{
+    const { data, error } = await sb.functions.invoke('whop', { body:{ action:'checkout', plan: b.dataset.plan } });
+    if(error || !data || !data.url) throw error || new Error('no url');
+    location.href = data.url;
+  }catch(e){ note.textContent = 'Checkout unavailable right now — try again in a minute.'; all.forEach(x => x.disabled = false); }
+}));
+let proChecked = false;
+function proOnSession(){
+  if(proChecked || !session) return; proChecked = true;
+  const back = new URLSearchParams(location.search).get('pro') === '1';
+  if(back) history.replaceState(null, '', location.pathname + location.hash);
+  loadPro(back);
 }
 sb.auth.onAuthStateChange((event, sess)=>{
   if(event==='TOKEN_REFRESHED' || event==='USER_UPDATED'){ session = sess; return; }

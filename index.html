@@ -183,6 +183,13 @@
 
   <div id="accountView" style="display:none;">
     <div class="sectionhead"><h2>MANAGE ACCOUNT</h2></div>
+    <div class="acc-block" id="proBlock" style="display:none;">
+      <h4>DEGENCARDS PRO</h4>
+      <div class="provider-row" style="border-top:none;">
+        <div><div class="provider-name" id="proState">Free plan</div><div class="provider-sub" id="proSub">Every replay theme, background, sell effect, intro, hook and the short-logo ending.</div></div>
+        <button type="button" class="btn-logout pro-btn" id="btnPro">GO PRO</button>
+      </div>
+    </div>
     <div class="acc-block">
       <h4>GETTING STARTED</h4>
       <div class="provider-row" style="border-top:none;">
@@ -307,6 +314,27 @@
       <button data-v="stats">STATS</button>
       <button data-v="account">ACCOUNT</button>
     </div>
+  </div>
+</div>
+
+<!-- PRO upsell (Whop checkout) -->
+<div class="overlay" id="proOverlay">
+  <div class="modal pro-modal" role="dialog" aria-modal="true" aria-labelledby="proTitle">
+    <button class="closebtn" data-close>×</button>
+    <h3 id="proTitle">DEGENCARDS <span class="pro-tag">PRO</span></h3>
+    <ul class="pro-list">
+      <li>Every replay color theme and background</li>
+      <li>All sell effects: confetti, fire, diamonds, rockets</li>
+      <li>Every intro and hook text</li>
+      <li>Short-logo ending for cleaner TikTok / Reels</li>
+      <li>Supports a solo indie builder</li>
+    </ul>
+    <div class="pro-plans">
+      <button type="button" class="pro-plan" data-plan="monthly"><b>$7.99</b><span>per month</span></button>
+      <button type="button" class="pro-plan best" data-plan="yearly"><em>-37%</em><b>$59.99</b><span>per year</span></button>
+    </div>
+    <p class="pro-fine">Secure checkout by Whop. Taxes may apply. Renews automatically, cancel anytime from your Whop account. By subscribing you accept the <a href="/terms" target="_blank" rel="noopener">Terms</a>.</p>
+    <div class="authnote" id="proNote"></div>
   </div>
 </div>
 

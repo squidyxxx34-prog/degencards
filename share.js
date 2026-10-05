@@ -477,13 +477,20 @@ const RO_PRESETS = {
   chill: { name:'\u{1F30A} Chill', o:{ theme:'ice', intro:'logo', hook:'auto', chart:'area', camera:'full', speed:'slow', bg:'stars', fx:'soft', burst:'confetti', sound:'chill', outro:'full' } },
   degen: { name:'\u{1F680} Degen', o:{ theme:'gold', intro:'countdown', hook:'go', chart:'candles', camera:'zoom', speed:'fast', bg:'glow', fx:'max', burst:'rockets', sound:'hype', outro:'quick' } },
 };
+/* PRO replay styles: free = the first, default look of each group; the rest needs PRO (only once PRO is live) */
+const RO_PRO = { theme:['purple','gold','ice','mono'], bg:['clean','glow','stars'], burst:['confetti','fire','diamonds','rockets'],
+  hook:['printed','scalp','copy','sniped','lesson','go'], intro:['countdown','logo'], outro:['recap','quick'] };
+const proLocked = () => !!(window.dcPro && window.dcPro.enabled && !window.dcPro.active);
+const isProVal = (k, v) => !!(RO_PRO[k] && RO_PRO[k].includes(v));
 function replayOpts(){
   const d = (window.dcReplay && window.dcReplay.DEFAULTS) || {};
   let saved = {}; try{ saved = JSON.parse(localStorage.getItem(RO_KEY) || '{}') || {}; }catch(e){}
   const o = { ...d };
   for(const [k, , opts] of RO_GROUPS) if(opts.some(x => x[0] === saved[k])) o[k] = saved[k];   // only known values: a stale / edited entry can't break a render
   for(const [k] of RO_SHOW) if(typeof saved[k] === 'boolean') o[k] = saved[k];
-  delete o.hideUsd; return o;
+  delete o.hideUsd;
+  if(proLocked()) for(const k in RO_PRO) if(isProVal(k, o[k])) o[k] = d[k];   // a lapsed PRO falls back to the free look
+  return o;
 }
 function saveReplayOpts(o){ try{ localStorage.setItem(RO_KEY, JSON.stringify(o)); }catch(e){} }
 function renderCustomize(){
@@ -493,17 +500,19 @@ function renderCustomize(){
   const preset = Object.entries(RO_PRESETS).find(([, p]) => Object.entries(p.o).every(([k, v]) => o[k] === v));
   box.innerHTML = `
     <div class="rc-head"><span>Customize</span><em>\u2248 ${secs} s</em></div>
-    <div class="rc-row" role="group" aria-label="Presets">${Object.entries(RO_PRESETS).map(([k, p]) => `<button type="button" class="rc-chip preset ${preset && preset[0] === k ? 'on' : ''}" data-rp="${k}" aria-pressed="${preset && preset[0] === k}">${p.name}</button>`).join('')}</div>
+    <div class="rc-row" role="group" aria-label="Presets">${Object.entries(RO_PRESETS).map(([k, p]) => `<button type="button" class="rc-chip preset ${preset && preset[0] === k ? 'on' : ''}${proLocked() && Object.entries(p.o).some(([pk, pv]) => isProVal(pk, pv)) ? ' locked' : ''}" data-rp="${k}" aria-pressed="${preset && preset[0] === k}">${p.name}</button>`).join('')}</div>
     ${RO_GROUPS.map(([k, label, opts]) => `
       <div class="rc-group"><div class="rc-label" id="rcl-${k}">${label}</div>
-        <div class="rc-row" role="radiogroup" aria-labelledby="rcl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'theme' ? ' sw sw-' + v : ''}" role="radio" aria-checked="${o[k] === v}" data-rk="${k}" data-rv="${v}">${l}</button>`).join('')}</div></div>`).join('')}
+        <div class="rc-row" role="radiogroup" aria-labelledby="rcl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'theme' ? ' sw sw-' + v : ''}${proLocked() && isProVal(k, v) ? ' locked' : ''}" role="radio" aria-checked="${o[k] === v}" data-rk="${k}" data-rv="${v}"${proLocked() && isProVal(k, v) ? ' data-pro="1"' : ''}>${l}</button>`).join('')}</div></div>`).join('')}
     <div class="rc-group"><div class="rc-label">Show</div>
       <div class="rc-row">${RO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-rs="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
     <button type="button" class="hbtn rc-reset" id="rcReset">RESET TO DEFAULT</button>`;
   const changed = next => { saveReplayOpts(next); renderCustomize(); syncButtons(); preview(); };
-  box.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => changed({ ...replayOpts(), [b.dataset.rk]: b.dataset.rv })));
+  box.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => b.dataset.pro ? window.dcPro.open() : changed({ ...replayOpts(), [b.dataset.rk]: b.dataset.rv })));
   box.querySelectorAll('[data-rs]').forEach(b => b.addEventListener('click', () => { const c = replayOpts(); changed({ ...c, [b.dataset.rs]: !c[b.dataset.rs] }); }));
-  box.querySelectorAll('[data-rp]').forEach(b => b.addEventListener('click', () => changed({ ...replayOpts(), ...RO_PRESETS[b.dataset.rp].o })));
+  box.querySelectorAll('[data-rp]').forEach(b => b.addEventListener('click', () => { const po = RO_PRESETS[b.dataset.rp].o;
+    if(proLocked() && Object.entries(po).some(([k, v]) => isProVal(k, v))) return window.dcPro.open();
+    changed({ ...replayOpts(), ...po }); }));
   document.getElementById('rcReset').addEventListener('click', () => { try{ localStorage.removeItem(RO_KEY); }catch(e){} renderCustomize(); syncButtons(); preview(); });
 }
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
@@ -631,3 +640,5 @@ function init(){
   sheet().addEventListener('click', e => { if(e.target === sheet()){ sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); } });
 }
 })();
+
+window.addEventListener('dc-pro', () => { try{ if(document.getElementById('shareCustom')) renderCustomize(); }catch(e){} });
