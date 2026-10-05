@@ -160,15 +160,25 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     "Access-Control-Allow-Methods": "POST, OPTIONS", "Vary": "Origin", "Content-Type": "application/json" };
   if (req.method === "OPTIONS") return new Response(null, { headers: h });
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
-  const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  const { data: u, error } = await db.auth.getUser(jwt);
-  if (error || !u?.user) return new Response('{"error":"unauthorized"}', { status: 401, headers: h });
-  let body: any = {}; try { body = await req.json(); } catch (_) { /* empty */ }
-  const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 3);
-  if (!ids.length) return new Response('{"error":"ids"}', { status: 400, headers: h });
-  const { data: rows } = await db.from("trades").select("id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries")
-    .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).eq("chart->>coarse", "true");
-  const deadline = Date.now() + 120_000; let charts = 0;
+  const cols = "id,mint,ext_id,legs,timestamp_ms,hold_time,chart,chart_tries";
+  let rows: any[] | null = null;
+  const cronKey = req.headers.get("x-cron-key");
+  if (cronKey) {                                                     // cron: every user's pending charts, newest first
+    const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
+    if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
+    ({ data: rows } = await db.from("trades").select(cols).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8)
+      .eq("chart->>coarse", "true").order("timestamp_ms", { ascending: false }).limit(3));
+  } else {
+    const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const { data: u, error } = await db.auth.getUser(jwt);
+    if (error || !u?.user) return new Response('{"error":"unauthorized"}', { status: 401, headers: h });
+    let body: any = {}; try { body = await req.json(); } catch (_) { /* empty */ }
+    const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 3);
+    if (!ids.length) return new Response('{"error":"ids"}', { status: 400, headers: h });
+    ({ data: rows } = await db.from("trades").select(cols)
+      .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).eq("chart->>coarse", "true"));
+  }
+  const deadline = Date.now() + 110_000; let charts = 0;
   for (const t of rows || []) {
     if (Date.now() > deadline - 20_000) break;
     let res = "";
