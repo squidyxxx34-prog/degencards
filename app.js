@@ -534,17 +534,16 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   const svg = `<rect x="${xb.toFixed(2)}" y="${y0.toFixed(2)}" width="${(xe-xb).toFixed(2)}" height="${h.toFixed(2)}" fill="${col}" fill-opacity="${big ? .13 : .1}"/>` + lv(ye, .55) + lv(yx, .9);
   return { svg, html:'' };                                         // no text on the chart: the figures are right above it
 }
-/* window of a small card chart: same amount of chart before the first BUY and after the last SELL, so the trade sits in the
-   middle (first BUY ~ 1/4-1/3 in, last SELL ~ 2/3-3/4 in, never on the same spot). Only real candles: the margin is
-   capped by the data on the shorter side, never padded with empty space. */
+/* window of a small card chart: the whole context is kept; only the extra on the longer side is trimmed so the trade
+   stays near the middle: each side keeps at least the shorter side's context and at least the hold's own length. */
 function centredWindow(ch){
   const bs = ch.m.filter(m=>m[1]==='b').map(m=>m[0]), ss = ch.m.filter(m=>m[1]==='s').map(m=>m[0]);
   if(!bs.length || !ss.length || !ch.c.length) return null;
   const tb = Math.min(...bs), te = Math.max(...ss); if(te < tb) return null;
   const d0 = ch.c[0][0], d1 = ch.c[ch.c.length-1][0] + ch.i;
-  const want = Math.max((te - tb) * 0.7, ch.i * 4);                 // hold span ~ 40 % of the width
-  const pad = Math.min(want, tb - d0, d1 - te);
-  return pad > 0 ? [tb - pad, te + pad] : null;
+  const L = tb - d0, R = d1 - te, keep = Math.max(te - tb, ch.i * 6);
+  const pl = Math.min(L, Math.max(R, keep)), pr = Math.min(R, Math.max(L, keep));
+  return (pl < L || pr < R) ? [tb - pl, te + pr] : null;
 }
 function miniChart(t, big){
   const h = big ? 170 : 66;
