@@ -74,7 +74,6 @@ async function build(t: any, deadline: number): Promise<string> {
   const legs = Array.isArray(t.legs) ? t.legs : [];
   const legTs = legs.map((l: any) => Number(l[0])).filter(Number.isFinite);
   const end = legTs.length ? Math.max(...legTs) : Number(t.timestamp_ms), start = legTs.length ? Math.min(...legTs) : end - Number(t.hold_time) * 1000;
-  const pad = Math.max(300_000, (end - start) * 0.5), t0 = start - pad, t1 = end + pad;
   const [wallet, , buySig] = String(t.ext_id || "").split(":");
   if (!buySig || !B58.test(buySig)) return "no buy signature";
   // the pool: the account that gave the coin to the buyer in the buy tx, and its owner
@@ -89,29 +88,29 @@ async function build(t: any, deadline: number): Promise<string> {
   const poolOwner = [...(btx.meta.preTokenBalances || []), ...(btx.meta.postTokenBalances || [])].find((b: any) => b.accountIndex === vix)?.owner || "";
   const sup = Number((await rpc("getTokenSupply", [t.mint]))?.value?.uiAmountString || 0);
   if (!sup) return "no supply";
-  // the pool's history around the trade, anchored on our own buy (cheap however busy the coin is today)
-  const sigs = new Map<string, number>();
-  const keep = (list: any[]) => { for (const s of list || []) { const ts = (s.blockTime || 0) * 1000; if (!s.err && ts >= t0 && ts <= t1) sigs.set(s.signature, ts); } };
-  let cur: string | undefined = buySig;                               // before (and at) the buy, back to t0
-  for (let p = 0; p < 6; p++) {
-    const list: any[] = await rpc("getSignaturesForAddress", [vault, { limit: 1000, before: cur }]) || [];
-    keep(list); if (list.length < 1000 || (list[list.length - 1].blockTime || 0) * 1000 < t0) break;
-    cur = list[list.length - 1].signature;
-  }
-  sigs.set(buySig, (btx.blockTime || 0) * 1000 || start);
-  // after the buy: newest first down to the buy — only when that's a reasonable amount of history
-  let after: any[] = [], c2: string | undefined;
-  for (let p = 0; p < 8; p++) {
-    const list: any[] = await rpc("getSignaturesForAddress", [vault, { limit: 1000, until: buySig, ...(c2 ? { before: c2 } : {}) }]) || [];
-    after.push(...list); if (list.length < 1000) break;
-    if ((list[list.length - 1].blockTime || 0) * 1000 < t1) {         // already inside the window: keep paging down to the buy
-      c2 = list[list.length - 1].signature; continue;
+  // the pool's history around the trade, anchored on our own buy (cheap however busy the coin is today);
+  // a quiet coin: the window widens (5 min -> 30 min -> 2 h -> 12 h each side) until there's enough real trading to draw
+  let all: [string, number][] = [];
+  for (const base of [300_000, 1_800_000, 7_200_000, 43_200_000]) {
+    const pad = Math.max(base, (end - start) * 0.5), t0 = start - pad, t1 = end + pad;
+    const sigs = new Map<string, number>();
+    const keep = (list: any[]) => { for (const s of list || []) { const ts = (s.blockTime || 0) * 1000; if (!s.err && ts >= t0 && ts <= t1) sigs.set(s.signature, ts); } };
+    let cur: string | undefined = buySig;                             // before (and at) the buy, back to t0
+    for (let p = 0; p < 6; p++) {
+      const list: any[] = await rpc("getSignaturesForAddress", [vault, { limit: 1000, before: cur }]) || [];
+      keep(list); if (list.length < 1000 || (list[list.length - 1].blockTime || 0) * 1000 < t0) break;
+      cur = list[list.length - 1].signature;
     }
-    c2 = list[list.length - 1].signature;
-    if (p === 7) after = after.filter((s) => (s.blockTime || 0) * 1000 <= t1);
+    sigs.set(buySig, (btx.blockTime || 0) * 1000 || start);
+    let c2: string | undefined;                                      // after the buy: newest first, down to the buy
+    for (let p = 0; p < 8; p++) {
+      const list: any[] = await rpc("getSignaturesForAddress", [vault, { limit: 1000, until: buySig, ...(c2 ? { before: c2 } : {}) }]) || [];
+      keep(list); if (list.length < 1000) break;
+      c2 = list[list.length - 1].signature;
+    }
+    all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
+    if (all.length >= 48 || Date.now() > deadline - 60_000) break;
   }
-  keep(after);
-  const all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
   if (all.length < 16) return `only ${all.length} swaps`;
   // read an even sample (by order: busy moments get more reads, quiet ones less), always our own fills
   const pick: [string, number][] = [];
@@ -184,7 +183,7 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     let res = "";
     try { res = await build(t, deadline); } catch (e) { res = (e as Error).message; }
     console.log(`fine chart ${t.id}: ${res}`);
-    const final = /^(only |no buy signature|no pool)/.test(res);         // the chain really doesn't have more: stop asking
+    const final = /^(only \d+ swaps|no buy signature|no pool)/.test(res);   // the chain really has no more (unread prices = Helius busy: retry)
     if (res === "ok") charts++; else await db.from("trades").update({ chart_tries: final ? 8 : (t.chart_tries || 0) + 1 }).eq("id", t.id);
   }
   return new Response(JSON.stringify({ charts }), { headers: h });

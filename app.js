@@ -1493,11 +1493,23 @@ async function fineCharts(only){
       const { data } = await sb.functions.invoke('fine-chart', { body:{ ids: batch.map(t=>t.id) } });
       const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
       const upd = [];
-      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine) t.chart = c; else t.chartTries = 8; upd.push(t.id); });   // not rebuilt this time: show the minute chart for now   // fine chart, or the minute one once it gave up
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine) t.chart = c; upd.push(t.id); });   // not rebuilt yet: the server cron keeps going, picked up below   // fine chart, or the minute one once it gave up
       if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
-    }catch(e){ batch.forEach(t=>{ t.chartTries = 8; }); refreshCharts(batch.map(t=>t.id)); return; }   // unreachable: show what we have
+    }catch(e){ return; }
   }
 }
+/* the server rebuilds the rest on its own (cron): pick up what it finished, every minute while the app is open */
+setInterval(async ()=>{
+  if(document.hidden || !session) return;
+  const ids = trades.filter(pendingFine).map(t=>t.id).slice(0, 100); if(!ids.length) return;
+  try{
+    const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', ids);
+    const upd = [];
+    (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; const was = pendingFine(t); t.chartTries = Number(r.chart_tries)||0;
+      const c = parseChart(r.chart); if(c) t.chart = c; if(was !== pendingFine(t) || (c && c.fine)) upd.push(t.id); });
+    if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
+  }catch(e){}
+}, 60000);
 
 /* opening a card whose candles are missing builds them right now, instead of waiting for the queue */
 const chartInFlight = new Set();
