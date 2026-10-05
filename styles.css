@@ -568,3 +568,11 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .mk-dot{width:12px !important;height:12px !important;border-width:2px !important;}
 .chartbox.big .mk-dot{width:14px !important;height:14px !important;}
 .chartbox.big .mk-anchor{width:7px;height:7px;}
+
+/* legal: footer links, sign-up consent, delete account */
+.foot-links{margin-top:8px;}
+.foot-links a,.consent a,.provider-sub a{color:var(--tx2);text-decoration:underline;text-underline-offset:2px;}
+.consent{display:flex;gap:9px;align-items:flex-start;margin:4px 0 12px;font-size:11.5px;line-height:1.45;color:var(--tx2);text-align:left;cursor:pointer;}
+.consent input{flex:none;width:16px;height:16px;margin-top:1px;accent-color:var(--purple);}
+.consent.need{color:var(--red);}
+.btn-danger{color:var(--red) !important;border-color:rgba(255,92,108,.5) !important;}

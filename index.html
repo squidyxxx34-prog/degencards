@@ -25,6 +25,7 @@
         <h3>SIGN IN</h3>
         <input id="authEmail" type="email" placeholder="you@email.com" maxlength="254" autocomplete="email">
         <input id="authPassword" type="password" placeholder="Password (8+ characters)" minlength="8" maxlength="72" autocomplete="current-password">
+        <label class="consent"><input type="checkbox" id="authConsent"><span>I'm 18+ and I accept the <a href="/terms" target="_blank" rel="noopener">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>. Not financial advice.</span></label>
         <div class="authrow"><button id="btnSignIn">SIGN IN</button><button id="btnSignUp" class="btn-ghost">CREATE ACCOUNT</button></div>
         <button id="btnForgot" class="btn-link">Forgot password?</button>
         <div class="authsep" style="margin:14px 0;"><span>OR</span></div>
@@ -52,6 +53,7 @@
     <div class="sectionhead"><h2>RARITY, NOT LUCK</h2></div>
     <p style="color:var(--tx2);font-size:13px;max-width:520px;">Common to Mythic — driven by ROI, speed and personal records. A 30-second scalp hits different than a slow bleed, and the card knows it.</p>
   </div>
+  <footer>DEGENCARDS · Not financial advice. Crypto-assets are highly risky. Watch-only: we never touch your funds.<div class="foot-links"><a href="/legal">Legal notice</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div></footer>
 </div>
 
 <!-- APP (logged in) -->
@@ -214,10 +216,20 @@
       <h4>RECOVER TRADES <span id="recoverCount"></span></h4>
       <div id="recoverBlock"></div>
     </div>
+    <div class="acc-block">
+      <h4>LEGAL &amp; DATA</h4>
+      <div class="provider-row" style="border-top:none;">
+        <div><div class="provider-name">Your data</div><div class="provider-sub"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/legal">Legal notice</a></div></div>
+      </div>
+      <div class="provider-row">
+        <div><div class="provider-name">Delete account</div><div class="provider-sub">Erases your account, trades, connected wallets and goal for good. Cannot be undone.</div></div>
+        <button type="button" class="btn-logout btn-danger" id="btnDeleteAccount">DELETE ACCOUNT</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<footer>DEGENCARDS · Trade tracking & collection experience — not financial advice</footer>
+<footer>DEGENCARDS · Trade tracking & collection experience — not financial advice<div class="foot-links"><a href="/legal">Legal notice</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div></footer>
 </div>
 
 <!-- NEW TRADE MODAL -->

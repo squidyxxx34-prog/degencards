@@ -1551,6 +1551,16 @@ document.getElementById('filterRow').addEventListener('click', e=>{
 document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(true); });
 document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+/* RGPD erasure: deletes the auth user server-side (delete_my_account), trades / wallets / goal cascade */
+document.getElementById('btnDeleteAccount').addEventListener('click', async ()=>{
+  const typed = window.prompt('This permanently deletes your account, all your trades, connected wallets and goal.\nType DELETE to confirm.');
+  if(typed === null) return;
+  if(typed.trim().toUpperCase() !== 'DELETE'){ showToast('Not deleted — type DELETE to confirm'); return; }
+  const { error } = await sb.rpc('delete_my_account');
+  if(error){ showToast('Could not delete the account — try again or contact us'); return; }
+  try{ Object.keys(localStorage).filter(k => k.startsWith('dc_')).forEach(k => localStorage.removeItem(k)); }catch(e){}
+  await sb.auth.signOut(); location.reload();
+});
 
 /* ---------- new trade modal ---------- */
 const newOverlay = document.getElementById('newOverlay');
@@ -1765,6 +1775,13 @@ renderCaptcha();
 /* ---------- auth: email + password ---------- */
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const authNote = document.getElementById('authNote');
+/* creating an account (email, Google, public key) needs the 18+ / Terms / Privacy box ticked; signing in to an existing one does not */
+function consentOk(){
+  const box = document.getElementById('authConsent'), lab = box && box.closest('.consent');
+  if(!box || box.checked){ if(lab) lab.classList.remove('need'); return true; }
+  if(lab) lab.classList.add('need');
+  setNote(authNote, 'Tick the box to confirm you are 18+ and accept the Terms and Privacy Policy.', 'error'); box.focus(); return false;
+}
 let authBusy = false;
 function readCreds(needPassword){
   const email = document.getElementById('authEmail').value.trim();
@@ -1789,7 +1806,7 @@ document.getElementById('btnSignIn').addEventListener('click', ()=>authAction(tr
   setNote(authNote, m.includes('not confirmed') ? 'Confirm your email first (check your inbox).'
     : m.includes('captcha') ? captchaMsg(m) : 'Wrong email or password.', 'error');   // no account enumeration
 }));
-document.getElementById('btnSignUp').addEventListener('click', ()=>authAction(true, async ({email,password}, captchaToken)=>{
+document.getElementById('btnSignUp').addEventListener('click', ()=>consentOk() && authAction(true, async ({email,password}, captchaToken)=>{
   const { data, error } = await sb.auth.signUp({ email, password, options:{ captchaToken, emailRedirectTo: REDIRECT_URL } });
   if(error){
     const m = String(error.message||'').toLowerCase();
@@ -1807,6 +1824,7 @@ document.getElementById('btnForgot').addEventListener('click', ()=>authAction(fa
   setNote(authNote, 'If an account exists, a reset link is on its way.', 'ok');
 }));
 document.getElementById('btnGoogle').addEventListener('click', async ()=>{
+  if(!consentOk()) return;
   await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: REDIRECT_URL } });
 });
 
@@ -1839,6 +1857,7 @@ async function loginWithPubkey(pubkey, note){
 document.getElementById('btnPubkey').addEventListener('click', async ()=>{
   const pk = document.getElementById('authPubkey').value.trim();
   if(!B58.test(pk)){ setNote(authNote, "That doesn't look like a valid Solana address.", 'error'); return; }
+  if(!consentOk()) return;
   await loginWithPubkey(pk, authNote);
 });
 
