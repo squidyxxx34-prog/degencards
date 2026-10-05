@@ -11,32 +11,37 @@ const GEM = 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z';   //
 /* ---------- options (all predefined choices) ---------- */
 const THEMES = {
   neon:   { name:'Neon',   win:'#3DFFA0', loss:'#FF5C6C', up:'#18C964', dn:'#FF3B4E' },
-  purple: { name:'Purple', win:'#C09EFF', loss:'#FF5C9D', up:'#A87BFF', dn:'#FF4D8D' },
-  gold:   { name:'Gold',   win:'#FFD35C', loss:'#FF6B5C', up:'#F5C542', dn:'#FF5A4E' },
-  ice:    { name:'Ice',    win:'#6EC0FF', loss:'#FF6B8B', up:'#4FB0FF', dn:'#FF5C7A' },
-  mono:   { name:'Mono',   win:'#FFFFFF', loss:'#9A9AA6', up:'#F2F2F2', dn:'#6B6B78' },
 };
+/* PRO replay studio: extra themes, backgrounds, sell effects, intros and hook texts are NOT in this public file; they arrive
+   from the `pro` edge function only for a verified subscriber (see app.js loadStudio) and register here. Without them,
+   every option falls back to the default look. */
+const EXT = { unlocked:false, themes:{}, bgs:{}, bursts:{}, intros:{}, hooks:{ en:{}, fr:{} } };
 const DEFAULTS = { theme:'neon', intro:'hook', hook:'auto', chart:'candles', speed:'normal', bg:'grid', camera:'follow', fx:'max',
   burst:'dollars', sound:'hype', lang:'en', outro:'full', showMiles:true, showBuy:true, showInvested:true, showMult:true, showTime:true, hideUsd:false };
 const STR = {
   en:{ replay:'TRADE REPLAY', watch:'WATCH THE TRADE', watchLoss:'WATCH IT PLAY OUT', in:'IN', on:'ON', live:'LIVE PNL', pnl:'PNL', invested:'INVESTED',
        held:'held', secured:'BAG SECURED', closed:'TRADE CLOSED', profit:'PROFIT', result:'RESULT', inv:'Invested', entry:'Entry MC', exit:'Exit MC', tag:'Your trades. Turned into cards.',
        buyWin:'YOUR PROFIT =', buyLoss:'YOU LOST =',
-       hooks:{ printed:'HOW I PRINTED', scalp:'SCALP OF THE DAY', copy:'WOULD YOU COPY THIS?', sniped:'SNIPED IT', lesson:'LESSON LEARNED', go:'LET\u2019S GO' } },
+     },
   fr:{ replay:'REPLAY DU TRADE', watch:'REGARDE LE TRADE', watchLoss:'REGARDE COMMENT \u00C7A TOURNE', in:'EN', on:'SUR', live:'PNL LIVE', pnl:'PNL', invested:'INVESTI',
        held:'tenu', secured:'SAC S\u00C9CURIS\u00C9', closed:'TRADE CL\u00D4TUR\u00C9', profit:'PROFIT', result:'R\u00C9SULTAT', inv:'Investi', entry:'MC entr\u00E9e', exit:'MC sortie', tag:'Tes trades. En cartes.',
        buyWin:'TON PROFIT =', buyLoss:'T\u2019AS PERDU =',
-       hooks:{ printed:'COMMENT J\u2019AI PRINT', scalp:'SCALP DU JOUR', copy:'TU L\u2019AURAIS PRIS ?', sniped:'SNIP\u00C9', lesson:'LE\u00C7ON APPRISE', go:'C\u2019EST PARTI' } },
+     },
 };
 let GREEN, UP, DN, RED, L, O, K, FX; const DOT_R = 30;                // fill rounds: one fixed, readable size
 let T_INTRO, T_WARP, T_REPLAY, T_OUTRO, T_BRAND, DURATION, O_WARP, O_REPLAY, O_OUTRO, O_BRAND;
 function configure(opt){
-  O = { ...DEFAULTS, ...(opt || {}) };
-  const th = THEMES[O.theme] || THEMES.neon; GREEN = th.win; RED = th.loss; UP = th.up; DN = th.dn;
+  O = EXT.unlocked ? { ...DEFAULTS, ...(opt || {}) } : { ...DEFAULTS, hideUsd: !!(opt && opt.hideUsd) };
+  if(!THEMES[O.theme] && !EXT.themes[O.theme]) O.theme = DEFAULTS.theme;
+  if(O.bg !== DEFAULTS.bg && !EXT.bgs[O.bg]) O.bg = DEFAULTS.bg;
+  if(!['dollars','none'].includes(O.burst) && !EXT.bursts[O.burst]) O.burst = DEFAULTS.burst;
+  if(!['hook','none'].includes(O.intro) && !EXT.intros[O.intro]) O.intro = DEFAULTS.intro;
+  if(O.hook !== 'auto' && !(EXT.hooks.en[O.hook])) O.hook = 'auto';
+  const th = THEMES[O.theme] || EXT.themes[O.theme] || THEMES.neon; GREEN = th.win; RED = th.loss; UP = th.up; DN = th.dn;
   L = STR[O.lang] || STR.en;
   FX = O.fx === 'off' ? 0 : O.fx === 'soft' ? 0.45 : 1;
   K = O.camera === 'zoom' ? 12 : O.camera === 'full' ? 1e9 : 22;
-  T_INTRO = O.intro === 'none' ? 0 : O.intro === 'countdown' ? 2100 : O.intro === 'logo' ? 1300 : 1700;
+  T_INTRO = O.intro === 'none' ? 0 : EXT.intros[O.intro] ? EXT.intros[O.intro].ms : 1700;
   T_WARP  = O.intro === 'none' || FX === 0 ? 0 : 850;
   T_REPLAY = O.speed === 'slow' ? 17500 : O.speed === 'fast' ? 8000 : 12500;
   T_OUTRO = O.outro === 'quick' ? 0 : 3200;
@@ -173,16 +178,12 @@ function livePrice(c, f, sd){
 
 /* ---------- scenes ---------- */
 function bg(ctx, W, H, u, glow, ms = 0){
+  if(EXT.bgs[O.bg]) return EXT.bgs[O.bg](ctx, W, H, u, glow, ms);
   ctx.fillStyle = '#05070A'; ctx.fillRect(0,0,W,H);
-  const strong = O.bg === 'glow';
-  const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, H*(strong ? 0.85 : 0.7));
-  g.addColorStop(0, hexA(glow, strong ? 0.26 : 0.10)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  if(strong){ const g2 = ctx.createRadialGradient(W*0.1, H*0.9, 0, W*0.1, H*0.9, H*0.6); g2.addColorStop(0, 'rgba(192,158,255,0.16)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g2; ctx.fillRect(0,0,W,H); }
+  const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, H*0.7);
+  g.addColorStop(0, hexA(glow, 0.10)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   if(O.bg === 'grid'){ ctx.fillStyle = 'rgba(255,255,255,0.07)';        // dotted grid
     for(let y = 40*u; y < H; y += 48*u) for(let x = 24*u; x < W; x += 48*u) ctx.fillRect(x, y, 2.4*u, 2.4*u); }
-  if(O.bg === 'stars'){ const R = rng(4242);                           // slow-drifting star field
-    for(let i = 0; i < 140; i++){ const x = R()*W, y = (R()*H + ms * 0.012 * (0.3 + R())) % H, r = (0.8 + R()*2.2) * u;
-      ctx.fillStyle = `rgba(255,255,255,${0.15 + R()*0.5})`; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); } }
 }
 function coinBadge(ctx, img, x, y, s, u){
   rrect(ctx, x, y, s, s, s*0.26); ctx.fillStyle = '#0B0B10'; ctx.fill();
@@ -252,36 +253,7 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
   if(flash > 0){ ctx.fillStyle = hexA(col, 0.18 * flash); ctx.fillRect(0,0,W,H); }
   if(ms < 90 && FX > 0){ ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H); }
 }
-function hookText(win){ return O.hook === 'auto' ? (win ? L.watch : L.watchLoss) : (L.hooks[O.hook] || L.watch); }
-/* intro variant: coin + ticker, clean */
-function introLogo(ctx, W, H, u, t, img, ms){
-  const k = ms / T_INTRO, col = t.pnl >= 0 ? GREEN : RED;
-  bg(ctx, W, H, u, col, ms);
-  const s = (420 + 140 * easeOut(k)) * u;
-  ctx.save(); ctx.globalAlpha = easeOut(seg(k, 0, 0.3));
-  ctx.shadowColor = hexA(col, 0.55); ctx.shadowBlur = 80*u*FX;
-  coinBadge(ctx, img, W/2 - s/2, H*0.42 - s/2, s, u); ctx.shadowBlur = 0;
-  ctx.textAlign = 'center'; ctx.font = `900 ${96*u}px ${SANS}`; ctx.fillStyle = '#fff';
-  ctx.fillText(tk(t.ticker), W/2, H*0.42 + s/2 + 130*u);
-  ctx.font = `700 ${30*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(L.replay, W/2, H*0.42 + s/2 + 190*u);
-  ctx.restore();
-}
-/* intro variant: 3-2-1 countdown on the beat, then the result */
-function introCountdown(ctx, W, H, u, t, img, ms, opt){
-  const col = t.pnl >= 0 ? GREEN : RED;
-  bg(ctx, W, H, u, col, ms);
-  const CY = H*0.42, s = 640*u; ctx.save(); ctx.globalAlpha = 0.22; ctx.filter = `blur(${22*u}px)`; coinBadge(ctx, img, W/2 - s/2, CY - s/2, s, u); ctx.restore();
-  const step = Math.floor(ms / 500), f = (ms % 500) / 500;
-  const txt = step < 3 ? String(3 - step) : (opt.hideUsd ? pctS(t.roi) : money(t.pnl));
-  const sc = step < 3 ? 1.6 - 0.6 * easeOut(f) : 0.8 + 0.2 * easeOutBack(clamp01(f * 2));
-  ctx.save(); ctx.translate(W/2, CY); ctx.scale(sc, sc); ctx.globalAlpha = step < 3 ? 1 - f * 0.6 : 1;
-  ctx.font = `900 ${(step < 3 ? 380 : 170) * u}px ${MONO}`;
-  ctx.fillStyle = step < 3 ? '#fff' : col; ctx.shadowColor = col; ctx.shadowBlur = 50*u*FX; fillCentered(ctx, txt, 0, 0); ctx.restore();
-  // ring pulse
-  ctx.save(); ctx.strokeStyle = hexA(col, (1 - f) * 0.7 * (FX || 0.4)); ctx.lineWidth = 8*u; ctx.beginPath(); ctx.arc(W/2, CY, (260 + 220*f) * u, 0, Math.PI*2); ctx.stroke(); ctx.restore();
-  if(step >= 3){ ctx.textAlign = 'center'; ctx.font = `900 ${50*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.globalAlpha = clamp01(f * 3);
-    fillCentered(ctx, L.on + ' ' + tk(t.ticker), W/2, CY + 330*u); ctx.globalAlpha = 1; }
-}
+function hookText(win){ const hk = EXT.hooks[O.lang] || EXT.hooks.en; return O.hook === 'auto' ? (win ? L.watch : L.watchLoss) : (hk[O.hook] || L.watch); }
 function warp(ctx, W, H, u, t, img, ms, seed){
   const k = ms / T_WARP, R = rng(seed);
   bg(ctx, W, H, u, t.pnl >= 0 ? GREEN : RED, ms);
@@ -493,13 +465,12 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const R = rng(seed + 11), cx = W/2, cy = H*0.45;
     ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.45 * Math.sin(kx * Math.PI)})`; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const CONF = ['#3DFFA0', '#FFD35C', '#C09EFF', '#6EC0FF', '#FF5ADC', '#FFFFFF'];
-    const glyph = O.burst === 'fire' ? '\u{1F525}' : O.burst === 'diamonds' ? '\u{1F48E}' : O.burst === 'rockets' ? '\u{1F680}' : (win ? '$' : '\u00D7');
+    const xb = EXT.bursts[O.burst], glyph = xb && xb.glyph ? xb.glyph : (win ? '$' : '\u00D7');
     for(let i = 0; i < (O.burst === 'none' ? 0 : Math.round(90 * Math.max(0.35, FX))); i++){
       const a = R() * Math.PI*2, sp = 0.35 + R()*0.9, d = easeOut(kx) * sp * H * 0.55, sz = (28 + R()*44) * u, spin = (R() - 0.5) * 8 * kx;
-      const px = cx + Math.cos(a)*d, py = cy + Math.sin(a)*d + (O.burst === 'confetti' ? kx * kx * 260*u : 0);
+      const px = cx + Math.cos(a)*d, py = cy + Math.sin(a)*d + (xb && xb.fall ? kx * kx * xb.fall * u : 0);
       ctx.globalAlpha = (1 - kx) * (0.6 + R()*0.4);
-      if(O.burst === 'confetti'){ ctx.save(); ctx.translate(px, py); ctx.rotate(spin); ctx.fillStyle = CONF[Math.floor(R()*CONF.length)]; ctx.fillRect(-sz*0.18, -sz*0.32, sz*0.36, sz*0.64); ctx.restore(); continue; }
+      if(xb && xb.draw){ xb.draw(ctx, px, py, sz, spin, R); continue; }
       ctx.font = `900 ${sz}px ${MONO}`; ctx.fillStyle = win ? (R() < 0.8 ? GREEN : '#fff') : (R() < 0.8 ? RED : '#fff');
       ctx.fillText(glyph, px, py);
     }
@@ -645,8 +616,7 @@ function soundtrack(ac, out, t0, t, opt){
   const pad = (at, dur, f, vol) => { [f, f * 1.5, f * 2].forEach(x => tone(at, x, 0, dur, 'sine', vol)); };   // soft chord for the chill style
   // intro: white hit + slam, word blips, kick on the beat
   if(O.intro === 'hook'){ impact(S(90), 0.9); if(!minimal) [420, 720, 1020].forEach((m, i) => tone(S(m), 660 + i*220, 0, 0.09, 'square', chill ? 0.04 : 0.08)); }
-  if(O.intro === 'countdown'){ [0, 500, 1000].forEach(m => tone(S(m), 880, 0, 0.12, 'square', 0.1)); tone(S(1500), 1760, 0, 0.3, 'square', 0.1); impact(S(1500), 0.9); }
-  if(O.intro === 'logo' && !minimal) pad(S(100), 1.1, 330, 0.05);
+  if(EXT.intros[O.intro] && EXT.intros[O.intro].sound) EXT.intros[O.intro].sound({ S, tone, impact, pad, minimal, chill });
   for(let m = 0; m < O_WARP; m += 400) kick(S(m), 0.55);
   if(chill && T_INTRO > 0) pad(S(0), T_INTRO / 1000, 262, 0.04);
   // warp: riser + impact on the flash
@@ -690,8 +660,7 @@ function draw(ctx, W, H, t, meta, ms, opt){
   const u = W / W0, img = t.image && window.__dcImgCache ? window.__dcImgCache.get(t.image) : null, seed = (t.tradeId || 1) * 9973;
   ctx.save(); ctx.clearRect(0,0,W,H); ctx.textBaseline = 'alphabetic';
   if(ms < O_WARP){
-    if(O.intro === 'countdown') introCountdown(ctx, W, H, u, t, img, ms, O);
-    else if(O.intro === 'logo') introLogo(ctx, W, H, u, t, img, ms);
+    if(EXT.intros[O.intro]) EXT.intros[O.intro].draw(ctx, W, H, u, t, img, ms, O);
     else intro(ctx, W, H, u, t, img, ms, O, seed);
   }
   else if(ms < O_REPLAY) warp(ctx, W, H, u, t, img, ms - O_WARP, seed);
@@ -704,5 +673,9 @@ function draw(ctx, W, H, t, meta, ms, opt){
   ctx.restore();
 }
 function duration(opt){ configure(opt); return DURATION; }
-window.dcReplay = { draw, available, soundtrack, duration, DEFAULTS, THEMES, W: W0, H: H0, get DURATION(){ return DURATION; } };
+function extend(fn){
+  fn({ EXT, THEMES, bg: (...a) => bg(...a), coinBadge, fillCentered, glitchText, rrect, rng, seg, easeOut, easeOutBack, clamp01, hexA, money, pctS, holdS, SANS, MONO,
+       get GREEN(){ return GREEN; }, get RED(){ return RED; }, get L(){ return L; }, get FX(){ return FX; }, get T_INTRO(){ return T_INTRO; } });
+}
+window.dcReplay = { draw, available, soundtrack, duration, extend, DEFAULTS, THEMES, W: W0, H: H0, get pro(){ return EXT.unlocked; }, get DURATION(){ return DURATION; } };
 })();

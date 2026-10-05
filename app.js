@@ -874,20 +874,29 @@ function openAchievement(key, list, has){
   detailOverlay.classList.add('show');
 }
 function renderStatsView(){
-  const wins = trades.filter(t=>t.pnl>=0), losses=trades.filter(t=>t.pnl<0);
+  const wins = trades.filter(t=>t.pnl>=0);
   const totalPnl = trades.reduce((s,t)=>s+t.pnl,0);
-  const best = trades.length? Math.max(...trades.map(t=>t.roi)):0;
-  const worst = trades.length? Math.min(...trades.map(t=>t.pnl)):0;
-  const legendary = computedTrades().filter(t=>['legendary','mythic'].includes(t.meta.rarity)).length;
-  const achUnlocked = new Set(); computedTrades().forEach(t=>t.meta.achievements.forEach(a=>achUnlocked.add(a.key)));
   const rows=[
-    {i:"layers", l:"Cards collected", v:trades.length},{i:"check", l:"Wins", v:wins.length},{i:"x", l:"Losses", v:losses.length},
+    {i:"layers", l:"Cards collected", v:trades.length},{i:"check", l:"Wins", v:wins.length},
     {i:"target", l:"Win rate", v: trades.length? Math.round(wins.length/trades.length*100)+"%":"—"},
-    {i:"coin", l:"Total P&L", v: fmt.usd(totalPnl)},{i:"rocket", l:"Best ROI", v: fmt.pct(best)},
-    {i:"skull", l:"Biggest loss", v: fmt.usd(worst)},{i:"crown", l:"Legendary+ cards", v: legendary},
-    {i:"trophy", l:"Achievements", v: achUnlocked.size+" / "+ACH_CATALOG.length},
+    {i:"coin", l:"Total P&L", v: fmt.usd(totalPnl)},
   ];
-  document.getElementById('statsGrid').innerHTML = rows.map(r=>`<div style="padding:14px 12px;"><div style="margin-bottom:6px;color:var(--purple);">${icon(r.i,20)}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`).join('');
+  // the rest of the stats (and the advanced ones) come from the PRO studio code, served to subscribers only
+  const pro = typeof window.dcProStats === 'function' && window.dcPro.active;
+  const free = !pro && window.dcPro.enabled;
+  if(pro) rows.push(...window.dcProStats());
+  else if(!free){                                                        // PRO not live yet: classic stats for everyone
+    const losses = trades.filter(t=>t.pnl<0);
+    rows.push({i:"x", l:"Losses", v:losses.length},
+      {i:"rocket", l:"Best ROI", v: fmt.pct(trades.length? Math.max(...trades.map(t=>t.roi)):0)},
+      {i:"skull", l:"Biggest loss", v: fmt.usd(trades.length? Math.min(...trades.map(t=>t.pnl)):0)});
+  }
+  const tile = r => `<div style="padding:14px 12px;"><div style="margin-bottom:6px;color:var(--purple);">${icon(r.i,20)}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`;
+  const locked = free ? ['Best ROI','Biggest loss','Profit factor','Avg win / loss','Win streaks','Max drawdown','Avg hold','Best hour','Top coin']
+    .map(l => `<div class="stat-locked" style="padding:14px 12px;"><div style="margin-bottom:6px;"><span class="pro-tag">PRO</span></div><div class="l">${l}</div><div class="v">\u2022\u2022\u2022</div></div>`).join('') : '';
+  document.getElementById('statsGrid').innerHTML = rows.map(tile).join('') + locked;
+  const cta = document.getElementById('statsPro');
+  if(cta) cta.hidden = !free;
   renderGoal(totalPnl);
 }
 function renderGoal(totalPnl){
@@ -1937,11 +1946,14 @@ function onSession(sess){
   else { appShown = false; showLanding(); }
 }
 /* ---------- PRO (Whop) ----------
-   PRO_LIVE stays false until the Whop plans exist and WHOP_API_KEY / WHOP_PLAN_* are set on the `whop` edge function:
-   until then nothing is locked and the PRO block is hidden. The PRO state comes only from public.subscriptions (server-written). */
-const PRO_LIVE = false;
+   Goes live by itself once the `whop` edge function has its WHOP_API_KEY (status -> live). Then:
+   - free: replay customization, 4K export and the full stats are locked;
+   - PRO is read ONLY from public.subscriptions (written by the server after checking Whop), and the PRO code itself
+     (extra replay looks, full stats) is not in the site files: the `pro` edge function sends it to verified
+     subscribers only, through a one-time ticket (loadStudio). */
 const PRO_OK = new Set(['active','trialing','completed','canceling','past_due']);
-window.dcPro = { enabled: PRO_LIVE, active: false, sub: null, open: () => openPro() };
+let PRO_LIVE = false;
+window.dcPro = { enabled: false, active: false, studio: false, sub: null, open: () => openPro() };
 function renderPro(){
   const blk = document.getElementById('proBlock'); if(!blk) return;
   blk.style.display = PRO_LIVE ? '' : 'none'; if(!PRO_LIVE) return;
@@ -1958,18 +1970,36 @@ function renderPro(){
     btn.textContent = 'GO PRO'; btn.classList.add('pro-btn');
   }
 }
+async function loadStudio(){
+  if(window.dcPro.studio || !window.dcPro.active) return;
+  try{
+    const { data } = await sb.functions.invoke('pro', { body:{} });
+    if(!data || !/^[a-f0-9]{64}$/.test(data.ticket || '')) return;
+    window.dcPro.studio = true;
+    const sc = document.createElement('script');
+    sc.src = `${SUPABASE_URL}/functions/v1/pro?t=${data.ticket}`; sc.async = true;
+    sc.onerror = () => { window.dcPro.studio = false; };
+    document.head.appendChild(sc);
+  }catch(e){}
+}
+window.addEventListener('dc-studio', () => { renderStatsView(); window.dispatchEvent(new Event('dc-pro')); });
 async function loadPro(force){
-  if(!PRO_LIVE || !session) return;
+  if(!session) return;
+  if(!PRO_LIVE){
+    try{ const { data } = await sb.functions.invoke('whop', { body:{ action:'status' } }); PRO_LIVE = !!(data && data.live); }catch(e){}
+    window.dcPro.enabled = PRO_LIVE; renderStatsView(); window.dispatchEvent(new Event('dc-pro'));
+    if(!PRO_LIVE) return;
+  }
   const { data } = await sb.from('subscriptions').select('*').maybeSingle();
   window.dcPro.sub = data || null; window.dcPro.active = !!(data && PRO_OK.has(data.status) && (!data.renews_at || new Date(data.renews_at) > new Date(Date.now() - 3*864e5)));
-  renderPro(); window.dispatchEvent(new Event('dc-pro'));
+  renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
   // back from checkout, or an existing row: read the membership back from Whop (renewals, cancellations)
   if(force || data){
     try{
       const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
       if(r && 'pro' in r){
         const was = window.dcPro.active; window.dcPro.active = !!r.pro; window.dcPro.sub = r.sub || window.dcPro.sub;
-        renderPro(); window.dispatchEvent(new Event('dc-pro'));
+        renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
         if(force && r.pro && !was) showToast('Welcome to PRO — every replay style is unlocked');
         else if(force && !r.pro) showToast('Payment not found yet — it can take a minute, reopen the app');
       }
@@ -1991,6 +2021,7 @@ document.querySelectorAll('.pro-plan').forEach(b => b.addEventListener('click', 
     location.href = data.url;
   }catch(e){ note.textContent = 'Checkout unavailable right now — try again in a minute.'; all.forEach(x => x.disabled = false); }
 }));
+document.getElementById('statsPro').addEventListener('click', ()=>openPro());
 let proChecked = false;
 function proOnSession(){
   if(proChecked || !session) return; proChecked = true;

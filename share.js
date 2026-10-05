@@ -353,7 +353,7 @@ async function pickVideoConfig(baseW, baseH, quality){
 }
 async function encodeOffline(baseW, baseH, total, frameAt, onProgress, audioFn){
   if(!('VideoEncoder' in window) || !('VideoFrame' in window) || !(await loadMuxer())) return null;
-  const pick = await pickVideoConfig(baseW, baseH, state.quality);
+  const pick = await pickVideoConfig(baseW, baseH, proLocked() ? '1080' : state.quality);
   if(!pick) return null;
   const { cfg: vcfg, mux: vmux, W, H, fps: FPS } = pick, n = Math.round(total / 1000 * FPS) + 1;
   // soundtrack rendered offline, sample-exact with the frames
@@ -489,12 +489,20 @@ function replayOpts(){
   for(const [k, , opts] of RO_GROUPS) if(opts.some(x => x[0] === saved[k])) o[k] = saved[k];   // only known values: a stale / edited entry can't break a render
   for(const [k] of RO_SHOW) if(typeof saved[k] === 'boolean') o[k] = saved[k];
   delete o.hideUsd;
-  if(proLocked()) for(const k in RO_PRO) if(isProVal(k, o[k])) o[k] = d[k];   // a lapsed PRO falls back to the free look
+  if(proLocked()) return { ...d };                                    // free: the default replay, no customization
   return o;
 }
 function saveReplayOpts(o){ try{ localStorage.setItem(RO_KEY, JSON.stringify(o)); }catch(e){} }
 function renderCustomize(){
   const box = document.getElementById('shareCustom'); if(!box) return;
+  if(proLocked() || (window.dcPro && window.dcPro.active && !(window.dcReplay && window.dcReplay.pro))){
+    const loading = !proLocked();
+    box.innerHTML = `<div class="rc-lock"><b><span class="pro-tag">PRO</span> Customize your replay</b>
+      ${loading ? 'Loading your PRO studio\u2026' : 'Themes, backgrounds, sell effects, intros, hooks, speed, camera, sound, endings and 4K export.'}
+      ${loading ? '' : '<button type="button" class="hbtn pro-btn" id="rcPro">GO PRO</button>'}</div>`;
+    const b = document.getElementById('rcPro'); if(b) b.addEventListener('click', () => window.dcPro.open());
+    return;
+  }
   const o = replayOpts(), R = window.dcReplay;
   const secs = R ? Math.round(R.duration({ ...o }) / 1000) : 0;
   const preset = Object.entries(RO_PRESETS).find(([, p]) => Object.entries(p.o).every(([k, v]) => o[k] === v));
@@ -572,7 +580,7 @@ function syncButtons(){
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
   document.getElementById('shareHideUsd').checked = state.hideUsd;
-  document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === state.quality; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+  document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
   v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
 }
@@ -630,7 +638,7 @@ function init(){
   document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); if(state.style === 'replay') renderCustomize(); preview(); }));
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
-  document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
+  document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { if(b.dataset.shareQ !== '1080' && proLocked()) return window.dcPro.open(); state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);
   document.getElementById('shareCaption').addEventListener('click', async () => {
@@ -641,4 +649,4 @@ function init(){
 }
 })();
 
-window.addEventListener('dc-pro', () => { try{ if(document.getElementById('shareCustom')) renderCustomize(); }catch(e){} });
+window.addEventListener('dc-pro', () => { try{ if(document.getElementById('shareCustom')) renderCustomize(); syncButtons(); }catch(e){} });

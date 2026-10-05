@@ -3,7 +3,8 @@
 //   { action:"checkout", plan:"monthly"|"yearly" } -> a Whop checkout link tagged with the user's id (metadata.uid)
 //   { action:"sync" }                              -> reads the user's membership back from Whop and stores it in public.subscriptions
 // No webhook needed: the app syncs on return from checkout (?pro=1) and on load when the user already has a row.
-// Secrets: WHOP_API_KEY (Whop dashboard > Developer > API keys, company key of DEGENCARDS). Optional: WHOP_PLAN_MONTHLY, WHOP_PLAN_YEARLY.
+// Secret: WHOP_API_KEY (Whop dashboard > Developer > API keys, company key of DEGENCARDS). Until it is set, status says not live
+// and the app locks nothing.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -12,8 +13,8 @@ const WHOP_KEY = Deno.env.get("WHOP_API_KEY") || "";
 const ACCOUNT = "biz_6CeBfKshynanPD";
 const PRODUCT = "prod_tsBbdHC0PSZlN";
 const PLANS: Record<string, string> = {
-  monthly: Deno.env.get("WHOP_PLAN_MONTHLY") || "",
-  yearly: Deno.env.get("WHOP_PLAN_YEARLY") || "",
+  monthly: Deno.env.get("WHOP_PLAN_MONTHLY") || "plan_IQZ9Lhp8VOgsH",   // PRO Monthly $7.99
+  yearly: Deno.env.get("WHOP_PLAN_YEARLY") || "plan_2S3vMkac5SgWR",     // PRO Yearly $59.99
 };
 const SITE = "https://degencards.vercel.app";
 const ALLOWED_ORIGIN = SITE;
@@ -83,9 +84,10 @@ Deno.serve(async (req) => {
   const { data: au } = await db.auth.getUser(token);
   const uid = au?.user?.id;
   if (!uid) return json({ error: "auth" }, 401, origin);
-  if (!WHOP_KEY) return json({ error: "not_configured" }, 503, origin);
   let body: any = {};
   try { body = await req.json(); } catch (_) { /* empty */ }
+  if (body.action === "status") return json({ live: !!WHOP_KEY }, 200, origin);
+  if (!WHOP_KEY) return json({ error: "not_configured" }, 503, origin);
 
   try {
     if (body.action === "checkout") {
