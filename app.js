@@ -534,12 +534,27 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   const svg = `<rect x="${xb.toFixed(2)}" y="${y0.toFixed(2)}" width="${(xe-xb).toFixed(2)}" height="${h.toFixed(2)}" fill="${col}" fill-opacity="${big ? .13 : .1}"/>` + lv(ye, .55) + lv(yx, .9);
   return { svg, html:'' };                                         // no text on the chart: the figures are right above it
 }
+/* window of a small card chart: same amount of chart before the first BUY and after the last SELL, so the trade sits in the
+   middle (first BUY ~ 1/4-1/3 in, last SELL ~ 2/3-3/4 in, never on the same spot). Only real candles: the margin is
+   capped by the data on the shorter side, never padded with empty space. */
+function centredWindow(ch){
+  const bs = ch.m.filter(m=>m[1]==='b').map(m=>m[0]), ss = ch.m.filter(m=>m[1]==='s').map(m=>m[0]);
+  if(!bs.length || !ss.length || !ch.c.length) return null;
+  const tb = Math.min(...bs), te = Math.max(...ss); if(te < tb) return null;
+  const d0 = ch.c[0][0], d1 = ch.c[ch.c.length-1][0] + ch.i;
+  const want = Math.max((te - tb) * 0.7, ch.i * 4);                 // hold span ~ 40 % of the width
+  const pad = Math.min(want, tb - d0, d1 - te);
+  return pad > 0 ? [tb - pad, te + pad] : null;
+}
 function miniChart(t, big){
   const h = big ? 170 : 66;
   const ch = t.chart;
   if(ch && ch.v === 2 && !pendingFine(t)){
-    const [cs, iv] = mergeCandles(ch.c, ch.i, big ? 140 : 48);
+    const win = big ? null : centredWindow(ch);                        // small cards: BUY and SELL framed around the middle
+    const raw = win ? ch.c.filter(c => c[0] + ch.i > win[0] && c[0] < win[1]) : ch.c;
+    const [cs, iv] = mergeCandles(raw.length >= 4 ? raw : ch.c, ch.i, big ? 140 : 48);
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
+    if(win && raw.length >= 4){ x0 = Math.max(win[0], cs[0][0]); x1 = Math.min(win[1], cs[cs.length-1][0] + iv); }
     if(x1 <= x0) x1 = x0 + iv;
     const ys =  [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
