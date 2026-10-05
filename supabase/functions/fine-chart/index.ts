@@ -13,7 +13,7 @@ const ORIGIN = "https://degencards.vercel.app";
 const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
-const N = 32, MAX_READS = HELIUS ? 220 : 70, PER_S = HELIUS ? 9 : 3;
+const N = 56, MAX_READS = HELIUS ? 240 : 70, PER_S = HELIUS ? 9 : 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rpc(method: string, params: unknown[]): Promise<any> {
@@ -133,7 +133,7 @@ async function build(t: any, deadline: number): Promise<string> {
   // a price far off its neighbours (a routed / odd tx) is dropped
   const clean = pts.filter((p, i) => { const nb = pts.slice(Math.max(0, i - 3), i + 4).filter((q) => q !== p).map((q) => q.mc).sort((a, b) => a - b);
     const m = nb[nb.length >> 1]; return !m || (p.mc < m * 3 && p.mc > m / 3); });
-  // consecutive swaps -> ~32 candles, each with real movement
+  // consecutive swaps -> ~56 candles, each with real movement
   const n = Math.min(N, clean.length - 1);                           // each candle: at least one new real price
   if (n < 16) return `only ${clean.length} prices`;
   const candles: number[][] = []; let prev = clean[0].mc;
@@ -166,7 +166,7 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
     ({ data: rows } = await db.from("trades").select(cols).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8)
-      .eq("chart->>coarse", "true").order("timestamp_ms", { ascending: false }).limit(3));
+      .or("chart->>coarse.eq.true,chart->>redo.eq.true").order("timestamp_ms", { ascending: false }).limit(3));
   } else {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u, error } = await db.auth.getUser(jwt);
@@ -175,7 +175,7 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 3);
     if (!ids.length) return new Response('{"error":"ids"}', { status: 400, headers: h });
     ({ data: rows } = await db.from("trades").select(cols)
-      .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).eq("chart->>coarse", "true"));
+      .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).or("chart->>coarse.eq.true,chart->>redo.eq.true"));
   }
   const deadline = Date.now() + 110_000; let charts = 0;
   for (const t of rows || []) {

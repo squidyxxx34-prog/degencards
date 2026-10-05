@@ -411,7 +411,7 @@ function regroup(cs, iv){
 /* every chart, every coin: about as many candles as a lively one (~32), never a flat candle.
    Minutes where nobody traded are dropped, the rest merged into ~32 candles drawn side by side (quiet stretches don't
    take room), and B / S placed at their exact moment inside the candle they fall in. */
-const EVEN_N = 32;
+const EVEN_N = 56;                                               // detail: 56 candles; small cards merge them to 28
 function evenCandles(ch){
   const src = ch.c, iv = ch.i;
   if(!src || src.length < 2) return ch;
@@ -446,7 +446,7 @@ function parseChart(c){
     const iv0 = okN(+c.i) && +c.i>0 ? +c.i : 60000;
     if(c.fine && cs.length >= 2){                                    // candles of real consecutive swaps: drawn as they are
       const fc = cs.slice().sort((a,b)=>a[0]-b[0]);
-      return evenCandles({ v:2, c:fc, m, m0:m, w, iv0, i: iv0, src: c.src==='pump' ? 'pump' : 'chain', q: 2, fine: true, coarse: false, n: fc.length });
+      return evenCandles({ v:2, c:fc, m, m0:m, w, iv0, i: iv0, src: c.src==='pump' ? 'pump' : 'chain', q: 2, fine: true, coarse: false, redo: !!c.redo, n: fc.length });
     }
     if(c.src === 'gt' && cs.length && m.some(x=>x[2] > 0)){             // GeckoTerminal prices in its own supply (fdv/price): when every fill
       const r = m.filter(x=>x[2] > 0).map(x=>{ const k = cs.find(y=>x[0] < y[0] + iv0) || cs[cs.length-1]; return x[2] / ((k[2]+k[3])/2); }).sort((p,q)=>p-q);
@@ -465,10 +465,10 @@ function parseChart(c){
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
         const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
-        return evenCandles({ v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: tc.length });
+        return evenCandles({ v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: tc.length });
       }
     }
-    return cl.length ? evenCandles({ v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, n: cl.length }) : null;
+    return cl.length ? evenCandles({ v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: cl.length }) : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -532,19 +532,7 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   const xb = clampP(X(tb)), xe = clampP(X(te)), ye = clampP(Y(en)), yx = clampP(Y(ex)), y0 = Math.min(ye, yx), h = Math.max(0.6, Math.abs(ye - yx));
   const lv = (y, op) => `<line x1="${xb.toFixed(2)}" x2="${xe.toFixed(2)}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${col}" stroke-opacity="${op}" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
   const svg = `<rect x="${xb.toFixed(2)}" y="${y0.toFixed(2)}" width="${(xe-xb).toFixed(2)}" height="${h.toFixed(2)}" fill="${col}" fill-opacity="${big ? .13 : .1}"/>` + lv(ye, .55) + lv(yx, .9);
-  if(!big) return { svg, html:'' };
-  const r = Number(t.roi) || (ex / en - 1) * 100, roiS = (r >= 0 ? '+' : '') + (Math.abs(r) >= 100 ? Math.round(r).toLocaleString('en-US') : r.toFixed(1)) + '%';
-  const mult = Number(t.roi) ? 1 + t.roi / 100 : ex / en, multS = (mult >= 10 ? mult.toFixed(0) : mult.toFixed(2)) + 'x';
-  const narrow = xe - xb < 22, right = narrow && xe < 75, mid = (ye + yx) / 2;
-  let html = `<span class="ch-tag" style="top:${ye.toFixed(2)}%;--c:rgba(255,255,255,.55)">${fmtMcShort(en)}</span>` +
-    `<span class="ch-tag" style="top:${yx.toFixed(2)}%;--c:${col}">${fmtMcShort(ex)}</span>` +
-    `<span class="ch-roi${right ? ' out' : ''}" style="left:${(narrow && !right ? xb : xe).toFixed(2)}%;top:${mid.toFixed(2)}%;--c:${col}"><b>${roiS}</b><i>${multS}</i></span>`;
-  // the top of the move while holding: shows what the hold went through, not a judgement
-  let pk = null; cs.forEach(c=>{ if(c[0] + iv > tb && c[0] <= te && (!pk || c[2] > pk[2])) pk = c; });
-  if(pk && win && pk[2] > ex * 1.25){
-    html += `<span class="ch-peak" style="left:${clampP(X(pk[0] + iv/2)).toFixed(2)}%;top:${clampP(Y(pk[2])).toFixed(2)}%">peak ${(pk[2] / en).toFixed(pk[2] / en >= 10 ? 0 : 1)}x</span>`;
-  }
-  return { svg, html };
+  return { svg, html:'' };                                         // no text on the chart: the figures are right above it
 }
 function miniChart(t, big){
   const h = big ? 170 : 66;
@@ -1503,7 +1491,7 @@ async function warmCharts(){
 const fineAsked = new Set();
 async function fineCharts(only){
   for(let round = 0; round < 40; round++){
-    const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.chart && t.chart.coarse && !t.chart.fine && (t.chartTries||0) < 8 && !fineAsked.has(t.id));
+    const todo = trades.filter(t=>(!only || only.includes(t.id)) && t.mint && t.chart && ((t.chart.coarse && !t.chart.fine) || (only && t.chart.redo)) && (t.chartTries||0) < 8 && !fineAsked.has(t.id));
     if(!todo.length) return;
     todo.sort((a,b)=>(onScreen.has(b.id)-onScreen.has(a.id)) || (b.timestamp-a.timestamp));
     const batch = todo.slice(0, 3); batch.forEach(t=>fineAsked.add(t.id));
@@ -1511,7 +1499,7 @@ async function fineCharts(only){
       const { data } = await sb.functions.invoke('fine-chart', { body:{ ids: batch.map(t=>t.id) } });
       const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
       const upd = [];
-      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine) t.chart = c; upd.push(t.id); });   // not rebuilt yet: the server cron keeps going, picked up below   // fine chart, or the minute one once it gave up
+      (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c && c.fine && !c.redo) t.chart = c; upd.push(t.id); });   // not rebuilt yet: the server cron keeps going, picked up below   // fine chart, or the minute one once it gave up
       if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
     }catch(e){ return; }
   }
@@ -1519,12 +1507,12 @@ async function fineCharts(only){
 /* the server rebuilds the rest on its own (cron): pick up what it finished, every minute while the app is open */
 setInterval(async ()=>{
   if(document.hidden || !session) return;
-  const ids = trades.filter(pendingFine).map(t=>t.id).slice(0, 100); if(!ids.length) return;
+  const ids = trades.filter(t=>pendingFine(t) || (t.chart && t.chart.redo)).map(t=>t.id).slice(0, 150); if(!ids.length) return;   // waiting, or being upgraded to more candles
   try{
     const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', ids);
     const upd = [];
     (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; const was = pendingFine(t); t.chartTries = Number(r.chart_tries)||0;
-      const c = parseChart(r.chart); if(c) t.chart = c; if(was !== pendingFine(t) || (c && c.fine)) upd.push(t.id); });
+      const c = parseChart(r.chart); const changed = c && JSON.stringify(c.c) !== JSON.stringify(t.chart && t.chart.c); if(c) t.chart = c; if(was !== pendingFine(t) || changed) upd.push(t.id); });
     if(upd.length){ refreshCharts(upd); const d = detailOverlay.dataset.id; if(detailOverlay.classList.contains('show') && upd.includes(d)) openDetail(d, true); }
   }catch(e){}
 }, 60000);
@@ -1662,7 +1650,7 @@ const fmtClock = ts => new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',m
 const fmtDelta = ms => { const s = Math.round(ms/1000); return s < 60 ? `+${s}s` : `+${Math.floor(s/60)}m ${s%60}s`; };
 function openDetail(id, refresh){
   const t = trades.find(x=>x.id===id); if(!t) return;
-  if(!refresh && t.chart && t.chart.coarse) fineCharts([t.id]);       // opened: its second-level candles first
+  if(!refresh && t.chart && (t.chart.coarse || t.chart.redo)) fineCharts([t.id]);       // opened: its second-level candles first
   const keepScroll = refresh ? detailOverlay.querySelector('.modal').scrollTop : 0;
   const meta = generateTradeCard(t, trades);
   const win = t.pnl >= 0, cls = win ? 'pos' : 'neg';
