@@ -17,13 +17,15 @@ const THEMES = {
   mono:   { name:'Mono',   win:'#FFFFFF', loss:'#9A9AA6', up:'#F2F2F2', dn:'#6B6B78' },
 };
 const DEFAULTS = { theme:'neon', intro:'hook', hook:'auto', chart:'candles', speed:'normal', bg:'grid', camera:'follow', fx:'max',
-  burst:'dollars', sound:'hype', lang:'en', outro:'full', showMiles:true, showInvested:true, showMult:true, showTime:true, hideUsd:false };
+  burst:'dollars', sound:'hype', lang:'en', outro:'full', showMiles:true, showBuy:true, showInvested:true, showMult:true, showTime:true, hideUsd:false };
 const STR = {
   en:{ replay:'TRADE REPLAY', watch:'WATCH THE TRADE', watchLoss:'WATCH IT PLAY OUT', in:'IN', on:'ON', live:'LIVE PNL', pnl:'PNL', invested:'INVESTED',
        held:'held', secured:'BAG SECURED', closed:'TRADE CLOSED', profit:'PROFIT', result:'RESULT', inv:'Invested', entry:'Entry MC', exit:'Exit MC', tag:'Your trades. Turned into cards.',
+       buyWin:'YOUR PROFIT =', buyLoss:'YOU LOST =',
        hooks:{ printed:'HOW I PRINTED', scalp:'SCALP OF THE DAY', copy:'WOULD YOU COPY THIS?', sniped:'SNIPED IT', lesson:'LESSON LEARNED', go:'LET\u2019S GO' } },
   fr:{ replay:'REPLAY DU TRADE', watch:'REGARDE LE TRADE', watchLoss:'REGARDE COMMENT \u00C7A TOURNE', in:'EN', on:'SUR', live:'PNL LIVE', pnl:'PNL', invested:'INVESTI',
        held:'tenu', secured:'SAC S\u00C9CURIS\u00C9', closed:'TRADE CL\u00D4TUR\u00C9', profit:'PROFIT', result:'R\u00C9SULTAT', inv:'Investi', entry:'MC entr\u00E9e', exit:'MC sortie', tag:'Tes trades. En cartes.',
+       buyWin:'TON PROFIT =', buyLoss:'T\u2019AS PERDU =',
        hooks:{ printed:'COMMENT J\u2019AI PRINT', scalp:'SCALP DU JOUR', copy:'TU L\u2019AURAIS PRIS ?', sniped:'SNIP\u00C9', lesson:'LE\u00C7ON APPRISE', go:'C\u2019EST PARTI' } },
 };
 let GREEN, UP, DN, RED, L, O, K, FX; const DOT_R = 30;                // fill rounds: one fixed, readable size
@@ -43,6 +45,35 @@ function configure(opt){
   DURATION = O_BRAND + T_BRAND;
 }
 configure({});
+/* what the PnL buys (option showBuy): the most expensive item it covers, times how many (rough US retail prices) */
+const BUYS = [
+  [5, '\u2615', 'Starbucks latte', 'Latte Starbucks'], [13, '\u{1F354}', 'Big Mac meal', 'Menu Big Mac'], [40, '\u{1F355}', 'Pizza night', 'Soir\u00E9e pizza'],
+  [70, '\u{1F3AE}', 'New video game', 'Jeu vid\u00E9o'], [130, '\u{1F45F}', 'Nike Dunks', 'Nike Dunk'], [250, '\u{1F3A7}', 'AirPods Pro', 'AirPods Pro'],
+  [700, '\u{1F579}\uFE0F', 'PS5 Pro', 'PS5 Pro'], [1200, '\u{1F4F1}', 'iPhone Pro Max', 'iPhone Pro Max'], [2500, '\u{1F4BB}', 'MacBook Pro', 'MacBook Pro'],
+  [5000, '\u2708\uFE0F', 'Week in Dubai', 'Semaine \u00E0 Duba\u00EF'], [10000, '\u231A', 'Rolex Submariner', 'Rolex Submariner'], [30000, '\u{1F45C}', 'Herm\u00E8s Birkin', 'Herm\u00E8s Birkin'],
+  [45000, '\u{1F697}', 'Tesla Model Y', 'Tesla Model Y'], [150000, '\u231A', 'Patek Nautilus', 'Patek Nautilus'], [250000, '\u{1F3CE}\uFE0F', 'Porsche 911 GT3 RS', 'Porsche 911 GT3 RS'],
+  [520000, '\u{1F3CE}\uFE0F', 'Lamborghini SVJ', 'Lamborghini SVJ'], [1000000, '\u{1F3D9}\uFE0F', 'Miami penthouse', 'Penthouse \u00E0 Miami'], [3500000, '\u{1F3CE}\uFE0F', 'Bugatti Chiron', 'Bugatti Chiron'],
+  [15000000, '\u{1F6E5}\uFE0F', 'Superyacht', 'Superyacht'], [65000000, '\u{1F6E9}\uFE0F', 'Gulfstream G650', 'Gulfstream G650'],
+];
+function buyOf(t){
+  const a = Math.abs(t.pnl || 0); if(!O.showBuy || O.hideUsd || a < 5) return null;
+  let b = BUYS[0]; BUYS.forEach(x => { if(x[0] <= a) b = x; });
+  const n = Math.floor(a / b[0]);
+  return { emo: b[1], name: (n > 1 ? n + '\u00D7 ' : '') + (O.lang === 'fr' ? b[3] : b[2]), lab: t.pnl >= 0 ? L.buyWin : L.buyLoss };
+}
+/* the item as a pill: emoji in a round + label + name, centered on (x, y) or left-aligned at x */
+function buyPill(ctx, it, x, y, u, col, center){
+  ctx.save(); ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.font = `700 ${22*u}px ${MONO}`; const lw = ctx.measureText(it.lab).width;
+  ctx.font = `900 ${38*u}px ${SANS}`; const nw = ctx.measureText(it.name).width;
+  const h = 96*u, w = h + 18*u + Math.max(lw, nw) + 34*u, x0 = center ? x - w/2 : x;
+  rrect(ctx, x0, y - h/2, w, h, h/2); ctx.fillStyle = 'rgba(5,7,10,0.72)'; ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = hexA(col, 0.7); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x0 + h/2, y, h/2 - 8*u, 0, Math.PI*2); ctx.fillStyle = hexA(col, 0.18); ctx.fill();
+  ctx.font = `${50*u}px ${SANS}`; fillCentered(ctx, it.emo, x0 + h/2, y);
+  ctx.font = `700 ${22*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(it.lab, x0 + h + 18*u, y - 20*u);
+  ctx.font = `900 ${38*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(it.name, x0 + h + 18*u, y + 18*u);
+  ctx.restore();
+}
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
 // TikTok / Reels / Shorts cover the top (search), the right column (like, comment…) and the bottom (caption)
 const SAFE_T = 250, SAFE_B = 480, SAFE_R = 170;
@@ -478,6 +509,8 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.font = `900 ${150*u}px ${MONO}`; ctx.fillStyle = win ? GREEN : RED; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 50*u*FX;
     fillCentered(ctx, opt.hideUsd ? pctS(t.roi) : money(t.pnl), 0, 0);
     if(!opt.hideUsd){ ctx.font = `900 ${64*u}px ${MONO}`; fillCentered(ctx, pctS(t.roi), 0, 125*u); }
+    const it = buyOf(t), kp = easeOutBack(seg(kx, 0.18, 0.4));
+    if(it && kp > 0){ ctx.shadowBlur = 0; ctx.save(); ctx.translate(0, 260*u); ctx.scale(kp, kp); buyPill(ctx, it, 0, 0, u, win ? GREEN : RED, true); ctx.restore(); }
     ctx.restore(); ctx.textBaseline = 'alphabetic';
   }
   // milestone stamps: 2X / 5X / -50 % slam in tilted, glitch while landing, then fly off
@@ -523,8 +556,10 @@ function outro(ctx, W, H, u, t, img, ms, opt){
   if(!opt.hideUsd){ ctx.font = `800 ${38*u}px ${MONO}`; const rt = (t.roi >= 0 ? '\u25B2 ' : '\u25BC ') + pctS(t.roi).replace('+',''), rw = ctx.measureText(rt).width + 40*u;
     rrect(ctx, bwid + 26*u, -58*u, rw, 64*u, 32*u); ctx.fillStyle = hexA(col, 0.16); ctx.fill(); ctx.fillStyle = col; ctx.fillText(rt, bwid + 46*u, -14*u); }
   ctx.restore(); ctx.restore();
+  const it = buyOf(t), kp = easeOutBack(seg(k, 0.28, 0.42));
+  if(it && kp > 0){ ctx.save(); ctx.translate(56*u, (SAFE_T + 500)*u); ctx.scale(kp, kp); buyPill(ctx, it, 0, 0, u, col, false); ctx.restore(); }
   // price line of the whole window with BUY / SELL
-  const top = (SAFE_T + 500)*u, bottom = H - (SAFE_B + 250)*u, left = 56*u, right = W - (SAFE_R + 20)*u;
+  const top = (SAFE_T + (it ? 600 : 500))*u, bottom = H - (SAFE_B + 250)*u, left = 56*u, right = W - (SAFE_R + 20)*u;
   const closes = P.cs.map(c => c[4]); let lo = Math.min(...P.cs.map(c=>c[3])), hi = Math.max(...P.cs.map(c=>c[2])); const pd = (hi-lo)*0.15 || hi*0.05; lo -= pd; hi += pd;
   const X = i => left + (i / Math.max(1, P.n - 1)) * (right - left), Y = v => top + (1 - (v - lo)/(hi - lo)) * (bottom - top);
   const draw = easeInOut(seg(k, 0.12, 0.6)), upto = Math.max(1, Math.floor(draw * (P.n - 1)));
@@ -638,6 +673,9 @@ function soundtrack(ac, out, t0, t, opt){
   impact(S(burst), 0.9);
   if(win){ [1318, 1760, 2637, 3520].forEach((f, i) => tone(S(burst + 40 + i*60), f, 0, 0.6, 'sine', 0.12)); noise(S(burst), 0.6, 6000, 9000, 0.12, 2); }
   else tone(S(burst), 600, 90, 0.9, 'sawtooth', 0.08);
+  // what the PnL buys: cha-ching on the pill (sell burst, and recap)
+  if(buyOf(t) && !minimal){ const ching = at => { tone(at, 2093, 0, 0.12, 'square', 0.05); tone(at + 0.08, 2637, 0, 0.5, 'sine', 0.1); noise(at, 0.15, 7000, 9000, 0.08, 3); };
+    ching(S(burst + 330)); if(T_OUTRO > 0) ching(S(O_OUTRO + T_OUTRO * 0.3)); }
   // recap: kick back in; brand: shimmer arpeggio on the jewel + soft hit on the wordmark
   for(let m = O_OUTRO; m < O_BRAND; m += 400) kick(S(m), 0.4);
   const bk = T_BRAND / 2700;                                            // the short outro plays the same cues, faster
