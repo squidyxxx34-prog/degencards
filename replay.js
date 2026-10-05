@@ -17,7 +17,7 @@ const THEMES = {
   mono:   { name:'Mono',   win:'#FFFFFF', loss:'#9A9AA6', up:'#F2F2F2', dn:'#6B6B78' },
 };
 const DEFAULTS = { theme:'neon', intro:'hook', hook:'auto', chart:'candles', speed:'normal', bg:'grid', camera:'follow', fx:'max',
-  burst:'dollars', sound:'hype', lang:'en', outro:'full', showInvested:true, showMult:true, showTime:true, hideUsd:false };
+  burst:'dollars', sound:'hype', lang:'en', outro:'full', showMiles:true, showInvested:true, showMult:true, showTime:true, hideUsd:false };
 const STR = {
   en:{ replay:'TRADE REPLAY', watch:'WATCH THE TRADE', watchLoss:'WATCH IT PLAY OUT', in:'IN', on:'ON', live:'LIVE PNL', pnl:'PNL', invested:'INVESTED',
        held:'held', secured:'BAG SECURED', closed:'TRADE CLOSED', profit:'PROFIT', result:'RESULT', inv:'Invested', entry:'Entry MC', exit:'Exit MC', tag:'Your trades. Turned into cards.',
@@ -90,13 +90,15 @@ function prep(t){
   const total = cum[cum.length-1];
   // milestones while holding: first candle that CLOSES at 2x, 3x, 5x... (or -25 %, -50 %, -75 %) -> stamp + camera kick + sound
   // (closes, not wicks: a stamp never claims a level the live multiplier on screen didn't show)
-  const ups = [2, 3, 5, 10, 20, 50, 100], dns = [0.75, 0.5, 0.25], hit = new Set(), mls = [];
+  const ups = [1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 50, 75, 100, 200, 500, 1000], dns = [0.9, 0.75, 0.5, 0.25, 0.1], hit = new Set(), mls = [];
+  const upEmo = th => th >= 100 ? '\u{1F315}' : th >= 30 ? '\u{1F451}' : th >= 10 ? '\u{1F48E}' : th >= 4 ? '\u{1F525}' : th >= 2 ? '\u{1F680}' : '\u{1F4C8}';
+  const dnEmo = th => th <= 0.1 ? '\u2620\uFE0F' : th <= 0.25 ? '\u{1FAA6}' : th <= 0.5 ? '\u{1F480}' : th <= 0.75 ? '\u{1F62C}' : '\u{1F610}';
   for(let i = ib + 1; i < is; i++){
     const c = cs[i];
-    ups.forEach(th => { if(!hit.has(th) && c[4] / buyMc >= th){ hit.add(th); mls.push({ i, up: true, txt: th + 'X', emo: th >= 10 ? '\u{1F48E}' : th >= 5 ? '\u{1F525}' : '\u{1F680}' }); } });
-    dns.forEach(th => { if(!hit.has(th) && c[4] / buyMc <= th){ hit.add(th); mls.push({ i, up: false, txt: '-' + Math.round((1 - th) * 100) + '%', emo: th <= 0.5 ? '\u{1F480}' : '\u{1F62C}' }); } });
+    ups.forEach(th => { if(!hit.has(th) && c[4] / buyMc >= th){ hit.add(th); mls.push({ i, up: true, txt: th + 'X', emo: upEmo(th) }); } });
+    dns.forEach(th => { if(!hit.has(th) && c[4] / buyMc <= th){ hit.add(th); mls.push({ i, up: false, txt: '-' + Math.round((1 - th) * 100) + '%', emo: dnEmo(th) }); } });
   }
-  const miles = mls.filter((m, k) => !mls[k+1] || mls[k+1].i - m.i > 2 || mls[k+1].up !== m.up).slice(-4);   // levels within 2 candles: only the biggest (no stacked stamps); at most 4
+  const miles = mls.filter((m, k) => !mls[k+1] || mls[k+1].i !== m.i);   // same candle: only the biggest (spacing in time: milesOf)
   const p = { cs, iv, marks: [bm, sm], miles, ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
   prepCache.set(t, p); return p;
 }
@@ -110,6 +112,15 @@ function revealAt(P, ms){
   const f = (target - P.cum[i]) / w;
   const pause = (i === P.ib || i === P.is) ? Math.min(1, f * (w / Math.max(1, w - 4))) : f;
   return i + clamp01(pause);
+}
+/* X cards shown (option showMiles): one every 0.8 s at most (no stacked stamps), the biggest level always shown, 8 max */
+function milesOf(P){
+  if(!O.showMiles || !P.miles.length) return [];
+  const all = P.miles.map(m => ({ ...m, at: revealTimeOf(P, m.i) })), out = [];
+  all.forEach(m => { const prev = out[out.length-1]; if(!prev || m.at - prev.at >= 800) out.push(m); });
+  const top = all[all.length-1];
+  if(out[out.length-1] !== top){ if(top.at - out[out.length-1].at < 800) out.pop(); out.push(top); }
+  return out.slice(-8);
 }
 function revealTimeOf(P, idx){                                         // replay ms at which candle idx is fully drawn
   const w = P.cum[idx+1] - P.cum[idx], extra = (idx === P.ib || idx === P.is) ? 4 : 0;
@@ -323,7 +334,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
   const r = revealAt(P, ms), full = Math.floor(r), frac = r - full;
   bg(ctx, W, H, u, col, ms);
   // camera kick on BUY, SELL and every milestone: punch-in zoom + short shake
-  const tb0 = revealTimeOf(P, P.ib), ts0 = revealTimeOf(P, P.is), mt = P.miles.map(m => revealTimeOf(P, m.i));
+  const ML = milesOf(P), tb0 = revealTimeOf(P, P.ib), ts0 = revealTimeOf(P, P.is), mt = ML.map(m => m.at);
   const kick = Math.max(0, ...[tb0, ts0 + 500, ...mt].map(e => ms >= e ? 1 - seg(ms, e, e + 380) : 0)) * FX;
   const pop = Math.max(0, ...mt.map(e => ms >= e ? 1 - seg(ms, e, e + 450) : 0));
   ctx.save();
@@ -470,8 +481,8 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.restore(); ctx.textBaseline = 'alphabetic';
   }
   // milestone stamps: 2X / 5X / -50 % slam in tilted, glitch while landing, then fly off
-  P.miles.forEach((m, k) => {
-    const e = mt[k], f = seg(ms, e, e + 1150); if(f <= 0 || f >= 1) return;
+  ML.forEach((m, k) => {
+    const e = mt[k], f = seg(ms, e, e + 1000); if(f <= 0 || f >= 1) return;
     const c2 = m.up ? GREEN : RED, land = easeOutBack(seg(f, 0, 0.22)), sc = 2.4 - 1.4 * land, out = seg(f, 0.8, 1);
     ctx.save(); ctx.translate(W*0.4, top + ph * 0.3 - out * 160*u); ctx.rotate((m.up ? -8 : 8) * Math.PI / 180); ctx.scale(sc, sc);
     ctx.globalAlpha = clamp01(f * 10) * (1 - out); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -616,7 +627,7 @@ function soundtrack(ac, out, t0, t, opt){
   const bv = chill ? 0.05 : 0.09;
   [0, 110, 220].forEach((d, i) => tone(S(tb - 200 + d), 880 + i*220, 0, 0.07, chill ? 'sine' : 'square', bv)); impact(S(tb + 80), 0.6); if(hype) tone(S(tb + 80), 220, 440, 0.35, 'sawtooth', 0.05);
   // milestones: short riser into a hit + a rising stab (higher for each new level, down-sweep for losses)
-  P.miles.forEach((m, k) => { const at = O_REPLAY + revealTimeOf(P, m.i);
+  milesOf(P).forEach((m, k) => { const at = O_REPLAY + m.at;
     if(!minimal) noise(S(at - 280), 0.3, 800, 6000, chill ? 0.06 : 0.16, 0.9);
     impact(S(at), 0.7);
     if(m.up) [0, 70, 140].forEach((d, j) => tone(S(at + d), 523 * Math.pow(1.26, k + j), 0, 0.18, chill ? 'sine' : 'square', chill ? 0.05 : 0.08));

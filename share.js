@@ -470,7 +470,7 @@ const RO_GROUPS = [
   ['outro',  'Ending',      [['full','Recap + logo'],['recap','Recap + short logo'],['quick','Short logo only']]],
   ['lang',   'Language',    [['en','English'],['fr','Fran\u00E7ais']]],
 ];
-const RO_SHOW = [['showInvested','Invested'],['showMult','Multiplier'],['showTime','Timer']];
+const RO_SHOW = [['showMiles','X cards'],['showInvested','Invested'],['showMult','Multiplier'],['showTime','Timer']];
 const RO_PRESETS = {
   hype:  { name:'\u{1F525} Hype',  o:{ theme:'neon', intro:'hook', hook:'auto', chart:'candles', camera:'follow', speed:'normal', bg:'grid', fx:'max', burst:'dollars', sound:'hype', outro:'full' } },
   clean: { name:'\u2728 Clean',    o:{ theme:'purple', intro:'logo', hook:'auto', chart:'candles', camera:'follow', speed:'normal', bg:'clean', fx:'soft', burst:'none', sound:'minimal', outro:'recap' } },
