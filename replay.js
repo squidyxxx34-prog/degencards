@@ -88,14 +88,15 @@ function prep(t){
   w[ib] += 4; w[is] += 4;
   const cum = [0]; w.forEach(x => cum.push(cum[cum.length-1] + x));
   const total = cum[cum.length-1];
-  // milestones while holding: first candle that reaches 2x, 3x, 5x... (or -25 %, -50 %, -75 %) -> stamp + camera kick + sound
+  // milestones while holding: first candle that CLOSES at 2x, 3x, 5x... (or -25 %, -50 %, -75 %) -> stamp + camera kick + sound
+  // (closes, not wicks: a stamp never claims a level the live multiplier on screen didn't show)
   const ups = [2, 3, 5, 10, 20, 50, 100], dns = [0.75, 0.5, 0.25], hit = new Set(), mls = [];
   for(let i = ib + 1; i < is; i++){
     const c = cs[i];
-    ups.forEach(th => { if(!hit.has(th) && c[2] / buyMc >= th){ hit.add(th); mls.push({ i, up: true, txt: th + 'X', emo: th >= 10 ? '\u{1F48E}' : th >= 5 ? '\u{1F525}' : '\u{1F680}' }); } });
-    dns.forEach(th => { if(!hit.has(th) && c[3] / buyMc <= th){ hit.add(th); mls.push({ i, up: false, txt: '-' + Math.round((1 - th) * 100) + '%', emo: th <= 0.5 ? '\u{1F480}' : '\u{1F62C}' }); } });
+    ups.forEach(th => { if(!hit.has(th) && c[4] / buyMc >= th){ hit.add(th); mls.push({ i, up: true, txt: th + 'X', emo: th >= 10 ? '\u{1F48E}' : th >= 5 ? '\u{1F525}' : '\u{1F680}' }); } });
+    dns.forEach(th => { if(!hit.has(th) && c[4] / buyMc <= th){ hit.add(th); mls.push({ i, up: false, txt: '-' + Math.round((1 - th) * 100) + '%', emo: th <= 0.5 ? '\u{1F480}' : '\u{1F62C}' }); } });
   }
-  const miles = mls.filter((m, k) => !mls[k+1] || mls[k+1].i !== m.i).slice(-4);   // same candle: keep the biggest; at most 4
+  const miles = mls.filter((m, k) => !mls[k+1] || mls[k+1].i - m.i > 2 || mls[k+1].up !== m.up).slice(-4);   // levels within 2 candles: only the biggest (no stacked stamps); at most 4
   const p = { cs, iv, marks: [bm, sm], miles, ib, is, bm, sm, buyMc, sellMc, size, cum, total, n: cs.length };
   prepCache.set(t, p); return p;
 }
