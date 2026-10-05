@@ -519,6 +519,33 @@ function mergeCandles(cs, iv, max){
   }
   return [out, iv*k];
 }
+/* entry -> exit band over the hold (first BUY to last SELL): fill + dashed entry / exit levels;
+   big chart: price tags on the right edge, the ROI in the band, and the peak reached while holding when it was well above the exit */
+function tradeZone(t, cs, iv, marks, X, Y, big){
+  const bs = marks.filter(m=>m[1]==='b'), ss = marks.filter(m=>m[1]==='s');
+  if(!bs.length || !ss.length) return { svg:'', html:'' };
+  const tb = Math.min(...bs.map(m=>m[0])), te = Math.max(...ss.map(m=>m[0]));
+  const en = t.entryMc > 0 ? t.entryMc : bs[0][2], ex = t.exitMc > 0 ? t.exitMc : ss[ss.length-1][2];
+  if(!(en > 0) || !(ex > 0) || te <= tb) return { svg:'', html:'' };
+  const win = ex >= en, col = win ? '#18c964' : '#ff3b4e';
+  const clampP = v => Math.min(100, Math.max(0, v));
+  const xb = clampP(X(tb)), xe = clampP(X(te)), ye = clampP(Y(en)), yx = clampP(Y(ex)), y0 = Math.min(ye, yx), h = Math.max(0.6, Math.abs(ye - yx));
+  const lv = (y, op) => `<line x1="${xb.toFixed(2)}" x2="${xe.toFixed(2)}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${col}" stroke-opacity="${op}" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
+  const svg = `<rect x="${xb.toFixed(2)}" y="${y0.toFixed(2)}" width="${(xe-xb).toFixed(2)}" height="${h.toFixed(2)}" fill="${col}" fill-opacity="${big ? .13 : .1}"/>` + lv(ye, .55) + lv(yx, .9);
+  if(!big) return { svg, html:'' };
+  const r = Number(t.roi) || (ex / en - 1) * 100, roiS = (r >= 0 ? '+' : '') + (Math.abs(r) >= 100 ? Math.round(r).toLocaleString('en-US') : r.toFixed(1)) + '%';
+  const mult = Number(t.roi) ? 1 + t.roi / 100 : ex / en, multS = (mult >= 10 ? mult.toFixed(0) : mult.toFixed(2)) + 'x';
+  const narrow = xe - xb < 22, right = narrow && xe < 75, mid = (ye + yx) / 2;
+  let html = `<span class="ch-tag" style="top:${ye.toFixed(2)}%;--c:rgba(255,255,255,.55)">${fmtMcShort(en)}</span>` +
+    `<span class="ch-tag" style="top:${yx.toFixed(2)}%;--c:${col}">${fmtMcShort(ex)}</span>` +
+    `<span class="ch-roi${right ? ' out' : ''}" style="left:${(narrow && !right ? xb : xe).toFixed(2)}%;top:${mid.toFixed(2)}%;--c:${col}"><b>${roiS}</b><i>${multS}</i></span>`;
+  // the top of the move while holding: shows what the hold went through, not a judgement
+  let pk = null; cs.forEach(c=>{ if(c[0] + iv > tb && c[0] <= te && (!pk || c[2] > pk[2])) pk = c; });
+  if(pk && win && pk[2] > ex * 1.25){
+    html += `<span class="ch-peak" style="left:${clampP(X(pk[0] + iv/2)).toFixed(2)}%;top:${clampP(Y(pk[2])).toFixed(2)}%">peak ${(pk[2] / en).toFixed(pk[2] / en >= 10 ? 0 : 1)}x</span>`;
+  }
+  return { svg, html };
+}
 function miniChart(t, big){
   const h = big ? 170 : 66;
   const ch = t.chart;
@@ -541,6 +568,8 @@ function miniChart(t, big){
     }).join('');
     const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
     const marks = ch.m.map(m=>[m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);   // the wallet's own fill: exact market cap
+    // the trade itself: a band from entry to exit level over the hold, so a x2 reads as a x2 even when a wick squashes the scale
+    const zone = tradeZone(t, cs, iv, marks, X, Y, big);
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     // modern look: faint grid, a glowing area under the price, last-price line
     const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#18c964' : '#ff3b4e', gid = 'g' + Math.random().toString(36).slice(2,8);
@@ -549,11 +578,11 @@ function miniChart(t, big){
     const area = `<polygon points="${X(lp[0][0]).toFixed(2)},100 ${line} ${X(lp[lp.length-1][0]).toFixed(2)},100" fill="url(#${gid})"/>`;
     const grid = [0.25,0.5,0.75].map(f=>{ const y = (CH_TOP + f*(100-CH_TOP)).toFixed(2); return `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
     const lastY = Y(lp[lp.length-1][1]).toFixed(2);
-    const deco = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity=".22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>${grid}${area}
+    const deco = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity=".22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>${grid}${area}${zone.svg}
       <polyline points="${line}" fill="none" stroke="${tone}" stroke-opacity=".35" stroke-width="1" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <line x1="0" x2="100" y1="${lastY}" y2="${lastY}" stroke="${tone}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`;
     return `<div class="chartbox modern ${big?'big':''}" style="height:${h}px">
-      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${deco}${body}</svg>${markersHtml(marks, X, Y, big)}${labels}</div>`;
+      <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${deco}${body}</svg>${markersHtml(marks, X, Y, big)}${labels}${zone.html}</div>`;
   }
   if(t.mint && chartState(t) === 'loading'){                        // loading: animated skeleton candles, not a fake line
     const n = big ? 26 : 16, bars = Array.from({length:n}, (_,i)=>{ const h = 18 + 30*Math.abs(Math.sin(i*1.7 + t.tradeId)); return `<i style="height:${h.toFixed(0)}%;animation-delay:${(i*60)}ms"></i>`; }).join('');

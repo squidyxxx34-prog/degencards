@@ -576,3 +576,11 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .consent input{flex:none;width:16px;height:16px;margin-top:1px;accent-color:var(--purple);}
 .consent.need{color:var(--red);}
 .btn-danger{color:var(--red) !important;border-color:rgba(255,92,108,.5) !important;}
+
+/* trade band on the detail chart: entry / exit price tags, ROI in the band, peak while holding */
+.ch-tag{position:absolute;right:0;transform:translateY(-50%);font:700 9px/1 var(--mono);color:#05070a;background:var(--c);padding:2px 4px;border-radius:3px;z-index:2;pointer-events:none;}
+.ch-roi{position:absolute;transform:translate(calc(-100% - 8px),-50%);display:flex;flex-direction:column;align-items:flex-end;gap:1px;z-index:2;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8);}
+.ch-roi.out{transform:translate(8px,-50%);align-items:flex-start;}
+.ch-roi b{font:900 15px/1 var(--mono);color:var(--c);}
+.ch-roi i{font:700 9px/1 var(--mono);font-style:normal;color:var(--tx2);}
+.ch-peak{position:absolute;transform:translate(-50%,calc(-100% - 5px));font:700 8.5px/1 var(--mono);color:var(--tx2);background:rgba(10,10,15,.7);padding:2px 4px;border-radius:3px;z-index:2;pointer-events:none;white-space:nowrap;}
