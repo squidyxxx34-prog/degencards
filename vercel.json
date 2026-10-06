@@ -63,5 +63,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/googled2c2b97330f4329a.html",
+      "destination": "/google-site-verification.txt"
+    }
   ]
 }
