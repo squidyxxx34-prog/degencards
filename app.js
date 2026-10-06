@@ -411,7 +411,7 @@ function regroup(cs, iv){
 /* every chart, every coin: about as many candles as a lively one (~32), never a flat candle.
    Minutes where nobody traded are dropped, the rest merged into ~32 candles drawn side by side (quiet stretches don't
    take room), and B / S placed at their exact moment inside the candle they fall in. */
-const EVEN_N = 56;                                               // detail: 56 candles; small cards merge them to 28
+const EVEN_N = 56;                                               // ~56 candles on every chart, small cards included
 function evenCandles(ch){
   const src = ch.c, iv = ch.i;
   if(!src || src.length < 2) return ch;
@@ -549,11 +549,12 @@ function miniChart(t, big){
   const h = big ? 170 : 66;
   const ch = t.chart;
   if(ch && ch.v === 2 && !pendingFine(t)){
-    const win = big ? null : centredWindow(ch);                        // small cards: BUY and SELL framed around the middle
-    const raw = win ? ch.c.filter(c => c[0] + ch.i > win[0] && c[0] < win[1]) : ch.c;
-    const [cs, iv] = mergeCandles(raw.length >= 4 ? raw : ch.c, ch.i, big ? 140 : 48);
+    let win = big ? null : centredWindow(ch);                          // small cards: BUY and SELL framed around the middle...
+    let raw = win ? ch.c.filter(c => c[0] + ch.i > win[0] && c[0] < win[1]) : ch.c;
+    if(win && raw.length < Math.min(48, ch.c.length)){ win = null; raw = ch.c; }   // ...but never at the cost of the candles: ~50 everywhere
+    const [cs, iv] = mergeCandles(raw.length >= 4 ? raw : ch.c, ch.i, big ? 140 : 64);
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
-    if(win && raw.length >= 4){ x0 = Math.max(win[0], cs[0][0]); x1 = Math.min(win[1], cs[cs.length-1][0] + iv); }
+    if(win){ x0 = Math.max(win[0], cs[0][0]); x1 = Math.min(win[1], cs[cs.length-1][0] + iv); }
     if(x1 <= x0) x1 = x0 + iv;
     const ys =  [...cs.flatMap(c=>[c[2],c[3]]), ...ch.m.map(m=>m[2]).filter(v=>v>0)];
     let y0 = Math.min(...ys), y1 = Math.max(...ys);

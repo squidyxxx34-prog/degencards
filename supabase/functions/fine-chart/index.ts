@@ -13,7 +13,7 @@ const ORIGIN = "https://degencards.vercel.app";
 const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
-const N = 56, MAX_READS = HELIUS ? 150 : 70, PER_S = HELIUS ? 5 : 3;   // 2 workers at a time stay under Helius' 10 req/s
+const N = 56, MAX_READS = HELIUS ? 100 : 70, PER_S = HELIUS ? 5 : 3;   // 2 workers at a time stay under Helius' 10 req/s
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rpc(method: string, params: unknown[]): Promise<any> {
@@ -109,24 +109,31 @@ async function build(t: any, deadline: number): Promise<string> {
       c2 = list[list.length - 1].signature;
     }
     all = [...sigs.entries()].sort((a, b) => a[1] - b[1]);
-    if (all.length >= 48 || Date.now() > deadline - 60_000) break;
+    if (all.length >= 150 || Date.now() > deadline - 60_000) break;
   }
   if (all.length < 16) return `only ${all.length} swaps`;
-  // read an even sample (by order: busy moments get more reads, quiet ones less), always our own fills
-  const pick: [string, number][] = [];
-  const step = Math.max(1, all.length / MAX_READS);
-  for (let x = 0; x < all.length && pick.length < MAX_READS; x += step) pick.push(all[Math.floor(x)]);
-  for (const e of all) if (e[0] === buySig && !pick.includes(e)) pick.push(e);
-  pick.sort((a, b) => a[1] - b[1]);
+  // read an even sample (by order: busy moments get more reads, quiet ones less), always our own fills;
+  // not enough prices out of it (non-swap txs, a pool that moved): keep reading other swaps until there are
   const sol = await solPrices(all[0][1], all[all.length - 1][1]);
   if (!sol.length) return "no SOL price";
   const pts: { ts: number; mc: number }[] = [];
-  for (let i = 0; i < pick.length && Date.now() < deadline; i += PER_S) {
-    const chunk = pick.slice(i, i + PER_S), tc = Date.now();
-    const txs = await Promise.all(chunk.map(([s]) => rpc("getTransaction", [s, { encoding: "json", maxSupportedTransactionVersion: 1 }])));
-    txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solAt(sol, chunk[j][1]), poolOwner); if (px > 0) pts.push({ ts: chunk[j][1], mc: px * sup }); });
-    const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
-  }
+  const read = new Set<string>();
+  const readSome = async (want: number) => {
+    const left = all.filter((e) => !read.has(e[0]));
+    const pick: [string, number][] = [];
+    const step = Math.max(1, left.length / want);
+    for (let x = 0; x < left.length && pick.length < want; x += step) pick.push(left[Math.floor(x)]);
+    if (!read.has(buySig)) { const b = all.find((e) => e[0] === buySig); if (b && !pick.includes(b)) pick.push(b); }
+    for (let i = 0; i < pick.length && Date.now() < deadline; i += PER_S) {
+      const chunk = pick.slice(i, i + PER_S), tc = Date.now();
+      chunk.forEach(([s]) => read.add(s));
+      const txs = await Promise.all(chunk.map(([s]) => rpc("getTransaction", [s, { encoding: "json", maxSupportedTransactionVersion: 1 }])));
+      txs.forEach((tx, j) => { const px = poolPrice(tx, t.mint, solAt(sol, chunk[j][1]), poolOwner); if (px > 0) pts.push({ ts: chunk[j][1], mc: px * sup }); });
+      const wait = 1000 - (Date.now() - tc); if (wait > 0) await sleep(wait);
+    }
+  };
+  await readSome(MAX_READS);
+  for (let k = 0; k < 4 && pts.length < 70 && read.size < all.length && Date.now() < deadline - 10_000; k++) await readSome(60);
   // our own fills are exact prices too
   for (const l of legs) if (Number(l[2]) > 0) pts.push({ ts: Number(l[0]), mc: Number(l[2]) });
   pts.sort((a, b) => a.ts - b.ts);
@@ -165,7 +172,7 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
   if (cronKey) {                                                     // cron: every user's pending charts, newest first
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
-    const { data: claimed } = await db.rpc("claim_fine_charts", { n: 3 });   // each chart to one worker only
+    const { data: claimed } = await db.rpc("claim_fine_charts", { n: 2 });   // each chart to one worker only
     const ids = (claimed || []).map((x: any) => typeof x === "string" ? x : x?.claim_fine_charts).filter(Boolean);
     ({ data: rows } = ids.length ? await db.from("trades").select(cols).in("id", ids) : { data: [] });
   } else {
@@ -176,7 +183,7 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
     const ids = (Array.isArray(body?.ids) ? body.ids : []).map((x: any) => String(x || "")).filter((x: string) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 3);
     if (!ids.length) return new Response('{"error":"ids"}', { status: 400, headers: h });
     ({ data: rows } = await db.from("trades").select(cols)
-      .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).or("chart->>coarse.eq.true,chart->>redo.eq.true"));
+      .eq("user_id", u.user.id).in("id", ids).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8).or("chart.is.null,chart->>coarse.eq.true,chart->>redo.eq.true"));
   }
   const deadline = Date.now() + 110_000; let charts = 0;
   for (const t of rows || []) {
