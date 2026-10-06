@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>DEGENCARDS · Your trades, turned into cards</title>
-<meta name="description" content="Import your Solana wallet (Pump.fun, Fomo, Phantom...) or log trades by hand. Every trade becomes a collectible card with rarity, grade and achievements, plus a shareable trade replay video. Watch-only, not financial advice.">
+<title>DEGENCARDS (Degen Cards) · Turn your degen trades into cards, PnL cards and trade replays</title>
+<meta name="description" content="DEGENCARDS (Degen Cards) turns every degen trade into a collectible card: PnL card, trade replay video, rarity, grade, achievements. Import your Solana wallet (Pump.fun, Fomo, Phantom, Axiom) by public key. Free, watch-only.">
+<meta name="keywords" content="degencards, degen cards, degen card, degencard, DEGENCARDS, DEGEN, degen, degen trading, degen trader, degen trades, crypto degen, solana degen, memecoin degen, pnl card, pnl card generator, crypto pnl card, solana pnl card, pump.fun pnl, pumpfun pnl card, fomo pnl, trade card, trading card, crypto trading cards, trade replay, trade replay video, memecoin tracker, memecoin pnl tracker, solana wallet tracker, solana trade tracker, wallet pnl, trading journal crypto, crypto trading journal, share trades, flex trades, pump.fun, fomo app, phantom wallet, axiom trade, bonk, memecoins">
+<meta name="author" content="DEGENCARDS">
+<meta name="application-name" content="DEGENCARDS">
+<meta name="apple-mobile-web-app-title" content="DEGENCARDS">
 <link rel="canonical" href="https://degencards.vercel.app/">
 <meta name="theme-color" content="#07070A">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -15,19 +19,33 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DEGENCARDS">
 <meta property="og:url" content="https://degencards.vercel.app/">
-<meta property="og:title" content="DEGENCARDS · Your trades, turned into cards">
-<meta property="og:description" content="Every crypto trade becomes a collectible card and a shareable trade replay. Watch-only.">
+<meta property="og:title" content="DEGENCARDS · Turn your degen trades into cards">
+<meta property="og:description" content="Degen Cards: every Solana trade becomes a collectible PnL card and a shareable trade replay. Pump.fun, Fomo, Phantom. Free, watch-only.">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="fr_FR">
 <meta property="og:image" content="https://degencards.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="DEGENCARDS: a trade turned into a collectible card">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="DEGENCARDS · Your trades, turned into cards">
+<meta name="twitter:title" content="DEGENCARDS · Turn your degen trades into cards">
 <meta name="twitter:description" content="Every crypto trade becomes a collectible card and a shareable trade replay.">
 <meta name="twitter:image" content="https://degencards.vercel.app/og.png">
 <link rel="stylesheet" href="/fonts/fonts.css">
 <script src="/vendor/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok"></script>
 <link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"Organization","@id":"https://degencards.vercel.app/#org","name":"DEGENCARDS","alternateName":["Degen Cards","DegenCards","Degencards","DEGEN CARDS","Degen Card","degencards.vercel.app"],"url":"https://degencards.vercel.app/","logo":"https://degencards.vercel.app/icon-512.png"},
+{"@type":"WebSite","@id":"https://degencards.vercel.app/#site","name":"DEGENCARDS","alternateName":["Degen Cards","DegenCards","DEGEN CARDS"],"url":"https://degencards.vercel.app/","publisher":{"@id":"https://degencards.vercel.app/#org"},"inLanguage":["en","fr"]},
+{"@type":"WebApplication","name":"DEGENCARDS","alternateName":["Degen Cards","DegenCards"],"url":"https://degencards.vercel.app/","applicationCategory":"FinanceApplication","operatingSystem":"Web, iOS, Android","description":"Turn every degen crypto trade into a collectible card: PnL card, trade replay video, rarity, grade and achievements. Auto-import from a Solana wallet (Pump.fun, Fomo, Phantom, Axiom) by public key.","image":"https://degencards.vercel.app/og.png","offers":[{"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},{"@type":"Offer","name":"PRO Monthly","price":"4.99","priceCurrency":"USD"},{"@type":"Offer","name":"PRO Yearly","price":"34.99","priceCurrency":"USD"}],"publisher":{"@id":"https://degencards.vercel.app/#org"}},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"What is DEGENCARDS?","acceptedAnswer":{"@type":"Answer","text":"DEGENCARDS (Degen Cards) is a web app for degen traders: every crypto trade becomes a collectible card with rarity, grade and achievements, plus a PnL card image and a trade replay video you can share on X, TikTok, Instagram or Telegram."}},
+{"@type":"Question","name":"Does DEGENCARDS work with Pump.fun, Fomo and Phantom?","acceptedAnswer":{"@type":"Answer","text":"Yes. Paste the public key of your Solana wallet (Pump.fun, Fomo, Phantom, Solflare, Backpack, Axiom...) and closed trades are imported automatically. Watch-only: no signature, no access to your funds."}},
+{"@type":"Question","name":"How do I make a PnL card of my trade?","acceptedAnswer":{"@type":"Answer","text":"Open any card and tap Share: you get a PnL card image (post or story format) or a trade replay video with the real candles, BUY and SELL, ready to post."}},
+{"@type":"Question","name":"Is DEGENCARDS free?","acceptedAnswer":{"@type":"Answer","text":"Yes, cards, auto-import and sharing are free. DEGENCARDS PRO unlocks replay customization and full stats."}}
+]}]}
+</script>
 </head>
 <body>
 
@@ -71,6 +89,22 @@
     </div>
     <div class="sectionhead"><h2>RARITY, NOT LUCK</h2></div>
     <p style="color:var(--tx2);font-size:13px;max-width:520px;">Common to Mythic — driven by ROI, speed and personal records. A 30-second scalp hits different than a slow bleed, and the card knows it.</p>
+    <section class="seo">
+      <div class="sectionhead"><h2>BUILT FOR DEGENS</h2></div>
+      <p><strong>DEGENCARDS</strong> (also written Degen Cards or DegenCards) is the trading card app for degen traders. Every memecoin trade, every Pump.fun flip, every Solana scalp becomes a collectible <strong>degen card</strong>: PnL, ROI, market cap in and out, hold time, real candles with your BUY and SELL.</p>
+      <div class="seo-grid">
+        <div><h3>PnL card generator</h3><p>Turn any trade into a clean PnL card for X, Telegram, Discord, Instagram or TikTok. Post 4:5 or story 9:16, hide the dollars if you want.</p></div>
+        <div><h3>Trade replay video</h3><p>Relive the trade candle by candle: entry, the pump, the exit. A short trade replay built from real on-chain data, in up to 4K.</p></div>
+        <div><h3>Solana wallet tracker</h3><p>Paste a public key from Pump.fun, Fomo, Phantom, Solflare, Backpack or Axiom. Closed positions are imported automatically. Watch-only, no signature.</p></div>
+        <div><h3>Degen trading journal</h3><p>Rarity from Common to Mythic, grades, 29 achievements, a monthly goal and stats on your win rate, best coins and biggest bags.</p></div>
+      </div>
+      <div class="sectionhead"><h2>FAQ</h2></div>
+      <details><summary>What is DEGENCARDS?</summary><p>A web app that turns every crypto trade into a collectible card, a PnL card image and a trade replay video you can share. Made for the degen crypto community.</p></details>
+      <details><summary>Does it work with Pump.fun and Fomo?</summary><p>Yes. Pump.fun and Fomo trades are on-chain: connect the public address of your wallet and DEGENCARDS reads your buys and sells, including pump.fun cashback and real fees.</p></details>
+      <details><summary>Can it touch my funds?</summary><p>No. It only reads a public key. No wallet connection, no signature, nothing can be moved.</p></details>
+      <details><summary>Is it free?</summary><p>Cards, auto-import and sharing are free. PRO unlocks replay customization and full stats.</p></details>
+      <details><summary>DEGENCARDS en français ?</summary><p>Oui : DEGENCARDS transforme chaque trade de degen en carte à collectionner, carte PnL et vidéo de trade replay. Import automatique depuis un wallet Solana (Pump.fun, Fomo, Phantom), en lecture seule.</p></details>
+    </section>
   </div>
   <footer>DEGENCARDS · Not financial advice. Crypto-assets are highly risky. Watch-only: we never touch your funds.<div class="foot-links"><a href="/legal">Legal notice</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div></footer>
 </div>

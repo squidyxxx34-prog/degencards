@@ -620,3 +620,15 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
     border-radius:50%; background:var(--surf2); color:var(--tx); font-size:22px;}
   #detailOverlay .dt-actions{margin:0 -18px -22px; padding-left:18px; padding-right:18px;}
 }
+
+/* landing SEO block */
+.seo p{color:var(--tx2); font-size:13px; line-height:1.6; max-width:760px;}
+.seo strong{color:var(--tx);}
+.seo-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:16px;}
+@media(max-width:700px){.seo-grid{grid-template-columns:1fr;}}
+.seo-grid>div{background:var(--surf); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+.seo-grid h3{font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; margin-bottom:6px;}
+.seo-grid p{margin:0;}
+.seo details{border-bottom:1px solid var(--border); padding:12px 0; max-width:760px;}
+.seo summary{cursor:pointer; font-weight:700; font-size:14px;}
+.seo details p{margin-top:8px;}
