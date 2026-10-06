@@ -17,7 +17,12 @@ Static site (no build): `index.html` + `styles.css` + `app.js`. supabase-js is *
 - The Supabase anon key in `app.js` is public by design; RLS is the protection.
 
 ## One-time setup
-1. Run `supabase/security_hardening.sql` in Supabase → SQL Editor (safe to re-run).
-2. Supabase → Authentication → URL Configuration: Site URL = your Vercel URL, and only that URL in the Redirect allow-list.
-3. Authentication → Providers: enable Web3 Wallet (Solana + Ethereum), Google (Client ID/Secret), Anonymous sign-ins (public-key login).
-4. Authentication → Attack Protection: enable CAPTCHA (Turnstile/hCaptcha) to stop bot sign-ups.
+1. SQL in `supabase/` already applied (hardening v1/v2, soft delete, auto-import, subscriptions, pro_assets...). New table = RLS + minimal grants, then `get_advisors`.
+2. Supabase > Authentication > URL Configuration: Site URL = https://degencards.vercel.app, only that URL in the Redirect allow-list.
+3. Authentication > Providers: Email (password + confirm email), Google, Anonymous sign-ins. Web3 Wallet off.
+4. Authentication > Attack Protection: hCaptcha on (done), Leaked password protection on.
+5. Edge Function secrets: `HELIUS_API_KEY`, `WHOP_API_KEY` (PRO goes live by itself once it is set).
+6. `legal-config.js`: legal identity (name, address, SIRET, email, mediator) before selling.
+
+## Launch assets
+`favicon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `site.webmanifest`, `og.png` (1200x630 link preview), `robots.txt` (landing + legal pages only), `sitemap.xml`, `404.html`.

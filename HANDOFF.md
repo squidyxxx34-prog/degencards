@@ -141,3 +141,12 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - (abandonné) `densify` (après `cleanCandles`) : chaque vraie bougie est découpée en 2-4 sous-bougies (cible ~120) dont le trajet va du vrai open au vrai close en passant par le vrai high et le vrai low (graine = timestamp, identique partout). OHLC réels conservés, zones plates laissées plates. `ch.iv0` = intervalle réel ; la légende n'affiche plus d'intervalle.
 
 - `regroup` (remplace `densify`) : durée par bougie choisie selon les données. Les bougies sont fusionnées par 2, 3, 4… (OHLC réels) jusqu'à ce que presque aucune ne soit plate, avec au moins ~16 bougies. Graphes trop vides : bougies « tick » (une par passage entre deux vrais prix).
+
+## Lancement (checklist au 2026-10-06)
+- Fait : favicon + icônes PWA + manifest, image de partage `og.png` (aperçu lien X/Discord/Telegram), meta description / Open Graph / Twitter, landing indexable (robots.txt : `/` + pages légales seulement, l'app derrière l'auth n'a rien à indexer), sitemap, page 404.
+- Whop : plans vérifiés (Monthly $4.99, Yearly $34.99 + 21 j d'essai), produit `prod_tsBbdHC0PSZlN`.
+- Reste côté Maxence :
+  1. `legal-config.js` : nom, adresse, SIRET, email, directeur de publication, médiateur (obligatoire pour vendre en France, les champs vides s'affichent en rouge).
+  2. Secret `WHOP_API_KEY` dans les Edge Functions si pas encore fait (sinon le bloc PRO reste caché).
+  3. Supabase Auth : Leaked password protection ON, Site URL / redirect = degencards.vercel.app, rate limits.
+  4. Test d'achat réel de bout en bout (Yearly avec essai = 0 $) puis annulation.

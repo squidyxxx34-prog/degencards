@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /$
+Allow: /legal
+Allow: /terms
+Allow: /privacy
+Disallow: /
+
+Sitemap: https://degencards.vercel.app/sitemap.xml
