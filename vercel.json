@@ -1,5 +1,5 @@
 {
-  "cleanUrls": true,
+  "cleanUrls": false,
   "headers": [
     {
       "source": "/(.*)",
@@ -66,8 +66,38 @@
   ],
   "rewrites": [
     {
-      "source": "/googled2c2b97330f4329a.html",
-      "destination": "/google-site-verification.txt"
+      "source": "/legal",
+      "destination": "/legal.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/legal.html",
+      "destination": "/legal",
+      "permanent": true
+    },
+    {
+      "source": "/terms.html",
+      "destination": "/terms",
+      "permanent": true
+    },
+    {
+      "source": "/privacy.html",
+      "destination": "/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/index.html",
+      "destination": "/",
+      "permanent": true
     }
   ]
 }
