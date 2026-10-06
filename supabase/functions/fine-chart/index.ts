@@ -13,7 +13,7 @@ const ORIGIN = "https://degencards.vercel.app";
 const WSOL = "So11111111111111111111111111111111111111112";
 const USD_MINTS = new Set(["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
-const N = 56, MAX_READS = HELIUS ? 240 : 70, PER_S = HELIUS ? 9 : 3;
+const N = 56, MAX_READS = HELIUS ? 150 : 70, PER_S = HELIUS ? 5 : 3;   // 2 workers at a time stay under Helius' 10 req/s
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rpc(method: string, params: unknown[]): Promise<any> {
@@ -165,8 +165,9 @@ if (Deno.env.get("LOCAL_TEST")) {                                     // deno ru
   if (cronKey) {                                                     // cron: every user's pending charts, newest first
     const { data: ok } = await db.rpc("verify_sync_cron_key", { k: cronKey });
     if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
-    ({ data: rows } = await db.from("trades").select(cols).not("mint", "is", null).is("deleted_at", null).lt("chart_tries", 8)
-      .or("chart->>coarse.eq.true,chart->>redo.eq.true").order("timestamp_ms", { ascending: false }).limit(3));
+    const { data: claimed } = await db.rpc("claim_fine_charts", { n: 3 });   // each chart to one worker only
+    const ids = (claimed || []).map((x: any) => typeof x === "string" ? x : x?.claim_fine_charts).filter(Boolean);
+    ({ data: rows } = ids.length ? await db.from("trades").select(cols).in("id", ids) : { data: [] });
   } else {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u, error } = await db.auth.getUser(jwt);

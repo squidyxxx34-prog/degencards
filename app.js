@@ -1777,7 +1777,7 @@ function openDetail(id, refresh){
   });
   detailOverlay.dataset.id = t.id;
   detailOverlay.classList.add('show');
-  detailOverlay.querySelector('.modal').scrollTop = keepScroll;
+  const md = detailOverlay.querySelector('.modal'); md.scrollTop = keepScroll; if(!refresh) requestAnimationFrame(()=>{ md.scrollTop = 0; });   // a new card always opens at its top
   if(st === 'loading') ensureChart(t);
 }
 
