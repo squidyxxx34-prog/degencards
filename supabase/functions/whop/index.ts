@@ -13,8 +13,8 @@ const WHOP_KEY = Deno.env.get("WHOP_API_KEY") || "";
 const ACCOUNT = "biz_6CeBfKshynanPD";
 const PRODUCT = "prod_tsBbdHC0PSZlN";
 const PLANS: Record<string, string> = {
-  monthly: Deno.env.get("WHOP_PLAN_MONTHLY") || "plan_IQZ9Lhp8VOgsH",   // PRO Monthly $7.99
-  yearly: Deno.env.get("WHOP_PLAN_YEARLY") || "plan_2S3vMkac5SgWR",     // PRO Yearly $59.99
+  monthly: Deno.env.get("WHOP_PLAN_MONTHLY") || "plan_IQZ9Lhp8VOgsH",   // PRO Monthly $4.99
+  yearly: Deno.env.get("WHOP_PLAN_YEARLY") || "plan_2S3vMkac5SgWR",     // PRO Yearly $34.99, 21-day trial
 };
 const SITE = "https://degencards.vercel.app";
 const ALLOWED_ORIGIN = SITE;
