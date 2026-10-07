@@ -9,7 +9,7 @@ window.LEGAL = {
   address:  '',                 // adresse postale (ou adresse de domiciliation)
   siret:    '',                 // SIRET (obligatoire des qu'on vend)
   vat:      'TVA non applicable, art. 293 B du CGI',   // franchise en base ; sinon numero de TVA intracom
-  email:    '',                 // email de contact (support + RGPD), ex. contact@...
+  email:    'squidyxzzz@gmail.com',                 // email de contact (support + RGPD), ex. contact@...
   director: '',                 // directeur de la publication (= vous)
   mediator: '',                 // mediateur de la consommation (nom + site), obligatoire pour vendre a des particuliers
   updated:  '5 octobre 2026 / October 5, 2026',
