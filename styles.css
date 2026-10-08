@@ -632,3 +632,13 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .seo details{border-bottom:1px solid var(--border); padding:12px 0; max-width:760px;}
 .seo summary{cursor:pointer; font-weight:700; font-size:14px;}
 .seo details p{margin-top:8px;}
+
+/* share: custom background (photo / video) */
+.share-bg{margin-top:12px;}
+.share-bg-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--tx2);}
+.share-bg-row span{font-weight:700;margin-right:4px;}
+.share-bg-row .hbtn{min-height:36px;padding:0 12px;font-size:12px;}
+.share-bg-row .hbtn.locked::after{content:"PRO";margin-left:5px;font:900 8px/1 var(--mono);padding:2px 4px;border-radius:3px;background:linear-gradient(90deg,#B98CFF,#FFD25A);color:#05070a;vertical-align:middle;}
+.share-bg-dim{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--tx2);}
+.share-bg-dim input{flex:1;accent-color:var(--purple);min-height:32px;}
+.share-bg-dim em{font:700 12px var(--mono);font-style:normal;color:var(--tx);min-width:38px;text-align:right;}

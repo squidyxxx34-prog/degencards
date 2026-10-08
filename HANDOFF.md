@@ -150,3 +150,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
   2. Secret `WHOP_API_KEY` dans les Edge Functions si pas encore fait (sinon le bloc PRO reste caché).
   3. Supabase Auth : Leaked password protection ON, Site URL / redirect = degencards.vercel.app, rate limits.
   4. Test d'achat réel de bout en bout (Yearly avec essai = 0 $) puis annulation.
+
+## Partage : mode SIMPLE + fond perso
+- 3e style dans la feuille de partage : CARD / SIMPLE / TRADE REPLAY. SIMPLE = carte PnL épurée façon terminal (Axiom) : logo, date, coin + ticker, ROI géant, PnL $, lignes Invested / Sold / Hold (Entry MC / Exit MC si « Hide $ »), pas de graphe. Formats POST 4:5, STORY 9:16 et WIDE 16:9 (WIDE seulement en SIMPLE). Image + vidéo (compteur, ≈5 s).
+- Fond perso photo ou vidéo pour CARD et SIMPLE (pas le Replay) : fichier lu en local (jamais envoyé), gardé sur l'appareil (IndexedDB `dc_share`), curseur « Darken » 0-85 %. Vidéo : boucle muette dans l'aperçu ; à l'export, chaque image est calée sur la vidéo (seek), durée = au moins une boucle, max 15 s. Limites 25 Mo photo / 200 Mo vidéo.
+- Fond perso = PRO (quand PRO est actif) ; SIMPLE est gratuit.
+- CSP : `media-src 'self' blob:` ajouté (vidéo de fond).

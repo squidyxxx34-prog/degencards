@@ -5,7 +5,7 @@
    Everything is drawn on a <canvas>: no external request, works offline.
    ============================================================================ */
 (function(){
-const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, story:{ w:1080, h:1920, label:'STORY 9:16' } };
+const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, story:{ w:1080, h:1920, label:'STORY 9:16' }, wide:{ w:1600, h:900, label:'WIDE 16:9' } };
 const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
 const GREEN = '#3DFFA0', RED = '#FF5C6C', CANDLE_UP = '#18C964', CANDLE_DN = '#FF3B4E';
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -37,6 +37,135 @@ function grainPattern(ctx){
 function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function fitFont(ctx, text, weight, family, maxSize, maxW){ let s = maxSize; do { ctx.font = `${weight} ${s}px ${family}`; s -= 4; } while(ctx.measureText(text).width > maxW && s > 20); return s + 4; }
 
+/* ---------- custom background: the user's own photo or video, kept on this device only (IndexedDB), never uploaded ---------- */
+const BG = { kind:null, el:null, url:null, dim:0.45, dur:0 };
+const BG_MAX_IMG = 25e6, BG_MAX_VID = 200e6, BG_DB = 'dc_share', BG_STORE = 'bg';
+function bgDb(){ return new Promise((res, rej) => { try{ const r = indexedDB.open(BG_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore(BG_STORE); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }catch(e){ rej(e); } }); }
+async function bgSave(v){ try{ const db = await bgDb(); await new Promise(r => { const tx = db.transaction(BG_STORE, 'readwrite'); v ? tx.objectStore(BG_STORE).put(v, 'cur') : tx.objectStore(BG_STORE).delete('cur'); tx.oncomplete = tx.onerror = tx.onabort = () => r(); }); db.close(); }catch(e){} }
+async function bgLoadSaved(){ try{ const db = await bgDb(); const v = await new Promise(r => { const q = db.transaction(BG_STORE).objectStore(BG_STORE).get('cur'); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); db.close(); return v || null; }catch(e){ return null; } }
+function bgRelease(){
+  if(BG.el && BG.kind === 'video'){ try{ BG.el.pause(); BG.el.removeAttribute('src'); BG.el.load(); BG.el.remove(); }catch(e){} }
+  if(BG.url) URL.revokeObjectURL(BG.url);
+  BG.kind = null; BG.el = null; BG.url = null; BG.dur = 0;
+}
+/* blob -> ready <img> / <video>; resolves false if the browser can't decode it */
+function bgUse(blob){
+  const isVid = /^video\//.test(blob.type), url = URL.createObjectURL(blob);
+  return new Promise(res => {
+    const fail = () => { URL.revokeObjectURL(url); res(false); };
+    if(isVid){
+      const v = document.createElement('video');
+      v.muted = true; v.defaultMuted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.preload = 'auto';
+      v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1';
+      const to = setTimeout(fail, 15000);
+      v.addEventListener('loadeddata', () => { clearTimeout(to); if(!v.videoWidth){ v.remove(); return fail(); }
+        bgRelease(); BG.kind = 'video'; BG.el = v; BG.url = url; BG.dur = isFinite(v.duration) ? v.duration : 0; v.play().catch(()=>{}); res(true); }, { once:true });
+      v.addEventListener('error', () => { clearTimeout(to); v.remove(); fail(); }, { once:true });
+      document.body.appendChild(v); v.src = url;
+    } else {
+      const im = new Image(); im.decoding = 'async';
+      im.onload = () => { if(!im.naturalWidth) return fail(); bgRelease(); BG.kind = 'image'; BG.el = im; BG.url = url; res(true); };
+      im.onerror = fail; im.src = url;
+    }
+  });
+}
+const bgReady = () => !proLocked() && !!(BG.el && (BG.kind === 'image' ? BG.el.naturalWidth : BG.el.readyState >= 2 && BG.el.videoWidth));
+/* frame-exact seek for exports: the video frame at ms (looped) */
+function bgSeek(ms){
+  const v = BG.el; if(BG.kind !== 'video' || !v || !BG.dur) return Promise.resolve();
+  const want = (ms / 1000) % BG.dur;
+  if(Math.abs(v.currentTime - want) < 0.004) return Promise.resolve();
+  return new Promise(r => { const to = setTimeout(done, 1500); function done(){ clearTimeout(to); v.removeEventListener('seeked', done); r(); } v.addEventListener('seeked', done); v.currentTime = want; });
+}
+function drawBg(ctx, W, H){
+  const el = BG.el, iw = BG.kind === 'video' ? el.videoWidth : el.naturalWidth, ih = BG.kind === 'video' ? el.videoHeight : el.naturalHeight;
+  const r = Math.max(W / iw, H / ih), dw = iw * r, dh = ih * r;          // cover: fills the frame, centered crop
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  try{ ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh); }catch(e){}
+  if(BG.dim > 0){ ctx.fillStyle = `rgba(0,0,0,${BG.dim})`; ctx.fillRect(0, 0, W, H); }
+}
+
+/* ---------- SIMPLE card: clean PnL card (terminal style) — big %, PnL, invested / sold, hold. No chart. ---------- */
+const SIMPLE_MS = 5200;
+function drawSimple(ctx, W, H, t, meta, p, opt){
+  const win = t.pnl >= 0, main = win ? GREEN : RED, u = Math.min(W, H) / 1080, wide = W > H, story = H / W > 1.5;
+  ctx.save();
+  // background
+  if(bgReady()){
+    drawBg(ctx, W, H);
+    const g = wide ? ctx.createLinearGradient(0, 0, W * 0.78, 0) : ctx.createLinearGradient(0, H, 0, H * 0.15);   // keeps the text side readable
+    g.addColorStop(0, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#07080B'; ctx.fillRect(0, 0, W, H);
+    let g = ctx.createRadialGradient(W * 0.92, H * 0.95, 0, W * 0.92, H * 0.95, Math.max(W, H) * 0.85);
+    g.addColorStop(0, hexA(main, 0.22)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    g = ctx.createRadialGradient(W * 0.05, 0, 0, W * 0.05, 0, Math.max(W, H) * 0.6);
+    g.addColorStop(0, 'rgba(192,158,255,0.14)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 2 * u;          // faint diagonal hatching
+    for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
+  }
+  const pad = (wide ? 80 : 72) * u, L = pad, Rr = W - pad, maxW = (wide ? W * 0.62 : W - 2 * pad);
+  const fa = (a, b) => easeOut(seg(p, a, b));
+  ctx.textBaseline = 'alphabetic';
+  // header: logo + date
+  ctx.globalAlpha = fa(0, 0.12);
+  ctx.textAlign = 'left'; ctx.font = `900 ${44 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, pad + 36 * u);
+  const dw = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', L + dw, pad + 36 * u);
+  ctx.textAlign = 'right'; ctx.font = `600 ${26 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText(fmt.date(t.timestamp).toUpperCase(), Rr, pad + 32 * u);
+  // body block (measured, then vertically placed)
+  const big = fmt.pct(t.roi);
+  const bigSize = Math.min((story ? 210 : wide ? 190 : 200) * u, fitFont(ctx, big, 900, MONO, (story ? 210 : wide ? 190 : 200) * u, maxW));
+  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, showMoney = !opt.hideUsd && inv > 0 && isFinite(inv);
+  const rows = showMoney ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['HOLD', fmt.hold(t.holdTime)]]
+                         : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
+  const rowH = 58 * u, blockH = 96 * u + bigSize * 0.95 + (opt.hideUsd ? 0 : 84 * u) + 50 * u + rows.length * rowH;
+  const top = wide ? (H - blockH) / 2 + 20 * u : story ? H * 0.5 - blockH * 0.45 : (H - blockH) / 2 + 30 * u;
+  let y = top;
+  // coin + ticker
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = !!(img && img.complete && img.naturalWidth);
+  const a1 = fa(0.03, 0.16); ctx.globalAlpha = a1; const sh = (1 - a1) * 24 * u;
+  let tx = L; const s = 72 * u;
+  if(hasImg){
+    ctx.save(); rrect(ctx, L, y + sh, s, s, s * 0.28); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.clip();
+    const r = Math.min(s / img.naturalWidth, s / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
+    ctx.drawImage(img, L + (s - iw) / 2, y + sh + (s - ih) / 2, iw, ih); ctx.restore();
+    tx = L + s + 22 * u;
+  }
+  ctx.textAlign = 'left'; const tick = tk(t.ticker);
+  fitFont(ctx, tick, 900, SANS, 64 * u, maxW - (tx - L)); ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, tx, y + sh + s * 0.5 + 22 * u);
+  y += 96 * u;
+  // big ROI (count-up)
+  const cnt = easeOut(seg(p, 0.06, 0.55));
+  ctx.globalAlpha = fa(0.05, 0.14);
+  ctx.font = `900 ${bigSize}px ${MONO}`; ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.55); ctx.shadowBlur = 50 * u;
+  y += bigSize * 0.82; ctx.fillText(fmt.pct(t.roi * cnt), L - 4 * u, y); ctx.shadowBlur = 0;
+  y += bigSize * 0.13;
+  if(!opt.hideUsd){
+    ctx.globalAlpha = fa(0.12, 0.24);
+    y += 64 * u; ctx.font = `800 ${60 * u}px ${MONO}`; ctx.fillStyle = main; ctx.fillText(fmt.usd(t.pnl * cnt), L, y);
+    y += 20 * u;
+  }
+  y += 50 * u;
+  // rows: label left, value right, thin separators
+  const rw = wide ? Math.min(maxW, 640 * u) : Math.min(maxW, 760 * u);
+  rows.forEach(([l, v], i) => {
+    const a = fa(0.3 + i * 0.06, 0.45 + i * 0.06); ctx.globalAlpha = a; const dx = (1 - a) * -30 * u;
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(L + dx, y); ctx.lineTo(L + rw + dx, y); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.font = `700 ${26 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(l, L + dx, y + 40 * u);
+    ctx.textAlign = 'right'; ctx.font = `800 ${34 * u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(v, L + rw + dx, y + 41 * u);
+    y += rowH;
+  });
+  // footer
+  ctx.globalAlpha = fa(0.5, 0.65);
+  ctx.textAlign = 'left'; ctx.font = `700 ${26 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.78)'; ctx.fillText('degencards.vercel.app', L, H - pad + 6 * u);
+  ctx.textAlign = 'right'; ctx.font = `600 ${24 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (meta && meta.rarity ? '  ·  ' + meta.rarity.toUpperCase() : ''), Rr, H - pad + 6 * u);
+  ctx.globalAlpha = 1;
+  if(!opt.video && !bgReady()){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
+  const intro = fa(0, 0.04); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
 /* ---------- one frame; p = animation progress 0..1 (1 = final still) ---------- */
 function drawFrame(ctx, W, H, t, meta, p, opt){
   const win = t.pnl >= 0, main = win ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8';
@@ -47,11 +176,13 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   // cinematic intro: fade from black + slow push-in
   const intro = easeOut(seg(p, 0, 0.05));
   const zoom = 1.06 - 0.06 * easeOut(seg(p, 0, 0.5));
-  if(!inner){ ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H); }
+  const ownBg = !inner && bgReady();
+  if(ownBg) drawBg(ctx, W, H);
   ctx.translate(W/2, H/2); ctx.scale(zoom, zoom); ctx.translate(-W/2, -H/2);
 
+  if(!inner && !ownBg){ ctx.fillStyle = '#050507'; ctx.fillRect(-W, -H, W*3, H*3); }
   // background glows (rarity + result)
-  if(!inner){
+  if(!inner && !ownBg){
   let g = ctx.createRadialGradient(W*0.2, H*0.12, 0, W*0.2, H*0.12, W*1.0);
   g.addColorStop(0, hexA(rar, 0.30)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   g = ctx.createRadialGradient(W*0.85, H*0.62, 0, W*0.85, H*0.62, W*0.95);
@@ -210,7 +341,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   // grain + vignette + fade
   if(inner){ ctx.restore(); return; }
   ctx.setTransform(1,0,0,1,0,0);
-  if(!opt.video){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
+  if(!opt.video && !ownBg){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
   const v = ctx.createRadialGradient(W/2, H/2, W*0.45, W/2, H/2, H*0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)'); ctx.fillStyle = v; ctx.fillRect(0,0,W,H);
   if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1-intro})`; ctx.fillRect(0,0,W,H); }
@@ -304,7 +435,7 @@ async function fontsReady(){
 }
 function renderStill(t, meta, fmtKey, opt){
   const F = FORMATS[fmtKey], c = document.createElement('canvas'); c.width = F.w; c.height = F.h;
-  drawFrame(c.getContext('2d'), F.w, F.h, t, meta, 1, opt);
+  (opt.style === 'simple' ? drawSimple : drawFrame)(c.getContext('2d'), F.w, F.h, t, meta, 1, opt);
   return c;
 }
 function videoMime(){
@@ -351,7 +482,7 @@ async function pickVideoConfig(baseW, baseH, quality){
   }
   return null;
 }
-async function encodeOffline(baseW, baseH, total, frameAt, onProgress, audioFn){
+async function encodeOffline(baseW, baseH, total, frameAt, onProgress, audioFn, prep){
   if(!('VideoEncoder' in window) || !('VideoFrame' in window) || !(await loadMuxer())) return null;
   const pick = await pickVideoConfig(baseW, baseH, proLocked() ? '1080' : state.quality);
   if(!pick) return null;
@@ -379,6 +510,7 @@ async function encodeOffline(baseW, baseH, total, frameAt, onProgress, audioFn){
   const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
   for(let i = 0; i < n; i++){
     if(failed) throw failed;
+    if(prep) await prep(Math.min(i * 1000 / FPS, total));
     frameAt(ctx, W, H, Math.min(i * 1000 / FPS, total));
     const vf = new VideoFrame(c, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
     venc.encode(vf, { keyFrame: i % FPS === 0 }); vf.close();                      // a keyframe every second: clean seeking & re-encode
@@ -437,10 +569,17 @@ function recordAnim(W, H, total, frameAt, onProgress, audio){
     requestAnimationFrame(tick);
   });
 }
+const animMs = opt => opt.style === 'simple' ? SIMPLE_MS : VIDEO_MS;
+/* total length: with a background video, at least one full loop of it (max 15 s) */
+const videoTotal = opt => { const a = animMs(opt); return BG.kind === 'video' && bgReady() && BG.dur ? Math.max(a, Math.min(15000, Math.round(BG.dur * 1000))) : a; };
 async function recordVideo(t, meta, fmtKey, opt, onProgress){
-  const F = FORMATS[fmtKey], frame = (ctx, W, H, el) => drawFrame(ctx, W, H, t, meta, Math.min(1, el / (VIDEO_MS - 1200)), { ...opt, video:true });   // last 1.2 s = hold
-  try{ const b = await encodeOffline(F.w, F.h, VIDEO_MS, frame, onProgress, null); if(b) return b; }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
-  return recordAnim(F.w, F.h, VIDEO_MS, frame, onProgress);
+  const F = FORMATS[fmtKey], simple = opt.style === 'simple', A = animMs(opt), total = videoTotal(opt);
+  const frame = (ctx, W, H, el) => (simple ? drawSimple : drawFrame)(ctx, W, H, t, meta, Math.min(1, el / (A - 1200)), { ...opt, video:true });   // last 1.2 s of the animation = hold
+  const vid = BG.kind === 'video' && bgReady();
+  if(vid) BG.el.pause();
+  try{ const b = await encodeOffline(F.w, F.h, total, frame, onProgress, null, vid ? bgSeek : null); if(b){ if(vid) BG.el.play().catch(()=>{}); return b; } }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
+  if(vid){ try{ BG.el.currentTime = 0; }catch(e){} BG.el.play().catch(()=>{}); }
+  return recordAnim(F.w, F.h, total, frame, onProgress);
 }
 async function recordReplay(t, meta, opt, onProgress, ac){
   const R = window.dcReplay; opt = { ...replayOpts(), ...opt };
@@ -524,6 +663,7 @@ function renderCustomize(){
   document.getElementById('rcReset').addEventListener('click', () => { try{ localStorage.removeItem(RO_KEY); }catch(e){} renderCustomize(); syncButtons(); preview(); });
 }
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
+const curFmt = () => state.style !== 'simple' && state.fmt === 'wide' ? 'post' : state.fmt;
 function captionFor(t, opt){
   const res = opt.hideUsd ? fmt.pct(t.roi) : `${fmt.usd(t.pnl)} (${fmt.pct(t.roi)})`;
   return `${tk(t.ticker)} ${res} in ${fmt.hold(t.holdTime)} ${t.pnl >= 0 ? '🟢' : '🔴'}\nMy trades, as collectible cards → degencards.vercel.app #DEGENCARDS`;
@@ -547,7 +687,7 @@ let lastExport = '';
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
   const cv = document.getElementById('sharePreview'), R = window.dcReplay;
-  const F = isReplay() ? { w:R.W, h:R.H } : FORMATS[state.fmt];
+  const F = isReplay() ? { w:R.W, h:R.H } : FORMATS[curFmt()];
   const scale = Math.min(1, 360 / F.w); cv.width = F.w * scale * (window.devicePixelRatio > 1 ? 2 : 1) | 0; cv.height = F.h * (cv.width / F.w) | 0;
   const ctx = cv.getContext('2d'), k = cv.width / F.w;
   cancelAnimationFrame(state.anim);
@@ -560,7 +700,7 @@ function preview(){
       if(c !== cycle){ cycle = c; if(state.sound) playPreviewSound(); }       // soundtrack restarts with each loop
       R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, D), ro);
     }
-    else { const el = (performance.now() - t0) % (VIDEO_MS + 900), p = Math.min(1, el / (VIDEO_MS - 1200)); drawFrame(ctx, F.w, F.h, state.t, state.meta, p, state); }
+    else { const A = animMs(state), el = (performance.now() - t0) % (A + 900), p = Math.min(1, el / (A - 1200)); (state.style === 'simple' ? drawSimple : drawFrame)(ctx, F.w, F.h, state.t, state.meta, p, state); }
     if(sheet().classList.contains('show')) state.anim = requestAnimationFrame(loop);
   };
   loop();
@@ -578,7 +718,8 @@ function syncButtons(){
   document.getElementById('shareReplayNote').hidden = canReplay;
   const cb = document.getElementById('shareCustom'); if(cb){ cb.hidden = state.style !== 'replay' || !canReplay; if(!cb.hidden && !cb.childElementCount) renderCustomize(); }
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
-  document.querySelectorAll('[data-share-fmt]').forEach(b => b.classList.toggle('on', b.dataset.shareFmt === state.fmt));
+  document.querySelectorAll('[data-share-fmt]').forEach(b => { if(b.dataset.shareFmt === 'wide') b.hidden = state.style !== 'simple'; b.classList.toggle('on', b.dataset.shareFmt === curFmt()); });
+  syncBg();
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
@@ -590,10 +731,10 @@ async function doStill(){
     await fontsReady(); await loadCoinImage(state.t.image);
     let c;
     if(isReplay()){ const R = window.dcReplay; c = document.createElement('canvas'); c.width = R.W; c.height = R.H; const ro = { ...replayOpts(), hideUsd: state.hideUsd }; R.draw(c.getContext('2d'), R.W, R.H, state.t, state.meta, R.duration(ro), ro); }
-    else c = renderStill(state.t, state.meta, state.fmt, state);
+    else c = renderStill(state.t, state.meta, curFmt(), state);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if(!blob) throw new Error('png');
-    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.png`, captionFor(state.t, state));
+    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : (state.style === 'simple' ? 'simple-' : '') + curFmt()}.png`, captionFor(state.t, state));
     if(r === 'downloaded') showToast('Image saved · caption copied');
   }catch(e){ showToast("Couldn't build the image"); }
   finally{ state.busy = false; }
@@ -607,29 +748,56 @@ async function doVideo(){
     lastExport = '';
     const tStart = performance.now();
     const prog = pr => { const el = (performance.now() - tStart) / 1000, eta = pr > 0.04 ? Math.max(0, Math.round(el / pr - el)) : null; btn.textContent = `RENDERING\u2026 ${Math.round(pr*100)}%` + (eta != null ? ` \u00B7 ~${eta}s` : ''); };
-    const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog, ac) : await recordVideo(state.t, state.meta, state.fmt, state, prog);
+    const blob = isReplay() ? await recordReplay(state.t, state.meta, state, prog, ac) : await recordVideo(state.t, state.meta, curFmt(), state, prog);
     btn.textContent = label;
     const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : state.fmt}.${ext}`, captionFor(state.t, state));
+    const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : (state.style === 'simple' ? 'simple-' : '') + curFmt()}.${ext}`, captionFor(state.t, state));
     showToast((r === 'downloaded' ? 'Video saved \u00B7 caption copied' : 'Video ready') + (lastExport ? ` \u00B7 ${lastExport}` : ''));
   }catch(e){ showToast("Video isn't supported here — share the image"); }
   finally{ btn.textContent = label; state.busy = false; }
 }
+/* background controls: PRO when PRO is live; the file stays on the device */
+function syncBg(){
+  const box = document.getElementById('shareBg'); if(!box) return;
+  box.hidden = state.style === 'replay';
+  const has = !!BG.kind, add = document.getElementById('shareBgAdd');
+  add.textContent = has ? (BG.kind === 'video' ? 'CHANGE VIDEO / PHOTO' : 'CHANGE PHOTO / VIDEO') : 'ADD PHOTO / VIDEO';
+  add.classList.toggle('locked', proLocked());
+  document.getElementById('shareBgClear').hidden = !has;
+  document.getElementById('shareBgDimRow').hidden = !has;
+  const pct = Math.round(BG.dim * 100); document.getElementById('shareBgDim').value = pct; document.getElementById('shareBgDimVal').textContent = pct + '%';
+}
+async function pickBg(file){
+  if(!file) return;
+  const vid = /^video\//.test(file.type), img = /^image\//.test(file.type);
+  if(!vid && !img) return showToast('Pick a photo or a video');
+  if(file.size > (vid ? BG_MAX_VID : BG_MAX_IMG)) return showToast(vid ? 'Video too big (max 200 MB)' : 'Photo too big (max 25 MB)');
+  showToast(vid ? 'Loading video…' : 'Loading photo…');
+  const ok = await bgUse(file);
+  if(!ok) return showToast("This file can't be read here — try a JPG / PNG or an MP4");
+  syncBg(); preview();
+  bgSave({ blob:file, dim:BG.dim });
+  if(BG.kind === 'video' && BG.dur > 15) showToast('Video background: the first 15 s are used');
+}
+
 const safeName = () => (String(state.t.ticker).replace(/[^A-Za-z0-9_-]/g,'') || 'card');
 
 window.__dcLoadImg = loadCoinImage;
 window.__dcImgCache = IMG_CACHE;
 window.__dcShareReplay = (t, meta, opt, withSound) => recordReplay(t, meta, opt, null, withSound ? newAudio() : null);
-window.__dcShareFrame = (canvas, t, meta, fmtKey, opt, p) => { const F = FORMATS[fmtKey]; canvas.width = F.w; canvas.height = F.h; drawFrame(canvas.getContext('2d'), F.w, F.h, t, meta, p, opt); };   // used by the visual tests
+window.__dcShareFrame = (canvas, t, meta, fmtKey, opt, p) => { const F = FORMATS[fmtKey]; canvas.width = F.w; canvas.height = F.h; (opt && opt.style === 'simple' ? drawSimple : drawFrame)(canvas.getContext('2d'), F.w, F.h, t, meta, p, opt); };
+window.__dcShareBg = BG; window.__dcShareBgUse = bgUse;   // used by the visual tests
 window.__dcShareRecord = (t, meta, fmtKey, opt) => recordVideo(t, meta, fmtKey, opt);
 window.shareCard = function(t, meta){
   state.t = t; state.meta = meta;
+  if(BG.kind === 'video' && BG.el) BG.el.play().catch(()=>{});
   syncButtons();
   document.getElementById('detailOverlay')?.classList.remove('show');
   sheet().classList.add('show');
   Promise.all([fontsReady(), loadCoinImage(t.image)]).then(preview);
   loadMuxer();
 };
+window.addEventListener('dc-pro', () => { try{ if(document.getElementById('shareCustom')) renderCustomize(); if(state.t) syncButtons(); }catch(e){} });
 let inited = false;
 document.addEventListener('DOMContentLoaded', init); if(document.readyState !== 'loading') init();
 function init(){
@@ -639,14 +807,21 @@ function init(){
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
   document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { if(b.dataset.shareQ !== '1080' && proLocked()) return window.dcPro.open(); state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
+  document.getElementById('shareBgAdd').addEventListener('click', () => { if(proLocked()) return window.dcPro.open(); document.getElementById('shareBgFile').click(); });
+  document.getElementById('shareBgFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBg(f); });
+  document.getElementById('shareBgClear').addEventListener('click', () => { bgRelease(); bgSave(null); syncBg(); preview(); });
+  document.getElementById('shareBgDim').addEventListener('input', e => { BG.dim = Math.max(0, Math.min(0.85, Number(e.target.value) / 100)); document.getElementById('shareBgDimVal').textContent = Math.round(BG.dim * 100) + '%'; });
+  document.getElementById('shareBgDim').addEventListener('change', async () => { const v = await bgLoadSaved(); if(v) bgSave({ ...v, dim:BG.dim }); });
+  bgLoadSaved().then(async v => { if(!v || !v.blob || BG.kind) return; if(typeof v.dim === 'number') BG.dim = Math.max(0, Math.min(0.85, v.dim)); if(await bgUse(v.blob)){ if(BG.kind === 'video') BG.el.pause(); syncBg(); } });
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);
   document.getElementById('shareCaption').addEventListener('click', async () => {
     try{ await navigator.clipboard.writeText(captionFor(state.t, state)); showToast('Caption copied'); }catch(e){ showToast("Couldn't copy"); }
   });
-  sheet().querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); }));
-  sheet().addEventListener('click', e => { if(e.target === sheet()){ sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); } });
+  const closeSheet = () => { sheet().classList.remove('show'); cancelAnimationFrame(state.anim); stopPreviewSound(); if(BG.kind === 'video' && BG.el) BG.el.pause(); };
+  sheet().querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
+  sheet().addEventListener('click', e => { if(e.target === sheet()) closeSheet(); });
 }
 })();
 
-window.addEventListener('dc-pro', () => { try{ if(document.getElementById('shareCustom')) renderCustomize(); syncButtons(); }catch(e){} });
+

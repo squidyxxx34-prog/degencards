@@ -334,10 +334,15 @@
   <div class="modal share-modal">
     <button class="closebtn" data-close>×</button>
     <h3>SHARE CARD</h3>
-    <div class="share-fmts share-styles" role="group" aria-label="Video style"><button data-share-style="card" class="on">CARD</button><button data-share-style="replay">TRADE REPLAY</button></div>
-    <div class="share-fmts" id="shareFmts" role="group" aria-label="Format"><button data-share-fmt="post" class="on">POST 4:5</button><button data-share-fmt="story">STORY 9:16</button></div>
+    <div class="share-fmts share-styles" role="group" aria-label="Video style"><button data-share-style="card" class="on">CARD</button><button data-share-style="simple">SIMPLE</button><button data-share-style="replay">TRADE REPLAY</button></div>
+    <div class="share-fmts" id="shareFmts" role="group" aria-label="Format"><button data-share-fmt="post" class="on">POST 4:5</button><button data-share-fmt="story">STORY 9:16</button><button data-share-fmt="wide" hidden>WIDE 16:9</button></div>
     <p class="share-note" id="shareReplayNote" hidden>Trade replay needs this trade's real candles. They're loading — try again in a moment.</p>
     <div class="share-stage"><canvas id="sharePreview"></canvas><button type="button" class="share-sound" id="shareSound" hidden aria-pressed="false">Sound off</button></div>
+    <div class="share-bg" id="shareBg">
+      <div class="share-bg-row"><span>Background</span><button type="button" class="hbtn" id="shareBgAdd">ADD PHOTO / VIDEO</button><button type="button" class="hbtn" id="shareBgClear" hidden>REMOVE</button></div>
+      <input type="file" id="shareBgFile" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" hidden>
+      <label class="share-bg-dim" id="shareBgDimRow" hidden><span>Darken</span><input type="range" id="shareBgDim" min="0" max="85" step="5" value="45"><em id="shareBgDimVal">45%</em></label>
+    </div>
     <label class="share-opt"><input type="checkbox" id="shareHideUsd"> Hide $ amount (show % only)</label>
     <div class="share-q" role="radiogroup" aria-label="Video quality"><span>Video</span><button type="button" data-share-q="4k" role="radio">4K · 60 fps</button><button type="button" data-share-q="1080" role="radio">1080p · 60 fps (faster)</button></div>
     <div class="rc" id="shareCustom" hidden></div>
