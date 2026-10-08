@@ -642,3 +642,5 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .share-bg-dim{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--tx2);}
 .share-bg-dim input{flex:1;accent-color:var(--purple);min-height:32px;}
 .share-bg-dim em{font:700 12px var(--mono);font-style:normal;color:var(--tx);min-width:38px;text-align:right;}
+#shareBgTools .rc-row{margin-top:8px;}
+.share-bg-dim span{min-width:58px;}

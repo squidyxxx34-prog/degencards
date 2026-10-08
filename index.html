@@ -341,11 +341,16 @@
     <div class="share-bg" id="shareBg">
       <div class="share-bg-row"><span>Background</span><button type="button" class="hbtn" id="shareBgAdd">ADD PHOTO / VIDEO</button><button type="button" class="hbtn" id="shareBgClear" hidden>REMOVE</button></div>
       <input type="file" id="shareBgFile" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" hidden>
-      <label class="share-bg-dim" id="shareBgDimRow" hidden><span>Darken</span><input type="range" id="shareBgDim" min="0" max="85" step="5" value="45"><em id="shareBgDimVal">45%</em></label>
+      <div id="shareBgTools" hidden>
+        <label class="share-bg-dim"><span>Darken</span><input type="range" id="shareBgDim" min="0" max="85" step="5" value="45"><em id="shareBgDimVal">45%</em></label>
+        <label class="share-bg-dim"><span>Position</span><input type="range" id="shareBgPos" min="0" max="100" step="1" value="50"><em id="shareBgPosVal">50%</em></label>
+        <div class="rc-row"><button type="button" class="rc-chip" id="shareBgBlur" role="switch" aria-checked="false">Blur</button></div>
+      </div>
     </div>
     <label class="share-opt"><input type="checkbox" id="shareHideUsd"> Hide $ amount (show % only)</label>
     <div class="share-q" role="radiogroup" aria-label="Video quality"><span>Video</span><button type="button" data-share-q="4k" role="radio">4K · 60 fps</button><button type="button" data-share-q="1080" role="radio">1080p · 60 fps (faster)</button></div>
     <div class="rc" id="shareCustom" hidden></div>
+    <div class="rc" id="shareSimple" hidden></div>
     <button class="share-btn" id="shareVideo">SHARE VIDEO</button>
     <div class="share-row"><button class="hbtn" id="shareImage">SHARE IMAGE</button><button class="hbtn" id="shareCaption">COPY CAPTION</button></div>
   </div>

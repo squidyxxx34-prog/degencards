@@ -38,7 +38,7 @@ function rrect(ctx, x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcT
 function fitFont(ctx, text, weight, family, maxSize, maxW){ let s = maxSize; do { ctx.font = `${weight} ${s}px ${family}`; s -= 4; } while(ctx.measureText(text).width > maxW && s > 20); return s + 4; }
 
 /* ---------- custom background: the user's own photo or video, kept on this device only (IndexedDB), never uploaded ---------- */
-const BG = { kind:null, el:null, url:null, dim:0.45, dur:0 };
+const BG = { kind:null, el:null, url:null, dim:0.45, dur:0, pos:0.5, blur:false };
 const BG_MAX_IMG = 25e6, BG_MAX_VID = 200e6, BG_DB = 'dc_share', BG_STORE = 'bg';
 function bgDb(){ return new Promise((res, rej) => { try{ const r = indexedDB.open(BG_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore(BG_STORE); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }catch(e){ rej(e); } }); }
 async function bgSave(v){ try{ const db = await bgDb(); await new Promise(r => { const tx = db.transaction(BG_STORE, 'readwrite'); v ? tx.objectStore(BG_STORE).put(v, 'cur') : tx.objectStore(BG_STORE).delete('cur'); tx.oncomplete = tx.onerror = tx.onabort = () => r(); }); db.close(); }catch(e){} }
@@ -77,91 +77,224 @@ function bgSeek(ms){
   if(Math.abs(v.currentTime - want) < 0.004) return Promise.resolve();
   return new Promise(r => { const to = setTimeout(done, 1500); function done(){ clearTimeout(to); v.removeEventListener('seeked', done); r(); } v.addEventListener('seeked', done); v.currentTime = want; });
 }
-function drawBg(ctx, W, H){
+/* soft blur that works everywhere (canvas filter isn't on every Safari): downscale, then upscale smoothly */
+const BLUR_C = document.createElement('canvas');
+function softBlur(src, sw, sh, k){
+  const w = Math.max(2, Math.round(sw / k)), h = Math.max(2, Math.round(sh / k));
+  if(BLUR_C.width !== w || BLUR_C.height !== h){ BLUR_C.width = w; BLUR_C.height = h; }
+  const b = BLUR_C.getContext('2d'); b.imageSmoothingEnabled = true; b.imageSmoothingQuality = 'high';
+  try{ b.drawImage(src, 0, 0, w, h); }catch(e){}
+  return BLUR_C;
+}
+/* cover-draw any source; pos 0..1 slides along the cropped axis; zoom >= 1 */
+function coverDraw(ctx, el, iw, ih, W, H, pos, zoom, blur){
+  const r = Math.max(W / iw, H / ih) * (zoom || 1), dw = iw * r, dh = ih * r;
+  const x = dw > W ? -(dw - W) * pos : (W - dw) / 2, y = dh > H ? -(dh - H) * (dw > W + 1 ? 0.5 : pos) : (H - dh) / 2;
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  try{ ctx.drawImage(blur ? softBlur(el, iw, ih, Math.max(iw, ih) / 64) : el, x, y, dw, dh); }catch(e){}
+  ctx.restore();
+}
+function drawBg(ctx, W, H, zoom){
   const el = BG.el, iw = BG.kind === 'video' ? el.videoWidth : el.naturalWidth, ih = BG.kind === 'video' ? el.videoHeight : el.naturalHeight;
-  const r = Math.max(W / iw, H / ih), dw = iw * r, dh = ih * r;          // cover: fills the frame, centered crop
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  try{ ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh); }catch(e){}
+  coverDraw(ctx, el, iw, ih, W, H, BG.pos, zoom, BG.blur);
   if(BG.dim > 0){ ctx.fillStyle = `rgba(0,0,0,${BG.dim})`; ctx.fillRect(0, 0, W, H); }
 }
 
-/* ---------- SIMPLE card: clean PnL card (terminal style) — big %, PnL, invested / sold, hold. No chart. ---------- */
+/* ---------- SIMPLE card: clean PnL card (terminal style). No chart. ---------- */
 const SIMPLE_MS = 5200;
-function drawSimple(ctx, W, H, t, meta, p, opt){
-  const win = t.pnl >= 0, main = win ? GREEN : RED, u = Math.min(W, H) / 1080, wide = W > H, story = H / W > 1.5;
-  ctx.save();
-  // background
-  if(bgReady()){
-    drawBg(ctx, W, H);
-    const g = wide ? ctx.createLinearGradient(0, 0, W * 0.78, 0) : ctx.createLinearGradient(0, H, 0, H * 0.15);   // keeps the text side readable
-    g.addColorStop(0, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+const SO_KEY = 'dc_simple_opts';
+const SO_DEF = { big:'roi', accent:'auto', bg:'dark', stats:true, date:true, rarity:true };
+const SO_GROUPS = [
+  ['big',    'Big number', [['roi','ROI %'],['pnl','PnL $']]],
+  ['accent', 'Color',      [['auto','Auto'],['purple','Purple'],['gold','Gold'],['ice','Ice'],['mono','Mono']]],
+  ['bg',     'Background', [['dark','Dark'],['aurora','Aurora'],['sunset','Sunset'],['matrix','Matrix'],['coin','Coin']]],
+];
+const SO_SHOW = [['stats','Stats'],['date','Date'],['rarity','Rarity']];
+const SO_PRO = { accent:['purple','gold','ice','mono'], bg:['aurora','sunset','matrix','coin'] };
+const ACCENT = { purple:'#C09EFF', gold:'#FFD35C', ice:'#6EC0FF', mono:'#FFFFFF' };
+let SO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(SO_KEY) || '{}') || {}; }catch(e){} const o = { ...SO_DEF };
+  for(const [k, , opts] of SO_GROUPS) if(opts.some(x => x[0] === v[k])) o[k] = v[k];
+  for(const [k] of SO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k];
+  return o; })();
+function simpleOpts(){                                               // free: PRO-only choices fall back to the default
+  const o = { ...SO_SAVED };
+  if(proLocked()) for(const k in SO_PRO) if(SO_PRO[k].includes(o[k])) o[k] = SO_DEF[k];
+  return o;
+}
+function presetBg(ctx, W, H, kind, main, t, p, u){
+  const M = Math.max(W, H), drift = p * 0.04;
+  const blob = (x, y, r, col, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, hexA(col, a)); g.addColorStop(1, hexA(col, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+  if(kind === 'coin'){
+    const img = t.image ? IMG_CACHE.get(t.image) : null;
+    if(img && img.complete && img.naturalWidth){
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      coverDraw(ctx, img, img.naturalWidth, img.naturalHeight, W, H, 0.5, 1.6 - drift, true);
+      ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(0, 0, W, H);
+      return;
+    }
+    kind = 'dark';
+  }
+  if(kind === 'aurora'){
+    ctx.fillStyle = '#050816'; ctx.fillRect(0, 0, W, H);
+    blob(W * (0.15 + drift), H * 0.15, M * 0.75, '#3DFFA0', 0.20);
+    blob(W * (0.85 - drift), H * 0.35, M * 0.7, '#7C5CFF', 0.30);
+    blob(W * 0.6, H * (1.0 - drift), M * 0.7, '#00C2FF', 0.18);
+  } else if(kind === 'sunset'){
+    const g = ctx.createLinearGradient(0, 0, W * 0.4, H); g.addColorStop(0, '#12061F'); g.addColorStop(0.55, '#3A0F3A'); g.addColorStop(1, '#6B2A12');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    blob(W * (0.9 - drift), H * 0.95, M * 0.8, '#FF7A2F', 0.35);
+    blob(W * 0.1, H * 0.05, M * 0.6, '#FF3DBB', 0.18);
+  } else if(kind === 'matrix'){
+    ctx.fillStyle = '#020604'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(61,255,160,0.06)'; ctx.lineWidth = 1.5 * u; const st = 54 * u, off = (p * st * 2) % st;
+    for(let x = 0; x < W; x += st){ ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for(let y = -st + off; y < H; y += st){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    blob(W * 0.8, H * 0.8, M * 0.8, '#3DFFA0', 0.16);
   } else {
     ctx.fillStyle = '#07080B'; ctx.fillRect(0, 0, W, H);
-    let g = ctx.createRadialGradient(W * 0.92, H * 0.95, 0, W * 0.92, H * 0.95, Math.max(W, H) * 0.85);
-    g.addColorStop(0, hexA(main, 0.22)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    g = ctx.createRadialGradient(W * 0.05, 0, 0, W * 0.05, 0, Math.max(W, H) * 0.6);
-    g.addColorStop(0, 'rgba(192,158,255,0.14)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 2 * u;          // faint diagonal hatching
+    blob(W * (0.92 - drift), H * 0.95, M * 0.85, main, 0.22);
+    blob(W * 0.05, 0, M * 0.6, '#C09EFF', 0.14);
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 2 * u;
     for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
   }
-  const pad = (wide ? 80 : 72) * u, L = pad, Rr = W - pad, maxW = (wide ? W * 0.62 : W - 2 * pad);
+}
+function drawSimple(ctx, W, H, t, meta, p, opt){
+  const so = { ...simpleOpts(), ...(opt.so || {}) };
+  const win = t.pnl >= 0, own = bgReady();
+  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
+  const wide = W > H * 1.2, story = H / W > 1.5, u = Math.min(W, H) / 1080;
+  const S = story ? { coin:118, tick:84, big:250, pnl:74, lab:30, val:40, rowH:78, gap:56 } : wide ? { coin:78, tick:62, big:186, pnl:58, lab:24, val:32, rowH:56, gap:44 } : { coin:86, tick:68, big:212, pnl:62, lab:26, val:34, rowH:60, gap:48 };
+  for(const k in S) S[k] *= u;
   const fa = (a, b) => easeOut(seg(p, a, b));
+  ctx.save();
+  // background: own photo / video (slow push-in), else a preset
+  if(own){
+    drawBg(ctx, W, H, 1.06 - 0.06 * easeOut(seg(p, 0, 1)));
+    const g = wide ? ctx.createLinearGradient(0, 0, W * 0.75, 0) : ctx.createLinearGradient(0, H, 0, H * 0.1);
+    g.addColorStop(0, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  } else presetBg(ctx, W, H, so.bg, main, t, p, u);
+  const pad = (wide ? 84 : story ? 84 : 72) * u, L = pad, Rr = W - pad, maxW = wide ? W * 0.56 : W - 2 * pad;
+  const lift = own || so.bg === 'coin';                                  // text sits on an image: add a soft shadow
+  const sh = on => { if(on && lift){ ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 2 * u; } else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; } };
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = !!(img && img.complete && img.naturalWidth);
+  // wide hero: the coin, big, on the right (only when the right side is ours)
+  if(wide && !own){
+    const k = easeOutBack(seg(p, 0.06, 0.3)), s = H * 0.5, cx = W * 0.79, cy = H * 0.5 + Math.sin(p * Math.PI) * 6 * u;
+    ctx.save(); ctx.globalAlpha = clamp01(k);
+    for(let i = 0; i < 3; i++){ ctx.strokeStyle = hexA(main, 0.10 - i * 0.025); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(cx, cy, s * (0.78 + i * 0.2) * (0.9 + 0.1 * k), 0, Math.PI * 2); ctx.stroke(); }
+    ctx.translate(cx, cy); ctx.scale(k, k); ctx.rotate(-0.06 * (1 - p));
+    if(hasImg){
+      ctx.shadowColor = hexA(main, 0.55); ctx.shadowBlur = 90 * u;
+      rrect(ctx, -s / 2, -s / 2, s, s, s * 0.26); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.save(); rrect(ctx, -s / 2, -s / 2, s, s, s * 0.26); ctx.clip();
+      const r = Math.min(s / img.naturalWidth, s / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
+      ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih); ctx.restore();
+      rrect(ctx, -s / 2, -s / 2, s, s, s * 0.26); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.stroke();
+    } else {
+      const tick0 = tk(t.ticker); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      fitFont(ctx, tick0, 900, SANS, s * 0.7, s * 1.3); ctx.fillStyle = hexA(main, 0.16); ctx.fillText(tick0, 0, 0); ctx.textBaseline = 'alphabetic';
+    }
+    ctx.restore();
+  }
+  // story hero: the coin, big, above the numbers
+  const heroS = story && !own && hasImg ? 330 * u : 0;
+  if(heroS){
+    const k = easeOutBack(seg(p, 0.06, 0.3)), s0 = heroS, cx = L + s0 / 2, cy = pad + 150 * u + s0 / 2 + Math.sin(p * Math.PI) * 6 * u;
+    ctx.save(); ctx.globalAlpha = clamp01(k);
+    for(let i = 0; i < 3; i++){ ctx.strokeStyle = hexA(main, 0.10 - i * 0.025); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(cx, cy, s0 * (0.8 + i * 0.22), 0, Math.PI * 2); ctx.stroke(); }
+    ctx.translate(cx, cy); ctx.scale(k, k); ctx.rotate(-0.06 * (1 - p));
+    ctx.shadowColor = hexA(main, 0.55); ctx.shadowBlur = 90 * u;
+    rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.save(); rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.clip();
+    const r = Math.min(s0 / img.naturalWidth, s0 / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
+    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih); ctx.restore();
+    rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.stroke();
+    ctx.restore();
+  }
   ctx.textBaseline = 'alphabetic';
   // header: logo + date
-  ctx.globalAlpha = fa(0, 0.12);
-  ctx.textAlign = 'left'; ctx.font = `900 ${44 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, pad + 36 * u);
+  ctx.globalAlpha = fa(0, 0.12); sh(true);
+  ctx.textAlign = 'left'; ctx.font = `900 ${(story ? 50 : 44) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, pad + 36 * u);
   const dw = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', L + dw, pad + 36 * u);
-  ctx.textAlign = 'right'; ctx.font = `600 ${26 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText(fmt.date(t.timestamp).toUpperCase(), Rr, pad + 32 * u);
-  // body block (measured, then vertically placed)
-  const big = fmt.pct(t.roi);
-  const bigSize = Math.min((story ? 210 : wide ? 190 : 200) * u, fitFont(ctx, big, 900, MONO, (story ? 210 : wide ? 190 : 200) * u, maxW));
-  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, showMoney = !opt.hideUsd && inv > 0 && isFinite(inv);
-  const rows = showMoney ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['HOLD', fmt.hold(t.holdTime)]]
-                         : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
-  const rowH = 58 * u, blockH = 96 * u + bigSize * 0.95 + (opt.hideUsd ? 0 : 84 * u) + 50 * u + rows.length * rowH;
-  const top = wide ? (H - blockH) / 2 + 20 * u : story ? H * 0.5 - blockH * 0.45 : (H - blockH) / 2 + 30 * u;
-  let y = top;
-  // coin + ticker
-  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = !!(img && img.complete && img.naturalWidth);
-  const a1 = fa(0.03, 0.16); ctx.globalAlpha = a1; const sh = (1 - a1) * 24 * u;
-  let tx = L; const s = 72 * u;
-  if(hasImg){
-    ctx.save(); rrect(ctx, L, y + sh, s, s, s * 0.28); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.clip();
+  if(so.date){ ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 28 : 25) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.fillText(fmt.date(t.timestamp).toUpperCase(), Rr, pad + 32 * u); }
+  // body content
+  const bigIsPnl = so.big === 'pnl' && !opt.hideUsd;
+  const bigTxt = v => bigIsPnl ? fmt.usd(t.pnl * v) : fmt.pct(t.roi * v);
+  const subTxt = v => bigIsPnl ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
+  const showSub = !opt.hideUsd;
+  const bigSize = fitFont(ctx, bigTxt(1), 900, MONO, S.big, maxW);
+  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
+  const rows = !so.stats ? [] : money
+    ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['MC', mcShort(t.entryMc) + ' → ' + mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]]
+    : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
+  const headH = Math.max(S.coin, S.tick) + 28 * u;
+  const blockH = headH + bigSize * 0.95 + (showSub ? S.pnl + 24 * u : 0) + (rows.length ? S.gap + rows.length * S.rowH : 0);
+  const areaT = heroS ? pad + 150 * u + heroS + 90 * u : pad + 70 * u, areaB = H - pad - 60 * u;
+  let y = Math.max(areaT, areaT + (areaB - areaT - blockH) * (story ? 0.56 : 0.5));
+  // coin + ticker + rarity pill
+  const a1 = fa(0.03, 0.16); ctx.globalAlpha = a1; const dy = (1 - a1) * 24 * u;
+  let tx = L; const s = S.coin;
+  if(hasImg && !(wide && !own) && !heroS){
+    sh(false);
+    ctx.save(); rrect(ctx, L, y + dy, s, s, s * 0.28); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.clip();
     const r = Math.min(s / img.naturalWidth, s / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
-    ctx.drawImage(img, L + (s - iw) / 2, y + sh + (s - ih) / 2, iw, ih); ctx.restore();
-    tx = L + s + 22 * u;
+    ctx.drawImage(img, L + (s - iw) / 2, y + dy + (s - ih) / 2, iw, ih); ctx.restore();
+    rrect(ctx, L, y + dy, s, s, s * 0.28); ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.stroke();
+    tx = L + s + 24 * u;
   }
-  ctx.textAlign = 'left'; const tick = tk(t.ticker);
-  fitFont(ctx, tick, 900, SANS, 64 * u, maxW - (tx - L)); ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, tx, y + sh + s * 0.5 + 22 * u);
-  y += 96 * u;
-  // big ROI (count-up)
+  const midY = y + dy + Math.max(s, S.tick) / 2;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; sh(true);
+  const tick = tk(t.ticker), pillW = so.rarity && meta && meta.rarity ? 200 * u : 0;
+  fitFont(ctx, tick, 900, SANS, S.tick, maxW - (tx - L) - pillW); ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, tx, midY + 2 * u);
+  if(pillW){
+    const tw = ctx.measureText(tick).width, rar = RARITY_HEX[meta.rarity] || '#ADADB8', rt = meta.rarity.toUpperCase();
+    ctx.font = `800 ${(story ? 26 : 22) * u}px ${MONO}`; const pw = ctx.measureText(rt).width + 30 * u, ph = (story ? 46 : 40) * u, px = tx + tw + 20 * u;
+    sh(false); rrect(ctx, px, midY - ph / 2, pw, ph, ph / 2); ctx.fillStyle = hexA(rar, 0.16); ctx.fill(); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(rar, 0.6); ctx.stroke();
+    ctx.fillStyle = rar; ctx.fillText(rt, px + 15 * u, midY + 2 * u);
+  }
+  ctx.textBaseline = 'alphabetic';
+  y += headH;
+  // big number (count-up) + light sweep across the glyphs at the end
   const cnt = easeOut(seg(p, 0.06, 0.55));
   ctx.globalAlpha = fa(0.05, 0.14);
-  ctx.font = `900 ${bigSize}px ${MONO}`; ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.55); ctx.shadowBlur = 50 * u;
-  y += bigSize * 0.82; ctx.fillText(fmt.pct(t.roi * cnt), L - 4 * u, y); ctx.shadowBlur = 0;
-  y += bigSize * 0.13;
-  if(!opt.hideUsd){
-    ctx.globalAlpha = fa(0.12, 0.24);
-    y += 64 * u; ctx.font = `800 ${60 * u}px ${MONO}`; ctx.fillStyle = main; ctx.fillText(fmt.usd(t.pnl * cnt), L, y);
-    y += 20 * u;
+  ctx.font = `900 ${bigSize}px ${MONO}`; y += bigSize * 0.8;
+  const pulse = seg(p, 0.55, 0.62), glow = 50 + 40 * Math.sin(pulse * Math.PI);
+  ctx.fillStyle = main; ctx.shadowColor = hexA(main, lift ? 0.7 : 0.55); ctx.shadowBlur = glow * u; ctx.shadowOffsetY = 0;
+  ctx.fillText(bigTxt(cnt), L - 4 * u, y); ctx.shadowBlur = 0;
+  const sw = seg(p, 0.82, 0.97);
+  if(sw > 0 && sw < 1){
+    const bw = ctx.measureText(bigTxt(1)).width, sx = L - bw * 0.3 + bw * 1.6 * easeOut(sw);
+    const lg = ctx.createLinearGradient(sx - 120 * u, 0, sx + 120 * u, 0);
+    lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.75)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = lg; ctx.fillText(bigTxt(1), L - 4 * u, y);
   }
-  y += 50 * u;
-  // rows: label left, value right, thin separators
-  const rw = wide ? Math.min(maxW, 640 * u) : Math.min(maxW, 760 * u);
-  rows.forEach(([l, v], i) => {
-    const a = fa(0.3 + i * 0.06, 0.45 + i * 0.06); ctx.globalAlpha = a; const dx = (1 - a) * -30 * u;
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(L + dx, y); ctx.lineTo(L + rw + dx, y); ctx.stroke();
-    ctx.textAlign = 'left'; ctx.font = `700 ${26 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(l, L + dx, y + 40 * u);
-    ctx.textAlign = 'right'; ctx.font = `800 ${34 * u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(v, L + rw + dx, y + 41 * u);
-    y += rowH;
-  });
+  y += bigSize * 0.15;
+  if(showSub){
+    ctx.globalAlpha = fa(0.12, 0.24); sh(true);
+    y += S.pnl; ctx.font = `800 ${S.pnl}px ${MONO}`; ctx.fillStyle = main; ctx.fillText(subTxt(cnt), L, y);
+    y += 24 * u;
+  }
+  // rows
+  if(rows.length){
+    y += S.gap;
+    const rw = wide ? Math.min(maxW, 620 * u) : Math.min(maxW, (story ? 900 : 760) * u);
+    rows.forEach(([l, v], i) => {
+      const a = fa(0.3 + i * 0.06, 0.45 + i * 0.06); ctx.globalAlpha = a; const dx = (1 - a) * -30 * u;
+      sh(false); ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(L + dx, y); ctx.lineTo(L + rw + dx, y); ctx.stroke();
+      sh(true);
+      ctx.textAlign = 'left'; ctx.font = `700 ${S.lab}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText(l, L + dx, y + S.rowH * 0.68);
+      ctx.textAlign = 'right'; ctx.font = `800 ${S.val}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(v, L + rw + dx, y + S.rowH * 0.7);
+      y += S.rowH;
+    });
+  }
   // footer
-  ctx.globalAlpha = fa(0.5, 0.65);
-  ctx.textAlign = 'left'; ctx.font = `700 ${26 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.78)'; ctx.fillText('degencards.vercel.app', L, H - pad + 6 * u);
-  ctx.textAlign = 'right'; ctx.font = `600 ${24 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (meta && meta.rarity ? '  ·  ' + meta.rarity.toUpperCase() : ''), Rr, H - pad + 6 * u);
-  ctx.globalAlpha = 1;
-  if(!opt.video && !bgReady()){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
+  ctx.globalAlpha = fa(0.5, 0.65); sh(true);
+  ctx.textAlign = 'left'; ctx.font = `700 ${(story ? 30 : 26) * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('degencards.vercel.app', L, H - pad + 6 * u);
+  ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 27 : 24) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (t.source === 'wallet' ? '  ·  ON-CHAIN' : ''), Rr, H - pad + 6 * u);
+  sh(false); ctx.globalAlpha = 1;
+  if(!opt.video && !own && so.bg !== 'coin'){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
   const intro = fa(0, 0.04); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
 }
@@ -720,6 +853,7 @@ function syncButtons(){
   const sb = document.getElementById('shareSound'); sb.hidden = state.style !== 'replay'; sb.textContent = state.sound ? '\u{1F50A} Sound on' : '\u{1F507} Sound off'; sb.setAttribute('aria-pressed', String(state.sound));
   document.querySelectorAll('[data-share-fmt]').forEach(b => { if(b.dataset.shareFmt === 'wide') b.hidden = state.style !== 'simple'; b.classList.toggle('on', b.dataset.shareFmt === curFmt()); });
   syncBg();
+  const sbx = document.getElementById('shareSimple'); if(sbx){ sbx.hidden = state.style !== 'simple'; if(!sbx.hidden) renderSimple(); }
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
@@ -764,8 +898,24 @@ function syncBg(){
   add.textContent = has ? (BG.kind === 'video' ? 'CHANGE VIDEO / PHOTO' : 'CHANGE PHOTO / VIDEO') : 'ADD PHOTO / VIDEO';
   add.classList.toggle('locked', proLocked());
   document.getElementById('shareBgClear').hidden = !has;
-  document.getElementById('shareBgDimRow').hidden = !has;
+  document.getElementById('shareBgTools').hidden = !has || proLocked();
   const pct = Math.round(BG.dim * 100); document.getElementById('shareBgDim').value = pct; document.getElementById('shareBgDimVal').textContent = pct + '%';
+  const pp = Math.round(BG.pos * 100); document.getElementById('shareBgPos').value = pp; document.getElementById('shareBgPosVal').textContent = pp + '%';
+  const bl = document.getElementById('shareBgBlur'); bl.classList.toggle('on', BG.blur); bl.setAttribute('aria-checked', String(BG.blur)); bl.textContent = (BG.blur ? '\u2713 ' : '') + 'Blur';
+}
+const bgPersist = async () => { const v = await bgLoadSaved(); if(v) bgSave({ ...v, dim:BG.dim, pos:BG.pos, blur:BG.blur }); };
+/* SIMPLE customization (same chips as the replay studio) */
+function renderSimple(){
+  const box = document.getElementById('shareSimple'); if(!box) return;
+  const o = simpleOpts(), lk = (k, v) => proLocked() && SO_PRO[k] && SO_PRO[k].includes(v);
+  box.innerHTML = `<div class="rc-head"><span>Customize</span></div>
+    ${SO_GROUPS.map(([k, label, opts]) => `<div class="rc-group"><div class="rc-label" id="scl-${k}">${label}</div>
+      <div class="rc-row" role="radiogroup" aria-labelledby="scl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'accent' && v !== 'auto' ? ' sw sw-' + v : ''}${lk(k, v) ? ' locked' : ''}" role="radio" aria-checked="${o[k] === v}" data-sk="${k}" data-sv="${v}"${lk(k, v) ? ' data-pro="1"' : ''}>${l}</button>`).join('')}</div></div>`).join('')}
+    <div class="rc-group"><div class="rc-label">Show</div><div class="rc-row">${SO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-ss="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
+    ${BG.kind ? '<p class="share-note" style="margin:8px 0 0">Your own background is on: it replaces the background preset.</p>' : ''}`;
+  const save = () => { try{ localStorage.setItem(SO_KEY, JSON.stringify(SO_SAVED)); }catch(e){} renderSimple(); };
+  box.querySelectorAll('[data-sk]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); SO_SAVED = { ...SO_SAVED, [b.dataset.sk]: b.dataset.sv }; save(); }));
+  box.querySelectorAll('[data-ss]').forEach(b => b.addEventListener('click', () => { SO_SAVED = { ...SO_SAVED, [b.dataset.ss]: !SO_SAVED[b.dataset.ss] }; save(); }));
 }
 async function pickBg(file){
   if(!file) return;
@@ -775,8 +925,8 @@ async function pickBg(file){
   showToast(vid ? 'Loading video…' : 'Loading photo…');
   const ok = await bgUse(file);
   if(!ok) return showToast("This file can't be read here — try a JPG / PNG or an MP4");
-  syncBg(); preview();
-  bgSave({ blob:file, dim:BG.dim });
+  BG.pos = 0.5; syncButtons(); preview();
+  bgSave({ blob:file, dim:BG.dim, pos:BG.pos, blur:BG.blur });
   if(BG.kind === 'video' && BG.dur > 15) showToast('Video background: the first 15 s are used');
 }
 
@@ -809,10 +959,13 @@ function init(){
   document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { if(b.dataset.shareQ !== '1080' && proLocked()) return window.dcPro.open(); state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
   document.getElementById('shareBgAdd').addEventListener('click', () => { if(proLocked()) return window.dcPro.open(); document.getElementById('shareBgFile').click(); });
   document.getElementById('shareBgFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBg(f); });
-  document.getElementById('shareBgClear').addEventListener('click', () => { bgRelease(); bgSave(null); syncBg(); preview(); });
+  document.getElementById('shareBgClear').addEventListener('click', () => { bgRelease(); bgSave(null); syncButtons(); preview(); });
   document.getElementById('shareBgDim').addEventListener('input', e => { BG.dim = Math.max(0, Math.min(0.85, Number(e.target.value) / 100)); document.getElementById('shareBgDimVal').textContent = Math.round(BG.dim * 100) + '%'; });
-  document.getElementById('shareBgDim').addEventListener('change', async () => { const v = await bgLoadSaved(); if(v) bgSave({ ...v, dim:BG.dim }); });
-  bgLoadSaved().then(async v => { if(!v || !v.blob || BG.kind) return; if(typeof v.dim === 'number') BG.dim = Math.max(0, Math.min(0.85, v.dim)); if(await bgUse(v.blob)){ if(BG.kind === 'video') BG.el.pause(); syncBg(); } });
+  document.getElementById('shareBgDim').addEventListener('change', bgPersist);
+  document.getElementById('shareBgPos').addEventListener('input', e => { BG.pos = Math.max(0, Math.min(1, Number(e.target.value) / 100)); document.getElementById('shareBgPosVal').textContent = Math.round(BG.pos * 100) + '%'; });
+  document.getElementById('shareBgPos').addEventListener('change', bgPersist);
+  document.getElementById('shareBgBlur').addEventListener('click', () => { BG.blur = !BG.blur; syncBg(); bgPersist(); });
+  bgLoadSaved().then(async v => { if(!v || !v.blob || BG.kind) return; if(typeof v.dim === 'number') BG.dim = Math.max(0, Math.min(0.85, v.dim)); if(typeof v.pos === 'number') BG.pos = Math.max(0, Math.min(1, v.pos)); BG.blur = v.blur === true; if(await bgUse(v.blob)){ if(BG.kind === 'video') BG.el.pause(); syncBg(); } });
   document.getElementById('shareImage').addEventListener('click', doStill);
   document.getElementById('shareVideo').addEventListener('click', doVideo);
   document.getElementById('shareCaption').addEventListener('click', async () => {
