@@ -749,11 +749,10 @@ const RO_PRESETS = {
   chill: { name:'\u{1F30A} Chill', o:{ theme:'ice', intro:'logo', hook:'auto', chart:'area', camera:'full', speed:'slow', bg:'stars', fx:'soft', burst:'confetti', sound:'chill', outro:'full' } },
   degen: { name:'\u{1F680} Degen', o:{ theme:'gold', intro:'countdown', hook:'go', chart:'candles', camera:'zoom', speed:'fast', bg:'glow', fx:'max', burst:'rockets', sound:'hype', outro:'quick' } },
 };
-/* PRO replay styles: free = the first, default look of each group; the rest needs PRO (only once PRO is live) */
-const RO_PRO = { theme:['purple','gold','ice','mono'], bg:['clean','glow','stars'], burst:['confetti','fire','diamonds','rockets'],
-  hook:['printed','scalp','copy','sniped','lesson','go'], intro:['countdown','logo'], outro:['recap','quick'] };
+/* PRO replay studio: free = the default look; every other choice (any group, any toggle, any preset) needs PRO.
+   Free users still SEE every option (locked chips open the paywall); the PRO rendering code itself is only served to subscribers. */
 const proLocked = () => !!(window.dcPro && window.dcPro.enabled && !window.dcPro.active);
-const isProVal = (k, v) => !!(RO_PRO[k] && RO_PRO[k].includes(v));
+const isProVal = (k, v) => { const d = (window.dcReplay && window.dcReplay.DEFAULTS) || {}; return k in d && v !== d[k]; };
 function replayOpts(){
   const d = (window.dcReplay && window.dcReplay.DEFAULTS) || {};
   let saved = {}; try{ saved = JSON.parse(localStorage.getItem(RO_KEY) || '{}') || {}; }catch(e){}
@@ -767,33 +766,33 @@ function replayOpts(){
 function saveReplayOpts(o){ try{ localStorage.setItem(RO_KEY, JSON.stringify(o)); }catch(e){} }
 function renderCustomize(){
   const box = document.getElementById('shareCustom'); if(!box) return;
-  if(proLocked() || (window.dcPro && window.dcPro.active && !(window.dcReplay && window.dcReplay.pro))){
-    const loading = !proLocked();
-    box.innerHTML = `<div class="rc-lock"><b><span class="pro-tag">PRO</span> Customize your replay</b>
-      ${loading ? 'Loading your PRO studio\u2026' : 'Themes, backgrounds, sell effects, intros, hooks, speed, camera, sound, endings and 4K export.'}
-      ${loading ? '' : '<button type="button" class="hbtn pro-btn" id="rcPro">GO PRO</button>'}</div>`;
-    const b = document.getElementById('rcPro'); if(b) b.addEventListener('click', () => window.dcPro.open());
+  if(!proLocked() && window.dcPro && window.dcPro.active && !(window.dcReplay && window.dcReplay.pro)){
+    box.innerHTML = `<div class="rc-lock"><b><span class="pro-tag">PRO</span> Customize your replay</b>Loading your PRO studio\u2026</div>`;
     return;
   }
-  const o = replayOpts(), R = window.dcReplay;
+  const free = proLocked(), o = replayOpts(), R = window.dcReplay;
+  const lockV = (k, v) => free && isProVal(k, v);
   const secs = R ? Math.round(R.duration({ ...o }) / 1000) : 0;
   const preset = Object.entries(RO_PRESETS).find(([, p]) => Object.entries(p.o).every(([k, v]) => o[k] === v));
+  const presetLocked = p => free && Object.entries(p.o).some(([pk, pv]) => isProVal(pk, pv));
   box.innerHTML = `
-    <div class="rc-head"><span>Customize</span><em>\u2248 ${secs} s</em></div>
-    <div class="rc-row" role="group" aria-label="Presets">${Object.entries(RO_PRESETS).map(([k, p]) => `<button type="button" class="rc-chip preset ${preset && preset[0] === k ? 'on' : ''}${proLocked() && Object.entries(p.o).some(([pk, pv]) => isProVal(pk, pv)) ? ' locked' : ''}" data-rp="${k}" aria-pressed="${preset && preset[0] === k}">${p.name}</button>`).join('')}</div>
+    <div class="rc-head"><span>Customize${free ? ' <span class="pro-tag">PRO</span>' : ''}</span><em>\u2248 ${secs} s</em></div>
+    ${free ? `<div class="rc-upsell"><span>Every style below unlocks with PRO. Free replays use the default look.</span><button type="button" class="hbtn pro-btn" id="rcPro">GO PRO</button></div>` : ''}
+    <div class="rc-row" role="group" aria-label="Presets">${Object.entries(RO_PRESETS).map(([k, p]) => `<button type="button" class="rc-chip preset ${preset && preset[0] === k ? 'on' : ''}${presetLocked(p) ? ' locked' : ''}" data-rp="${k}" aria-pressed="${!!preset && preset[0] === k}"${presetLocked(p) ? ' data-pro="1"' : ''}>${p.name}</button>`).join('')}</div>
     ${RO_GROUPS.map(([k, label, opts]) => `
       <div class="rc-group"><div class="rc-label" id="rcl-${k}">${label}</div>
-        <div class="rc-row" role="radiogroup" aria-labelledby="rcl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'theme' ? ' sw sw-' + v : ''}${proLocked() && isProVal(k, v) ? ' locked' : ''}" role="radio" aria-checked="${o[k] === v}" data-rk="${k}" data-rv="${v}"${proLocked() && isProVal(k, v) ? ' data-pro="1"' : ''}>${l}</button>`).join('')}</div></div>`).join('')}
+        <div class="rc-row" role="radiogroup" aria-labelledby="rcl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${k === 'theme' ? ' sw sw-' + v : ''}${lockV(k, v) ? ' locked' : ''}" role="radio" aria-checked="${o[k] === v}" data-rk="${k}" data-rv="${v}"${lockV(k, v) ? ' data-pro="1"' : ''}>${l}</button>`).join('')}</div></div>`).join('')}
     <div class="rc-group"><div class="rc-label">Show</div>
-      <div class="rc-row">${RO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-rs="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
-    <button type="button" class="hbtn rc-reset" id="rcReset">RESET TO DEFAULT</button>`;
+      <div class="rc-row">${RO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}${free ? ' locked' : ''}" role="switch" aria-checked="${!!o[k]}" data-rs="${k}"${free ? ' data-pro="1"' : ''}>${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
+    ${free ? '' : '<button type="button" class="hbtn rc-reset" id="rcReset">RESET TO DEFAULT</button>'}`;
+  const gp = document.getElementById('rcPro'); if(gp) gp.addEventListener('click', () => window.dcPro.open());
   const changed = next => { saveReplayOpts(next); renderCustomize(); syncButtons(); preview(); };
   box.querySelectorAll('[data-rk]').forEach(b => b.addEventListener('click', () => b.dataset.pro ? window.dcPro.open() : changed({ ...replayOpts(), [b.dataset.rk]: b.dataset.rv })));
-  box.querySelectorAll('[data-rs]').forEach(b => b.addEventListener('click', () => { const c = replayOpts(); changed({ ...c, [b.dataset.rs]: !c[b.dataset.rs] }); }));
+  box.querySelectorAll('[data-rs]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); const c = replayOpts(); changed({ ...c, [b.dataset.rs]: !c[b.dataset.rs] }); }));
   box.querySelectorAll('[data-rp]').forEach(b => b.addEventListener('click', () => { const po = RO_PRESETS[b.dataset.rp].o;
-    if(proLocked() && Object.entries(po).some(([k, v]) => isProVal(k, v))) return window.dcPro.open();
+    if(b.dataset.pro || (proLocked() && Object.entries(po).some(([k, v]) => isProVal(k, v)))) return window.dcPro.open();
     changed({ ...replayOpts(), ...po }); }));
-  document.getElementById('rcReset').addEventListener('click', () => { try{ localStorage.removeItem(RO_KEY); }catch(e){} renderCustomize(); syncButtons(); preview(); });
+  const rr = document.getElementById('rcReset'); if(rr) rr.addEventListener('click', () => { try{ localStorage.removeItem(RO_KEY); }catch(e){} renderCustomize(); syncButtons(); preview(); });
 }
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
 const curFmt = () => state.style !== 'simple' && state.fmt === 'wide' ? 'post' : state.fmt;

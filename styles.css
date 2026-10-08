@@ -644,3 +644,6 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .share-bg-dim em{font:700 12px var(--mono);font-style:normal;color:var(--tx);min-width:38px;text-align:right;}
 #shareBgTools .rc-row{margin-top:8px;}
 .share-bg-dim span{min-width:58px;}
+.rc-upsell{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:10px 12px;border:1px dashed rgba(255,210,90,.5);border-radius:12px;background:rgba(255,210,90,.06);font-size:12px;color:var(--tx2);}
+.rc-upsell span{flex:1;}
+.rc-upsell .pro-btn{flex-shrink:0;}

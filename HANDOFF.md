@@ -158,3 +158,7 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - SIMPLE v2 : panneau Customize (`localStorage dc_simple_opts`) : gros chiffre ROI % ou PnL $, couleur (Auto / Purple / Gold / Ice / Mono), fond prédéfini (Dark / Aurora / Sunset / Matrix / Coin = logo du coin flouté), afficher Stats / Date / Rareté. Couleurs et fonds hors défaut = PRO. Coin en héros (grand, halo) en Wide et Story quand aucun fond perso ; pill de rareté à côté du ticker ; reflet lumineux sur le chiffre en fin d'anim ; ombre portée du texte sur image.
 - Fond perso : réglages Darken, Position (recadrage) et Blur (flou par réduction, marche aussi sur Safari), gardés avec le fichier. Léger zoom avant sur le fond en vidéo.
 - CSP : `media-src 'self' blob:` ajouté (vidéo de fond).
+
+## Trade Replay : options PRO visibles en free
+- En free (PRO actif sur le site, user non abonné), le panneau Customize du Replay affiche TOUTES les options : le choix par défaut de chaque groupe est utilisable, toute autre valeur (couleurs, intro, texte, graphe, caméra, vitesse, fond, effets, effet de vente, son, fin, langue), les interrupteurs « Show » et les préréglages autres que Hype portent la pastille PRO et ouvrent le paywall. Bandeau GO PRO en haut du panneau.
+- Sécurité inchangée : le rendu ignore toute option tant que le code studio PRO n'est pas chargé (servi par l'edge function `pro` aux seuls abonnés).
