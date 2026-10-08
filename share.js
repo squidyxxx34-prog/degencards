@@ -159,7 +159,7 @@ function presetBg(ctx, W, H, kind, main, t, p, u){
     for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
   }
 }
-/* STORY: the SIMPLE card stays a card (4:5, rounded, floating) on a darker, blurred backdrop + CTA, not a full-screen video frame */
+/* STORY and POST: the SIMPLE card stays a card (rounded, floating) on a darker, blurred backdrop + CTA, not a full-screen video frame */
 const STORY_CARD = document.createElement('canvas');
 function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   const so = { ...simpleOpts(), ...(opt.so || {}) }, u = W / 1080, win = t.pnl >= 0;
@@ -173,11 +173,11 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   const v = ctx.createRadialGradient(W / 2, H * 0.45, W * 0.3, W / 2, H * 0.5, H * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
   // the card, rendered at its own resolution (4:5)
-  const cw = Math.round(W - 2 * 72 * u), ch = Math.round(cw * 1.25), r = 46 * u;
+  const story = H / W > 1.5, cw = Math.round(W - 2 * (story ? 72 : 96) * u), ch = Math.round(cw * (story ? 1.25 : 1.2)), r = (story ? 46 : 40) * u;
   if(STORY_CARD.width !== cw || STORY_CARD.height !== ch){ STORY_CARD.width = cw; STORY_CARD.height = ch; }
   const cc = STORY_CARD.getContext('2d'); cc.setTransform(1, 0, 0, 1, 0, 0); cc.clearRect(0, 0, cw, ch);
   drawSimple(cc, cw, ch, t, meta, p, { ...opt, inner:true });
-  const ctaH = 210 * u, cx = W / 2, cy = (H - ctaH) / 2 + 30 * u;
+  const ctaH = (story ? 210 : 150) * u, cx = W / 2, cy = (H - ctaH) / 2 + (story ? 30 : 18) * u;
   const k = easeOutBack(seg(p, 0, 0.2)), e = easeOut(seg(p, 0, 0.2));
   ctx.save();
   ctx.translate(cx, cy + (1 - e) * 90 * u); ctx.rotate((1 - e) * -0.05); ctx.scale(0.9 + 0.1 * k, 0.9 + 0.1 * k);
@@ -194,14 +194,14 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   // CTA under the card
   const a = easeOut(seg(p, 0.55, 0.7)); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16 * u;
-  ctx.font = `800 ${40 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, H - 118 * u + (1 - a) * 16 * u);
-  ctx.font = `700 ${30 * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, H - 68 * u + (1 - a) * 16 * u);
+  ctx.font = `800 ${(story ? 40 : 32) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, H - (story ? 118 : 84) * u + (1 - a) * 16 * u);
+  ctx.font = `700 ${(story ? 30 : 24) * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, H - (story ? 68 : 44) * u + (1 - a) * 16 * u);
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   const intro = easeOut(seg(p, 0, 0.04)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
 }
 function drawSimple(ctx, W, H, t, meta, p, opt){
-  if(H / W > 1.5 && !opt.inner) return drawSimpleStory(ctx, W, H, t, meta, p, opt);
+  if(!opt.inner && W <= H * 1.2) return drawSimpleStory(ctx, W, H, t, meta, p, opt);      // post + story = floating card; wide stays full-bleed
   const so = { ...simpleOpts(), ...(opt.so || {}) };
   const win = t.pnl >= 0, own = bgReady();
   const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
