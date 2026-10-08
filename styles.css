@@ -653,13 +653,15 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .radar-list{display:flex; flex-direction:column; gap:10px;}
 .radar-item{background:var(--surf); border:1px solid var(--border); border-radius:14px; overflow:hidden; transition:border-color .15s;}
 .radar-item.open{border-color:rgba(192,158,255,.45);}
-.radar-row{display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; text-align:left; min-height:64px;}
+.radar-head{display:flex; align-items:center; gap:4px; padding-right:12px;}
+.radar-row{display:flex; align-items:center; gap:12px; flex:1; min-width:0; padding:12px 6px 12px 14px; text-align:left; min-height:64px;}
 .radar-row:hover{background:rgba(255,255,255,.02);}
 .radar-row:focus-visible{outline:2px solid var(--purple); outline-offset:-2px;}
 .radar-main{display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;}
 .radar-tk{font-weight:800; font-size:15px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; min-width:0;}
 .radar-name{font-weight:500; font-size:13px; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;}
 .radar-tag{font-size:10px; font-weight:700; letter-spacing:.04em; color:var(--purple); background:rgba(192,158,255,.12); padding:2px 6px; border-radius:5px;}
+.radar-tag.live{color:#fff; background:var(--red);}
 .radar-meta{font-family:var(--mono); font-size:12px; color:var(--tx2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .radar-score{display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:58px; height:48px; border-radius:11px; flex-shrink:0;
   background:rgba(61,255,160,.08); border:1px solid rgba(61,255,160,.35); color:var(--green);}
@@ -688,3 +690,52 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
   .radar-checks li{grid-template-columns:18px 1fr; }
   .radar-checks .rc-d{grid-column:2;}
 }
+
+/* RADAR v2 : liens, infos, graphique */
+.radar-open{display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:52px; height:48px; border-radius:11px; flex-shrink:0;
+  background:var(--tx); color:#000; text-decoration:none; font-size:10px; font-weight:800; letter-spacing:.06em;}
+.radar-open:hover{background:var(--purple);}
+.radar-open:focus-visible{outline:2px solid var(--purple); outline-offset:2px;}
+.rd-venues{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 12px;}
+.rd-venue{display:flex; flex-direction:column; gap:3px; padding:12px; min-height:56px; border-radius:11px; text-decoration:none; color:var(--tx);
+  background:var(--surf2); border:1px solid var(--border); transition:border-color .15s, transform .15s;}
+.rd-venue b{display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:14px;}
+.rd-venue small{font-size:11px; color:var(--tx2);}
+.rd-venue:hover{border-color:rgba(192,158,255,.6); transform:translateY(-1px);}
+.rd-venue.pump{background:linear-gradient(135deg,rgba(61,255,160,.14),rgba(61,255,160,.04)); border-color:rgba(61,255,160,.45);}
+.rd-chart{background:#0B0B10; border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:12px;}
+.rd-chart-bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); flex-wrap:wrap;}
+.rd-tfs{display:flex; gap:4px;}
+.rd-tfs button{min-width:38px; min-height:32px; padding:4px 8px; border-radius:7px; font-family:var(--mono); font-size:12px; font-weight:700; color:var(--tx2);}
+.rd-tfs button.active{color:var(--tx); background:var(--surf2); box-shadow:inset 0 0 0 1px var(--border);}
+.rd-chart-unit{font-size:10px; font-weight:700; letter-spacing:.08em; color:var(--tx2);}
+.rd-chart-box{position:relative; height:340px;}
+.rd-chart-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; padding:20px; text-align:center;
+  color:var(--tx2); font-size:13px; background:#0B0B10; z-index:3;}
+.rd-chart-msg a{color:var(--purple); font-weight:700;}
+.rd-chart-foot{padding:6px 10px; font-size:10.5px; color:var(--tx2); border-top:1px solid var(--border);}
+.rd-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:12px;}
+.rd-stat{background:var(--surf); padding:10px 12px; display:flex; flex-direction:column; gap:4px; min-width:0;}
+.rd-stat span{font-size:11px; color:var(--tx2);}
+.rd-stat b{font-family:var(--mono); font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.rd-stat b small{font-size:11px; font-weight:500;}
+.rd-na{color:var(--tx2);}
+.rd-curve{margin-bottom:12px;}
+.rd-curve-top{display:flex; justify-content:space-between; font-size:12px; color:var(--tx2); margin-bottom:6px;}
+.rd-curve-top b{color:var(--green); font-family:var(--mono);}
+.rd-bar{height:8px; border-radius:6px; background:var(--surf2); overflow:hidden;}
+.rd-bar i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--green),var(--gold));}
+.rd-about{background:var(--surf2); border-radius:12px; padding:12px; margin-bottom:12px;}
+.rd-socials{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+.rd-socials a{display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:6px 12px; border-radius:8px; background:var(--surf); border:1px solid var(--border);
+  font-size:12px; font-weight:700; color:var(--tx); text-decoration:none;}
+.rd-socials a small{font-weight:500; color:var(--tx2); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rd-desc{font-size:13px; line-height:1.5; color:var(--tx); overflow-wrap:anywhere;}
+.rd-src{font-size:11px; color:var(--tx2); margin-top:6px;}
+.rd-h{font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--tx2); margin:4px 0 0;}
+@media(max-width:760px){
+  .rd-venues{grid-template-columns:repeat(2,1fr);}
+  .rd-stats{grid-template-columns:repeat(2,1fr);}
+  .rd-chart-box{height:280px;}
+}
+@media(max-width:400px){ .radar-meta{font-size:11px;} .radar-score{min-width:50px;} .radar-open{min-width:46px;} }

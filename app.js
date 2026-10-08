@@ -1092,17 +1092,17 @@ function goToView(v){
 }
 
 /* ---------- RADAR: active Solana tokens with an on-chain safety score (filled by the `radar` edge function) ---------- */
+const RADAR_COLS = 'mint,symbol,name,source,graduated,image,score,checks,mc,liq,vol_h1,vol_h24,buys_h1,sells_h1,buys_h24,sells_h24,change_m5,change_h1,change_h6,change_h24,top10_pct,biggest_pct,dev_pct,supply,curve_pct,live,description,links,pair,pairs,created_at_ms,scanned_at';
 const radar = {
   rows: [], min: 80, sort: 'score', timer: null, loading: false, openMint: null, loadedAt: 0, failed: false,
   open(){ if(Date.now()-this.loadedAt > 30000) this.load(); else this.render(); clearInterval(this.timer); this.timer = setInterval(()=>{ if(!document.hidden) this.load(); }, 60000); },
-  close(){ clearInterval(this.timer); this.timer = null; },
+  close(){ clearInterval(this.timer); this.timer = null; radarChart.stop(); },
   async load(){
     if(this.loading) return; this.loading = true;
     if(!this.rows.length) document.getElementById('radarList').innerHTML = `<div class="radar-skel"></div><div class="radar-skel"></div><div class="radar-skel"></div>`;
     try{
       const since = new Date(Date.now() - 45*60000).toISOString();
-      const {data, error} = await sb.from('radar_tokens')
-        .select('mint,symbol,name,source,graduated,image,score,checks,mc,liq,vol_h1,buys_h1,sells_h1,change_h1,top10_pct,dev_pct,created_at_ms,scanned_at')
+      const {data, error} = await sb.from('radar_tokens').select(RADAR_COLS)
         .gte('score', 80).gt('scanned_at', since).order('score', {ascending:false}).limit(80);
       if(error) throw error;
       this.rows = (data||[]).map(radarRow).filter(Boolean); this.failed = false; this.loadedAt = Date.now();
@@ -1119,51 +1119,228 @@ const radar = {
     const last = this.rows.reduce((m,r)=>Math.max(m, r.scannedAt), 0);
     document.getElementById('radarFoot').textContent = this.failed ? 'Radar unavailable right now. Retrying every minute.'
       : last ? 'Last scan '+radarAgo(last)+' ago · refreshes every minute' : '';
+    radarChart.park();                                                  // keep the live chart alive across re-renders
     if(!rows.length){
       list.innerHTML = this.failed ? '' : `<div class="empty"><b>NOTHING ABOVE ${this.min} RIGHT NOW.</b>The radar rescans active tokens every 5 minutes. Most don't pass.</div>`;
+      if(!this.failed) radarChart.stop();
       return;
     }
     list.innerHTML = rows.map(r=>radarCardHTML(r, r.mint===this.openMint)).join('');
+    const open = rows.find(r=>r.mint===this.openMint);
+    if(open) radarChart.mount(open, list.querySelector('.radar-chart-slot')); else radarChart.stop();
   }
 };
 function radarAgo(ts){ const s = Math.max(0, Math.round((Date.now()-ts)/1000)); if(s<60) return s+'s'; const m=Math.round(s/60); if(m<60) return m+' min'; const h=Math.round(m/60); return h<48 ? h+' h' : Math.round(h/24)+' days'; }
+const RADAR_LINK_KINDS = { x:'X', telegram:'Telegram', discord:'Discord', tiktok:'TikTok', youtube:'YouTube', website:'Website' };
+function radarLink(l){
+  if(!l || typeof l !== 'object' || !RADAR_LINK_KINDS[l.t]) return null;
+  try{ const u = new URL(String(l.u||'')); if(u.protocol !== 'https:' || u.username || u.password) return null;
+    const s = u.toString(); return s.length <= 200 ? { t:l.t, u:s, host:u.hostname.replace(/^www\./,'') } : null; }catch(_){ return null; }
+}
 function radarRow(r){
   if(!r || !B58.test(String(r.mint||''))) return null;
   const n = (v,max)=> v==null ? null : num(v, -1e15, max);
   const checks = (Array.isArray(r.checks)?r.checks:[]).slice(0,12).filter(c=>c && typeof c==='object')
     .map(c=>({ s: [0,1,2].includes(c.s)?c.s:0, t: String(c.t||'').slice(0,40), d: String(c.d||'').slice(0,120) }));
+  const pairs = [...new Set([r.pair, ...(Array.isArray(r.pairs)?r.pairs:[])].filter(p=>typeof p==='string' && B58.test(p)))].slice(0,4);
   return { mint:r.mint, symbol:cleanTicker(r.symbol)||'?', name:String(r.name||'').replace(/[\u0000-\u001f]/g,'').slice(0,64),
-    pump: r.source==='pumpfun', graduated: !!r.graduated, image: safeImg(r.image), score: num(r.score,0,100),
-    checks, mc:n(r.mc,1e15)||0, liq:n(r.liq,1e15)||0, volH1:n(r.vol_h1,1e15)||0, buys:num(r.buys_h1,0,1e7), sells:num(r.sells_h1,0,1e7),
-    changeH1:n(r.change_h1,1e7), top10:n(r.top10_pct,100), dev:n(r.dev_pct,100), createdAt:n(r.created_at_ms,4102444800000), scannedAt: Date.parse(r.scanned_at)||0 };
+    pump: r.source==='pumpfun', graduated: !!r.graduated, image: safeImg(r.image), score: num(r.score,0,100), checks, pairs,
+    mc:n(r.mc,1e15)||0, liq:n(r.liq,1e15)||0, volH1:n(r.vol_h1,1e15)||0, volH24:n(r.vol_h24,1e15)||0,
+    buys:num(r.buys_h1,0,1e7), sells:num(r.sells_h1,0,1e7), buys24:num(r.buys_h24,0,1e8), sells24:num(r.sells_h24,0,1e8),
+    chM5:n(r.change_m5,1e7), changeH1:n(r.change_h1,1e7), chH6:n(r.change_h6,1e7), chH24:n(r.change_h24,1e7),
+    top10:n(r.top10_pct,100), biggest:n(r.biggest_pct,100), dev:n(r.dev_pct,100), supply:n(r.supply,1e18),
+    curve: r.curve_pct==null ? null : num(r.curve_pct,0,100), live: !!r.live,
+    desc: String(r.description||'').replace(/[\u0000-\u001f]/g,' ').slice(0,280),
+    links: (Array.isArray(r.links)?r.links:[]).map(radarLink).filter(Boolean).slice(0,5),
+    createdAt:n(r.created_at_ms,4102444800000), scannedAt: Date.parse(r.scanned_at)||0 };
 }
+/* where to open the coin: the launchpad / screeners every degen uses (all keyed by the mint) */
+function radarVenues(r){
+  return [
+    r.pump ? { k:'pump', name:'pump.fun', sub: r.graduated ? 'Coin page' : 'Bonding curve', url:`https://pump.fun/coin/${r.mint}` } : null,
+    { k:'dex', name:'DexScreener', sub:'Live chart', url:`https://dexscreener.com/solana/${r.mint}` },
+    { k:'gmgn', name:'GMGN', sub:'Holders, traders', url:`https://gmgn.ai/sol/token/${r.mint}` },
+    { k:'bird', name:'Birdeye', sub:'Token stats', url:`https://birdeye.so/token/${r.mint}?chain=solana` },
+  ].filter(Boolean);
+}
+const radarPct = v => v==null ? '<span class="rd-na">—</span>' : `<span class="${v>=0?'pos':'neg'}">${fmt.pct(v)}</span>`;
 function radarCardHTML(r, isOpen){
-  const ch = r.changeH1==null ? '' : `<span class="${r.changeH1>=0?'pos':'neg'}">${fmt.pct(r.changeH1)}</span>`;
   const tier = r.score>=90 ? 'hi' : 'ok';
   const age = r.createdAt ? radarAgo(r.createdAt) : '—';
+  const v = radarVenues(r), main = v[0];
   const mark = s => s===2 ? icon('check',14,'var(--green)') : s===1 ? icon('minus',14,'var(--gold)') : icon('x',14,'var(--red)');
-  const links = [
-    r.pump ? `<a href="https://pump.fun/coin/${r.mint}" target="_blank" rel="noopener noreferrer">pump.fun</a>` : '',
-    `<a href="https://dexscreener.com/solana/${r.mint}" target="_blank" rel="noopener noreferrer">DexScreener</a>`,
-    `<a href="https://rugcheck.xyz/tokens/${r.mint}" target="_blank" rel="noopener noreferrer">RugCheck</a>`,
-    `<a href="https://solscan.io/token/${r.mint}" target="_blank" rel="noopener noreferrer">Solscan</a>`].join('');
+  const ext = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6 M20 4l-9 9 M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>`;
+  const tag = r.pump ? `<span class="radar-tag">${r.graduated ? 'PUMP · GRADUATED' : 'PUMP · CURVE'}</span>` : '';
+  const live = r.live ? '<span class="radar-tag live">LIVE</span>' : '';
+  const stat = (k, val) => `<div class="rd-stat"><span>${k}</span><b>${val}</b></div>`;
+  const curve = r.pump && !r.graduated && r.curve!=null
+    ? `<div class="rd-curve"><div class="rd-curve-top"><span>Bonding curve</span><b>${r.curve.toFixed(1)}%</b></div><div class="rd-bar"><i style="width:${r.curve.toFixed(1)}%"></i></div></div>` : '';
   return `<div class="radar-item${isOpen?' open':''}" data-mint="${r.mint}">
-    <button type="button" class="radar-row" aria-expanded="${isOpen}" aria-label="${esc(tk(r.symbol))}, safety score ${r.score}">
-      ${coinImg({image:r.image, ticker:r.symbol}, 40)}
-      <span class="radar-main">
-        <span class="radar-tk">${esc(tk(r.symbol))}<span class="radar-name">${esc(r.name)}</span>${r.pump?`<span class="radar-tag">${r.graduated?'PUMP · GRADUATED':'PUMP · CURVE'}</span>`:''}</span>
-        <span class="radar-meta">MC ${fmt.mc(r.mc)} · Vol 1h ${fmt.mc(r.volH1)} · ${ch ? '1h '+ch+' · ' : ''}${age}</span>
-      </span>
-      <span class="radar-score ${tier}"><b>${r.score}</b><small>SAFETY</small></span>
-    </button>
+    <div class="radar-head">
+      <button type="button" class="radar-row" aria-expanded="${isOpen}" aria-label="${esc(tk(r.symbol))}, safety score ${r.score}. Show details and chart">
+        ${coinImg({image:r.image, ticker:r.symbol}, 40)}
+        <span class="radar-main">
+          <span class="radar-tk">${esc(tk(r.symbol))}<span class="radar-name">${esc(r.name)}</span>${tag}${live}</span>
+          <span class="radar-meta">MC ${fmt.mc(r.mc)} · Vol 1h ${fmt.mc(r.volH1)} · ${r.changeH1!=null ? '1h '+radarPct(r.changeH1)+' · ' : ''}${age}</span>
+        </span>
+        <span class="radar-score ${tier}"><b>${r.score}</b><small>SAFETY</small></span>
+      </button>
+      <a class="radar-open" href="${main.url}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(tk(r.symbol))} on ${main.name}">${ext}<span>${main.k==='pump'?'PUMP':'OPEN'}</span></a>
+    </div>
     ${isOpen ? `<div class="radar-detail">
+      <div class="rd-venues">${v.map(x=>`<a class="rd-venue ${x.k}" href="${x.url}" target="_blank" rel="noopener noreferrer"><b>${x.name} ${ext}</b><small>${x.sub}</small></a>`).join('')}</div>
+      <div class="radar-chart-slot"></div>
+      <div class="rd-stats">
+        ${stat('Market cap', fmt.mc(r.mc))}${stat('Liquidity', r.pump && !r.graduated ? 'Curve' : fmt.mc(r.liq))}${stat('Vol 1h', fmt.mc(r.volH1))}${stat('Vol 24h', fmt.mc(r.volH24))}
+        ${stat('5m', radarPct(r.chM5))}${stat('1h', radarPct(r.changeH1))}${stat('6h', radarPct(r.chH6))}${stat('24h', radarPct(r.chH24))}
+        ${stat('Trades 24h', `${(r.buys24+r.sells24).toLocaleString('en-US')} <small><span class="pos">${r.buys24.toLocaleString('en-US')}B</span> / <span class="neg">${r.sells24.toLocaleString('en-US')}S</span></small>`)}
+        ${stat('Top 10', r.top10!=null ? r.top10.toFixed(1)+'%' : '—')}${stat('Biggest holder', r.biggest!=null ? r.biggest.toFixed(1)+'%' : '—')}${stat('Dev holds', r.dev!=null ? r.dev.toFixed(1)+'%' : '—')}
+        ${stat('Age', age)}
+      </div>
+      ${curve}
+      ${r.links.length || r.desc ? `<div class="rd-about">
+        ${r.links.length ? `<div class="rd-socials">${r.links.map(l=>`<a href="${esc(l.u)}" target="_blank" rel="noopener noreferrer nofollow ugc">${RADAR_LINK_KINDS[l.t]}${l.t==='website'?` <small>${esc(l.host)}</small>`:''}</a>`).join('')}</div>` : ''}
+        ${r.desc ? `<p class="rd-desc">${esc(r.desc)}</p>` : ''}
+        <p class="rd-src">Links and description come from the coin's creator. Check them before trusting them.</p>
+      </div>` : ''}
+      <h4 class="rd-h">SAFETY CHECKS · ${r.score}/100</h4>
       <ul class="radar-checks">${r.checks.map(c=>`<li>${mark(c.s)}<span class="rc-t">${esc(c.t)}</span><span class="rc-d">${esc(c.d)}</span></li>`).join('')}</ul>
-      <div class="radar-stats"><span>Liquidity <b>${fmt.mc(r.liq)}</b></span><span>Trades 1h <b>${r.buys+r.sells}</b></span>${r.top10!=null?`<span>Top 10 <b>${r.top10.toFixed(1)}%</b></span>`:''}${r.dev!=null?`<span>Dev <b>${r.dev.toFixed(1)}%</b></span>`:''}</div>
-      <div class="radar-links">${links}<button type="button" class="radar-copy" data-mint="${r.mint}">${icon('copy',13)} COPY CA</button></div>
+      <div class="radar-links">
+        <a href="https://rugcheck.xyz/tokens/${r.mint}" target="_blank" rel="noopener noreferrer">RugCheck</a>
+        <a href="https://solscan.io/token/${r.mint}" target="_blank" rel="noopener noreferrer">Solscan</a>
+        <button type="button" class="radar-copy" data-mint="${r.mint}">${icon('copy',13)} COPY CA</button>
+      </div>
       <p class="radar-warn">Checked ${radarAgo(r.scannedAt)} ago. Fewer rug signals is not a guarantee. DYOR, not financial advice.</p>
     </div>` : ''}
   </div>`;
 }
+
+/* ---------- RADAR chart: real candles (GeckoTerminal OHLCV) drawn with TradingView Lightweight Charts, self-hosted ---------- */
+const LWC_SRC = '/vendor/lightweight-charts.js', LWC_SRI = 'sha384-KkYqTZlM13Zya6fVUF3IGCBOQ1ehFeJVVgxaVvD/0MebineF9EI8Jkd3NnWNChqN';
+let lwcLoading = null;
+function loadLwc(){
+  if(window.LightweightCharts) return Promise.resolve(true);
+  return lwcLoading || (lwcLoading = new Promise(res=>{
+    const sc = document.createElement('script'); sc.src = LWC_SRC; sc.integrity = LWC_SRI; sc.async = true;
+    sc.onload = ()=>res(!!window.LightweightCharts); sc.onerror = ()=>{ lwcLoading = null; res(false); };
+    document.head.appendChild(sc);
+  }));
+}
+const RADAR_TF = [
+  { k:'1m', path:'minute', agg:1, sec:60 }, { k:'5m', path:'minute', agg:5, sec:300 }, { k:'15m', path:'minute', agg:15, sec:900 },
+  { k:'1h', path:'hour', agg:1, sec:3600 }, { k:'4h', path:'hour', agg:4, sec:14400 }, { k:'1D', path:'day', agg:1, sec:86400 } ];
+async function radarGt(path){                                          // direct call (the card-chart queue can be busy), shares its pacing
+  for(let k=0; k<2; k++){
+    const wait = gtLast + 1200 - Date.now(); if(wait > 0 && wait < 25000) await new Promise(r=>setTimeout(r, wait));
+    gtLast = Date.now();
+    try{
+      const r = await fetch(GT + path, { headers:{ Accept:'application/json' } });
+      if(r.status === 429){ await new Promise(res=>setTimeout(res, 3000)); continue; }
+      return r.ok ? await r.json() : null;
+    }catch(_){ return null; }
+  }
+  return 'busy';
+}
+function radarFmtY(v, mc){
+  if(mc) return fmt.mc(v);
+  const a = Math.abs(v); if(!a) return '$0';
+  if(a >= 1) return '$'+v.toFixed(a >= 1000 ? 0 : 2);
+  const z = Math.max(0, -Math.floor(Math.log10(a)) - 1);              // 0.0000123 -> keep 3 significant digits
+  return '$'+v.toFixed(Math.min(14, z + 3));
+}
+const radarChart = {
+  mint: null, row: null, host: null, chart: null, candles: null, vols: null, tf: null, pool: null, timer: null, seq: 0, mcMode: false,
+  defaultTf(r){ const h = r.createdAt ? (Date.now()-r.createdAt)/3600e3 : 999; return h < 3 ? '1m' : h < 24 ? '5m' : h < 168 ? '15m' : '1h'; },
+  park(){ if(this.host && this.host.parentNode) this.host.parentNode.removeChild(this.host); },
+  stop(){
+    clearInterval(this.timer); this.timer = null; this.seq++;
+    try{ this.chart && this.chart.remove(); }catch(_){}
+    this.chart = this.candles = this.vols = null; this.mint = this.row = this.pool = null;
+    if(this.host){ this.park(); this.host = null; }
+  },
+  mount(r, slot){
+    if(!slot) return;
+    if(this.mint === r.mint && this.host){ this.row = r; slot.appendChild(this.host); return; }   // same coin: just put it back
+    this.stop();
+    this.mint = r.mint; this.row = r; this.tf = this.defaultTf(r); this.mcMode = !!(r.supply > 0);
+    const h = document.createElement('div'); h.className = 'rd-chart';
+    h.innerHTML = `<div class="rd-chart-bar"><div class="rd-tfs" role="group" aria-label="Candle size">${RADAR_TF.map(t=>`<button type="button" data-tf="${t.k}" class="${t.k===this.tf?'active':''}" aria-pressed="${t.k===this.tf}">${t.k}</button>`).join('')}</div>
+      <span class="rd-chart-unit">${this.mcMode ? 'MARKET CAP' : 'PRICE'} · USD</span></div>
+      <div class="rd-chart-box"><div class="rd-chart-msg">Loading chart…</div></div>
+      <div class="rd-chart-foot">Real trades · GeckoTerminal data · Chart by TradingView Lightweight Charts™ · refreshes every 30 s</div>`;
+    h.querySelector('.rd-tfs').addEventListener('click', e=>{
+      const b = e.target.closest('button'); if(!b || b.dataset.tf === this.tf) return;
+      this.tf = b.dataset.tf;
+      h.querySelectorAll('.rd-tfs button').forEach(x=>{ const on = x.dataset.tf===this.tf; x.classList.toggle('active', on); x.setAttribute('aria-pressed', String(on)); });
+      this.load(true);
+    });
+    this.host = h; slot.appendChild(h);
+    this.load(true);
+    this.timer = setInterval(()=>{ if(!document.hidden && view==='radar') this.load(false); }, 30000);
+  },
+  msg(t){ const box = this.host && this.host.querySelector('.rd-chart-box'); if(!box) return;
+    let m = box.querySelector('.rd-chart-msg'); if(!t){ if(m) m.remove(); return; }
+    if(!m){ m = document.createElement('div'); m.className = 'rd-chart-msg'; box.appendChild(m); } m.innerHTML = t; },
+  async ensureChart(){
+    if(this.chart) return true;
+    if(!await loadLwc()) return false;
+    const LW = window.LightweightCharts, box = this.host && this.host.querySelector('.rd-chart-box'); if(!box) return false;
+    const mc = this.mcMode;
+    this.chart = LW.createChart(box, {
+      autoSize: true,
+      layout: { background:{ type:'solid', color:'transparent' }, textColor:'#ADADB8', fontSize:11, fontFamily:"'JetBrains Mono', monospace", attributionLogo:true },
+      grid: { vertLines:{ color:'rgba(255,255,255,.04)' }, horzLines:{ color:'rgba(255,255,255,.05)' } },
+      rightPriceScale: { borderColor:'rgba(255,255,255,.12)' },
+      timeScale: { borderColor:'rgba(255,255,255,.12)', timeVisible:true, secondsVisible:false, rightOffset:4 },
+      crosshair: { mode: LW.CrosshairMode.Normal },
+      localization: { priceFormatter: v=>radarFmtY(v, mc) },
+    });
+    this.candles = this.chart.addSeries(LW.CandlestickSeries, { upColor:'#3DFFA0', downColor:'#FF5C6C', wickUpColor:'#3DFFA0', wickDownColor:'#FF5C6C',
+      borderVisible:false, priceFormat:{ type:'custom', minMove:1e-12, formatter: v=>radarFmtY(v, mc) } });
+    this.candles.priceScale().applyOptions({ scaleMargins:{ top:0.08, bottom:0.24 } });
+    this.vols = this.chart.addSeries(LW.HistogramSeries, { priceFormat:{ type:'volume' }, priceScaleId:'vol', lastValueVisible:false, priceLineVisible:false });
+    this.chart.priceScale('vol').applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+    return true;
+  },
+  async fetch(r, tf){
+    const t = RADAR_TF.find(x=>x.k===tf) || RADAR_TF[1];
+    const q = `ohlcv/${t.path}?aggregate=${t.agg}&limit=300&currency=usd&token=${r.mint}`;
+    const tryPool = async p => { const j = await radarGt(`/pools/${p}/${q}`); if(j === 'busy') return 'busy';
+      const l = j?.data?.attributes?.ohlcv_list; return Array.isArray(l) && l.length ? l : null; };
+    const pools = this.pool ? [this.pool] : r.pairs.slice(0,2);
+    for(const p of pools){ const l = await tryPool(p); if(l === 'busy') return 'busy'; if(l){ this.pool = p; return l; } }
+    // not indexed under the screener's pair: ask GeckoTerminal which pools it knows for this coin
+    const j = await radarGt(`/tokens/${r.mint}/pools?page=1`); if(j === 'busy') return 'busy';
+    for(const p of (j?.data||[]).slice(0,3)){
+      const a = p?.attributes?.address; if(!B58.test(String(a||'')) || pools.includes(a)) continue;
+      const l = await tryPool(a); if(l === 'busy') return 'busy'; if(l){ this.pool = a; return l; }
+    }
+    return null;
+  },
+  async load(fresh){
+    const r = this.row; if(!r || !this.host) return;
+    const my = ++this.seq, tf = this.tf;
+    if(fresh) this.msg('Loading chart…');
+    const [ok, list] = await Promise.all([this.ensureChart(), this.fetch(r, tf)]);
+    if(my !== this.seq || r.mint !== this.mint) return;                 // another coin / timeframe was picked meanwhile
+    const dex = `<a href="https://dexscreener.com/solana/${r.mint}" target="_blank" rel="noopener noreferrer">Open the live chart on DexScreener</a>`;
+    if(!ok){ this.msg(`Chart could not load. ${dex}`); return; }
+    if(list === 'busy'){ if(fresh) this.msg(`Chart data is busy, retrying in 30 s. ${dex}`); return; }
+    if(!list){ this.msg(`No candles indexed for this coin yet. ${dex}`); return; }
+    const k = this.mcMode ? r.supply : 1, seen = new Set(), c = [], vol = [];
+    for(const x of list.map(a=>a.map(Number)).sort((a,b)=>a[0]-b[0])){
+      const [ts,o,h,l,cl,v] = x; if(!(ts>0) || seen.has(ts) || ![o,h,l,cl].every(n=>Number.isFinite(n) && n>0)) continue;
+      seen.add(ts);
+      c.push({ time:ts, open:o*k, high:h*k, low:l*k, close:cl*k });
+      vol.push({ time:ts, value:Number.isFinite(v)?v:0, color: cl>=o ? 'rgba(61,255,160,.35)' : 'rgba(255,92,108,.35)' });
+    }
+    if(!c.length){ this.msg(`No candles indexed for this coin yet. ${dex}`); return; }
+    this.msg('');
+    this.candles.setData(c); this.vols.setData(vol);
+    if(fresh) this.chart.timeScale().fitContent();
+  }
+};
+
 document.getElementById('radarList').addEventListener('click', async e=>{
   const cp = e.target.closest('.radar-copy');
   if(cp){ try{ await navigator.clipboard.writeText(cp.dataset.mint); showToast('Contract address copied'); }catch(_){ showToast('Could not copy'); } return; }

@@ -17,6 +17,25 @@ const MIN_MC = 15_000, MIN_VOL_H1 = 3_000, MIN_TX_H1 = 40;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>&"'`\\]/g, "").trim().slice(0, n);
 const fin = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const text = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+/* the coin's own links (X, Telegram, website…): https only, no credentials, short; kind from the host */
+function link(u: unknown): { t: string; u: string } | null {
+  try {
+    const x = new URL(String(u ?? "").trim());
+    if (x.protocol !== "https:" || x.username || x.password) return null;
+    const h = x.hostname.replace(/^www\./, "").toLowerCase(), s = x.toString();
+    if (s.length > 200 || /(^|\.)(pump\.fun|dexscreener\.com)$/.test(h)) return null;
+    const t = /^(x|twitter)\.com$/.test(h) ? "x" : /^(t\.me|telegram\.me)$/.test(h) ? "telegram" : /(^|\.)discord\.(gg|com)$/.test(h) ? "discord"
+      : /(^|\.)tiktok\.com$/.test(h) ? "tiktok" : /(^|\.)(youtube\.com|youtu\.be)$/.test(h) ? "youtube" : "website";
+    return { t, u: s };
+  } catch (_) { return null; }
+}
+function links(list: unknown[]): { t: string; u: string }[] {
+  const out: { t: string; u: string }[] = [], seen = new Set<string>();
+  for (const u of list) { const l = link(u); if (l && !seen.has(l.u) && !out.some((o) => o.t === l.t && l.t !== "website")) { seen.add(l.u); out.push(l); } }
+  return out.slice(0, 5);
+}
+const CURVE_TOKENS = 793_100_000_000_000;                             // pump.fun: real token reserves of a fresh bonding curve (raw, 6 decimals)
 
 async function getJson(url: string, ms = 10_000): Promise<any> {
   try { const r = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(ms) }); return r.ok ? await r.json() : null; }
@@ -39,7 +58,17 @@ async function rpc(method: string, params: unknown[]): Promise<any> {
 }
 
 /* ---------- 1. candidates ---------- */
-type Pump = { creator: string; curve: string; pool: string; complete: boolean; name: string; symbol: string; image: string };
+type Pump = { creator: string; curve: string; pool: string; complete: boolean; name: string; symbol: string; image: string;
+  description: string; links: string[]; curvePct: number | null; live: boolean };
+function pumpInfo(c: any): Pump | null {
+  if (!B58.test(c?.mint || "") || c.is_banned || c.nsfw) return null;
+  const rtr = fin(c.real_token_reserves);
+  return { creator: B58.test(c.creator || "") ? c.creator : "", curve: B58.test(c.bonding_curve || "") ? c.bonding_curve : "",
+    pool: B58.test(c.pool_address || "") ? c.pool_address : "", complete: !!c.complete, name: clean(c.name, 64), symbol: clean(c.symbol, 24),
+    image: typeof c.image_uri === "string" ? c.image_uri : "", description: text(c.description, 280),
+    links: [c.twitter, c.telegram, c.website].filter((x) => typeof x === "string" && x),
+    curvePct: c.complete ? 100 : rtr == null ? null : Math.max(0, Math.min(100, (CURVE_TOKENS - rtr) / CURVE_TOKENS * 100)), live: !!c.is_currently_live };
+}
 async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump> }> {
   const pump = new Map<string, Pump>(), set = new Set<string>();
   const lists = await Promise.all([
@@ -48,11 +77,8 @@ async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump> 
     getJson("https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=market_cap&order=DESC&includeNsfw=false&complete=false"),
   ]);
   for (const list of lists) for (const c of Array.isArray(list) ? list : []) {
-    if (!B58.test(c?.mint || "") || c.is_banned || c.nsfw) continue;
-    set.add(c.mint);
-    pump.set(c.mint, { creator: B58.test(c.creator || "") ? c.creator : "", curve: B58.test(c.bonding_curve || "") ? c.bonding_curve : "",
-      pool: B58.test(c.pool_address || "") ? c.pool_address : "", complete: !!c.complete, name: clean(c.name, 64), symbol: clean(c.symbol, 24),
-      image: typeof c.image_uri === "string" ? c.image_uri : "" });
+    const p = pumpInfo(c); if (!p) continue;
+    set.add(c.mint); pump.set(c.mint, p);
   }
   for (const u of ["https://api.dexscreener.com/token-profiles/latest/v1", "https://api.dexscreener.com/token-boosts/latest/v1"]) {
     const arr = await getJson(u);
@@ -66,7 +92,8 @@ async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump> 
 
 /* ---------- 2. market data (DexScreener, 30 mints per call) ---------- */
 type Market = { name: string; symbol: string; mc: number; liq: number; volH1: number; volH24: number; buys: number; sells: number; changeH1: number | null;
-  createdAt: number | null; pairs: string[]; mainPair: string; image: string; dexIds: string[] };
+  createdAt: number | null; pairs: string[]; mainPair: string; image: string; dexIds: string[];
+  changeM5: number | null; changeH6: number | null; changeH24: number | null; buys24: number; sells24: number; links: string[] };
 async function markets(mints: string[]): Promise<Map<string, Market>> {
   const out = new Map<string, Market>();
   for (let i = 0; i < mints.length; i += 30) {
@@ -75,15 +102,18 @@ async function markets(mints: string[]): Promise<Map<string, Market>> {
       const mint = p?.baseToken?.address; if (!B58.test(mint || "")) continue;
       const liq = fin(p.liquidity?.usd) || 0;
       const m = out.get(mint) || { name: clean(p.baseToken.name, 64), symbol: clean(p.baseToken.symbol, 24), mc: 0, liq: 0, volH1: 0, volH24: 0, buys: 0, sells: 0,
-        changeH1: null, createdAt: null, pairs: [], mainPair: "", image: "", dexIds: [], _best: -1 } as Market & { _best: number };
+        changeH1: null, createdAt: null, pairs: [], mainPair: "", image: "", dexIds: [], changeM5: null, changeH6: null, changeH24: null, buys24: 0, sells24: 0, links: [], _best: -1 } as Market & { _best: number };
       const best = (m as any)._best;
       m.liq += liq; m.volH1 += fin(p.volume?.h1) || 0; m.volH24 += fin(p.volume?.h24) || 0;
       m.buys += fin(p.txns?.h1?.buys) || 0; m.sells += fin(p.txns?.h1?.sells) || 0;
+      m.buys24 += fin(p.txns?.h24?.buys) || 0; m.sells24 += fin(p.txns?.h24?.sells) || 0;
+      if (!m.links.length && p.info) m.links = [...(p.info.socials || []).map((x: any) => x?.url), ...(p.info.websites || []).map((x: any) => x?.url)].filter((x) => typeof x === "string");
       if (B58.test(p.pairAddress || "")) m.pairs.push(p.pairAddress);
       if (p.dexId) m.dexIds.push(String(p.dexId));
       const c = fin(p.pairCreatedAt); if (c && (!m.createdAt || c < m.createdAt)) m.createdAt = c;
       if (liq > best) {                                               // the deepest pool gives price, market cap and image
         (m as any)._best = liq; m.mc = fin(p.marketCap) || fin(p.fdv) || m.mc; m.changeH1 = fin(p.priceChange?.h1);
+        m.changeM5 = fin(p.priceChange?.m5); m.changeH6 = fin(p.priceChange?.h6); m.changeH24 = fin(p.priceChange?.h24);
         m.mainPair = B58.test(p.pairAddress || "") ? p.pairAddress : m.mainPair; if (p.info?.imageUrl) m.image = String(p.info.imageUrl);
       }
       out.set(mint, m);
@@ -191,7 +221,7 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
     else add("rugcheck", warns > 2 ? 6 : 10, 10, "RugCheck", warns ? `${warns} warning${warns > 1 ? "s" : ""}, no danger` : "No risk flagged");
   }
 
-  return { score: Math.max(0, Math.min(cap, Math.round(score))), checks, top10, devPct, holders: held.length };
+  return { score: Math.max(0, Math.min(cap, Math.round(score))), checks, top10, devPct, biggest, supply, holders: held.length };
 }
 
 /* ---------- 4. logo copied to our bucket (CSP only allows our storage) ---------- */
@@ -237,6 +267,10 @@ async function pass() {
   const mk = await markets(mints);
   const pre = mints.filter((m) => { const x = mk.get(m); return x && x.mc >= MIN_MC && x.volH1 >= MIN_VOL_H1 && x.buys + x.sells >= MIN_TX_H1; })
     .sort((a, b) => mk.get(b)!.volH1 - mk.get(a)!.volH1).slice(0, MAX_DEEP);
+  // tokens re-checked from the feed may be missing from this pass's pump.fun lists: fetch their pump.fun details one by one
+  for (const mint of pre) if (!pump.has(mint) && (mint.endsWith("pump") || mk.get(mint)!.dexIds.some((d) => d.startsWith("pump")))) {
+    const p = pumpInfo(await getJson(`https://frontend-api-v3.pump.fun/coins-v2/${mint}`, 8000)); if (p) pump.set(mint, p);
+  }
   const { data: known } = await db.from("radar_tokens").select("mint,image,image_tries").in("mint", pre.length ? pre : ["x"]);
   const prev = new Map((known || []).map((r: any) => [r.mint, r]));
   let scanned = 0, passed = 0, images = 0, errors = 0; const sample: string[] = [];
@@ -250,7 +284,10 @@ async function pass() {
       const row: any = { mint, symbol: m.symbol || pm?.symbol || "", name: m.name || pm?.name || "", source: pm ? "pumpfun" : "dex",
         graduated: !!pm?.complete || (!!pm && !m.dexIds.includes("pumpfun")), score: r.score, checks: r.checks,
         mc: m.mc || null, liq: m.liq || null, vol_h1: m.volH1, vol_h24: m.volH24, buys_h1: m.buys, sells_h1: m.sells, change_h1: m.changeH1,
-        top10_pct: r.top10, dev_pct: r.devPct, holders_checked: r.holders, created_at_ms: m.createdAt, pair: m.mainPair || null, scanned_at: new Date().toISOString() };
+        top10_pct: r.top10, dev_pct: r.devPct, holders_checked: r.holders, created_at_ms: m.createdAt, pair: m.mainPair || null, scanned_at: new Date().toISOString(),
+        supply: r.supply, biggest_pct: r.biggest, change_m5: m.changeM5, change_h6: m.changeH6, change_h24: m.changeH24, buys_h24: m.buys24, sells_h24: m.sells24,
+        curve_pct: pm?.curvePct ?? null, live: !!pm?.live, description: pm?.description || null, links: links([...(pm?.links || []), ...m.links]),
+        pairs: [...new Set([m.mainPair, ...m.pairs].filter(Boolean))].slice(0, 4) };
       const p = prev.get(mint);
       if (r.score >= 80 && !p?.image && (p?.image_tries || 0) < 3 && images < MAX_IMAGES && Date.now() < deadline - 25_000) {
         const url = await copyImage(mint, [pm?.image || "", m.image]).catch(() => null);

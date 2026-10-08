@@ -43,3 +43,18 @@ select cron.schedule('radar', '3-59/5 * * * *', $$
   select net.http_post(url := 'https://wlxyepkewatmwlziybfb.supabase.co/functions/v1/radar',
     headers := jsonb_build_object('Content-Type','application/json','x-cron-key',(select decrypted_secret from vault.decrypted_secrets where name = 'sync_cron_key')),
     body := '{}'::jsonb, timeout_milliseconds := 140000); $$);
+
+-- v2 (migration radar_tokens_more) : infos en plus pour le détail du radar
+alter table public.radar_tokens
+  add column if not exists supply      double precision,
+  add column if not exists biggest_pct double precision,
+  add column if not exists change_m5   double precision,
+  add column if not exists change_h6   double precision,
+  add column if not exists change_h24  double precision,
+  add column if not exists buys_h24    integer,
+  add column if not exists sells_h24   integer,
+  add column if not exists curve_pct   double precision,
+  add column if not exists live        boolean not null default false,
+  add column if not exists description text check (description is null or char_length(description) <= 280),
+  add column if not exists links       jsonb not null default '[]'::jsonb,
+  add column if not exists pairs       jsonb not null default '[]'::jsonb;
