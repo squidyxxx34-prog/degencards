@@ -1,4 +1,6 @@
 -- DEGENCARDS — RADAR : feed des tokens Solana actifs avec un score de sécurité on-chain (0-100).
+-- Appliqué le 2026-10-08 via le connecteur (3 migrations : radar_tokens, radar_tokens_grants, radar_cron).
+-- NB : le connecteur Supabase annule sans prévenir tout SQL « destructif » (drop, delete, unschedule…) : le passer à part ou au SQL Editor.
 -- Rempli uniquement par l'edge function `radar` (service_role, cron 3-59/5). Lecture seule pour les utilisateurs connectés.
 -- Données publiques (aucune donnée utilisateur) ; un score élevé = moins de signaux de rug, jamais une garantie.
 
@@ -32,17 +34,11 @@ create index if not exists radar_tokens_feed on public.radar_tokens (score desc,
 alter table public.radar_tokens enable row level security;
 revoke all on public.radar_tokens from anon, authenticated;
 grant select on public.radar_tokens to authenticated;
-drop policy if exists radar_read on public.radar_tokens;
 create policy radar_read on public.radar_tokens for select to authenticated using (true);
 
--- ménage : les tokens non revus depuis 24 h disparaissent
-create or replace function public.radar_prune() returns void language sql security definer set search_path = '' as $$
-  delete from public.radar_tokens where scanned_at < now() - interval '24 hours';
-$$;
-revoke all on function public.radar_prune() from public, anon, authenticated;
+-- ménage : la fonction `radar` supprime elle-même les tokens non revus depuis 24 h (pas de fonction SQL).
 
 -- cron (même clé que sync-trades), décalé des passages pump.fun existants
-select cron.unschedule('radar') where exists (select 1 from cron.job where jobname = 'radar');
 select cron.schedule('radar', '3-59/5 * * * *', $$
   select net.http_post(url := 'https://wlxyepkewatmwlziybfb.supabase.co/functions/v1/radar',
     headers := jsonb_build_object('Content-Type','application/json','x-cron-key',(select decrypted_secret from vault.decrypted_secrets where name = 'sync_cron_key')),

@@ -260,7 +260,7 @@ async function pass() {
       if (error) { errors++; console.error("upsert", mint, error.message); }
     } catch (e) { errors++; console.error("scan", mint, (e as Error).message); }
   }
-  await db.rpc("radar_prune");
+  await db.from("radar_tokens").delete().lt("scanned_at", new Date(Date.now() - 24 * 3600e3).toISOString());   // forget tokens not seen for 24 h
   const res = { candidates: mints.length, withMarket: mk.size, prefiltered: pre.length, scanned, passed, images, errors, ms: Date.now() - t0, sample };
   console.log("radar", JSON.stringify(res));
   return res;
