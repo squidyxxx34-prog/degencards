@@ -159,7 +159,49 @@ function presetBg(ctx, W, H, kind, main, t, p, u){
     for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
   }
 }
+/* STORY: the SIMPLE card stays a card (4:5, rounded, floating) on a darker, blurred backdrop + CTA, not a full-screen video frame */
+const STORY_CARD = document.createElement('canvas');
+function drawSimpleStory(ctx, W, H, t, meta, p, opt){
+  const so = { ...simpleOpts(), ...(opt.so || {}) }, u = W / 1080, win = t.pnl >= 0;
+  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
+  ctx.save();
+  // backdrop: same background as the card, blurred and darker, so the card reads as an object on top of it
+  if(bgReady()){ const b = BG.blur; BG.blur = true; drawBg(ctx, W, H, 1.12); BG.blur = b; }
+  else if(so.bg === 'coin') presetBg(ctx, W, H, 'coin', main, t, p, u);
+  else { presetBg(ctx, W, H, so.bg, main, t, p, u); }
+  ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, 0, W, H);
+  const v = ctx.createRadialGradient(W / 2, H * 0.45, W * 0.3, W / 2, H * 0.5, H * 0.75);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // the card, rendered at its own resolution (4:5)
+  const cw = Math.round(W - 2 * 72 * u), ch = Math.round(cw * 1.25), r = 46 * u;
+  if(STORY_CARD.width !== cw || STORY_CARD.height !== ch){ STORY_CARD.width = cw; STORY_CARD.height = ch; }
+  const cc = STORY_CARD.getContext('2d'); cc.setTransform(1, 0, 0, 1, 0, 0); cc.clearRect(0, 0, cw, ch);
+  drawSimple(cc, cw, ch, t, meta, p, { ...opt, inner:true });
+  const ctaH = 210 * u, cx = W / 2, cy = (H - ctaH) / 2 + 30 * u;
+  const k = easeOutBack(seg(p, 0, 0.2)), e = easeOut(seg(p, 0, 0.2));
+  ctx.save();
+  ctx.translate(cx, cy + (1 - e) * 90 * u); ctx.rotate((1 - e) * -0.05); ctx.scale(0.9 + 0.1 * k, 0.9 + 0.1 * k);
+  ctx.globalAlpha = clamp01(e * 1.4);
+  // drop shadow + soft result glow
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 90 * u; ctx.shadowOffsetY = 34 * u;
+  rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.fillStyle = '#07080B'; ctx.fill();
+  ctx.shadowColor = hexA(main, 0.35); ctx.shadowBlur = 70 * u; ctx.shadowOffsetY = 0; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+  ctx.save(); rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.clip(); ctx.drawImage(STORY_CARD, -cw / 2, -ch / 2); ctx.restore();
+  rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.stroke();
+  rrect(ctx, -cw / 2 + 3 * u, -ch / 2 + 3 * u, cw - 6 * u, ch - 6 * u, r - 3 * u); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(main, 0.22); ctx.stroke();
+  ctx.restore();
+  // CTA under the card
+  const a = easeOut(seg(p, 0.55, 0.7)); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16 * u;
+  ctx.font = `800 ${40 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, H - 118 * u + (1 - a) * 16 * u);
+  ctx.font = `700 ${30 * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, H - 68 * u + (1 - a) * 16 * u);
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  const intro = easeOut(seg(p, 0, 0.04)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
 function drawSimple(ctx, W, H, t, meta, p, opt){
+  if(H / W > 1.5 && !opt.inner) return drawSimpleStory(ctx, W, H, t, meta, p, opt);
   const so = { ...simpleOpts(), ...(opt.so || {}) };
   const win = t.pnl >= 0, own = bgReady();
   const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
