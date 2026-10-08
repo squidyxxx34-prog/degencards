@@ -104,13 +104,16 @@ function drawBg(ctx, W, H, zoom){
 /* ---------- SIMPLE card: clean PnL card (terminal style). No chart. ---------- */
 const SIMPLE_MS = 5200;
 const SO_KEY = 'dc_simple_opts';
-const SO_DEF = { big:'roi', accent:'auto', bg:'dark', stats:true, date:true, rarity:true };
+const SO_DEF = { layout:'full', big:'roi', accent:'auto', bg:'dark', coin:true, sub:true, stats:true, date:true, rarity:true, tradeNo:true };
 const SO_GROUPS = [
+  ['layout', 'Style',      [['full','Full'],['minimal','Minimal']]],
   ['big',    'Big number', [['roi','ROI %'],['pnl','PnL $']]],
   ['accent', 'Color',      [['auto','Auto'],['purple','Purple'],['gold','Gold'],['ice','Ice'],['mono','Mono']]],
   ['bg',     'Background', [['dark','Dark'],['aurora','Aurora'],['sunset','Sunset'],['matrix','Matrix'],['coin','Coin']]],
 ];
-const SO_SHOW = [['stats','Stats'],['date','Date'],['rarity','Rarity']];
+const SO_SHOW = [['coin','Coin logo'],['sub','2nd number'],['stats','Stats'],['date','Date'],['rarity','Rarity'],['tradeNo','Trade #']];
+/* Minimal = Axiom-like: flat background, no glow, 2 stat rows, fewer details (the toggles stay editable after) */
+const SO_LAYOUTS = { full:{ sub:true, date:true, rarity:true, tradeNo:true }, minimal:{ sub:false, date:false, rarity:false, tradeNo:false } };
 const SO_PRO = { accent:['purple','gold','ice','mono'], bg:['aurora','sunset','matrix','coin'] };
 const ACCENT = { purple:'#C09EFF', gold:'#FFD35C', ice:'#6EC0FF', mono:'#FFFFFF' };
 let SO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(SO_KEY) || '{}') || {}; }catch(e){} const o = { ...SO_DEF };
@@ -122,7 +125,7 @@ function simpleOpts(){                                               // free: PR
   if(proLocked()) for(const k in SO_PRO) if(SO_PRO[k].includes(o[k])) o[k] = SO_DEF[k];
   return o;
 }
-function presetBg(ctx, W, H, kind, main, t, p, u){
+function presetBg(ctx, W, H, kind, main, t, p, u, flat){
   const M = Math.max(W, H), drift = p * 0.04;
   const blob = (x, y, r, col, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, hexA(col, a)); g.addColorStop(1, hexA(col, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
   if(kind === 'coin'){
@@ -151,6 +154,9 @@ function presetBg(ctx, W, H, kind, main, t, p, u){
     for(let x = 0; x < W; x += st){ ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for(let y = -st + off; y < H; y += st){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     blob(W * 0.8, H * 0.8, M * 0.8, '#3DFFA0', 0.16);
+  } else if(flat){
+    ctx.fillStyle = '#0A0B0F'; ctx.fillRect(0, 0, W, H);
+    blob(W * 0.95, H * 1.05, M * 0.9, main, 0.10);
   } else {
     ctx.fillStyle = '#07080B'; ctx.fillRect(0, 0, W, H);
     blob(W * (0.92 - drift), H * 0.95, M * 0.85, main, 0.22);
@@ -168,7 +174,7 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   // backdrop: same background as the card, blurred and darker, so the card reads as an object on top of it
   if(bgReady()){ const b = BG.blur; BG.blur = true; drawBg(ctx, W, H, 1.12); BG.blur = b; }
   else if(so.bg === 'coin') presetBg(ctx, W, H, 'coin', main, t, p, u);
-  else { presetBg(ctx, W, H, so.bg, main, t, p, u); }
+  else { presetBg(ctx, W, H, so.bg, main, t, p, u, so.layout === 'minimal'); }
   ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, 0, W, H);
   const v = ctx.createRadialGradient(W / 2, H * 0.45, W * 0.3, W / 2, H * 0.5, H * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
@@ -185,11 +191,11 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   // drop shadow + soft result glow
   ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 90 * u; ctx.shadowOffsetY = 34 * u;
   rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.fillStyle = '#07080B'; ctx.fill();
-  ctx.shadowColor = hexA(main, 0.35); ctx.shadowBlur = 70 * u; ctx.shadowOffsetY = 0; ctx.fill();
+  if(so.layout !== 'minimal'){ ctx.shadowColor = hexA(main, 0.35); ctx.shadowBlur = 70 * u; ctx.shadowOffsetY = 0; ctx.fill(); }
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
   ctx.save(); rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.clip(); ctx.drawImage(STORY_CARD, -cw / 2, -ch / 2); ctx.restore();
   rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.stroke();
-  rrect(ctx, -cw / 2 + 3 * u, -ch / 2 + 3 * u, cw - 6 * u, ch - 6 * u, r - 3 * u); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(main, 0.22); ctx.stroke();
+  if(so.layout !== 'minimal'){ rrect(ctx, -cw / 2 + 3 * u, -ch / 2 + 3 * u, cw - 6 * u, ch - 6 * u, r - 3 * u); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(main, 0.22); ctx.stroke(); }
   ctx.restore();
   // CTA under the card
   const a = easeOut(seg(p, 0.55, 0.7)); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
@@ -202,7 +208,7 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
 }
 function drawSimple(ctx, W, H, t, meta, p, opt){
   if(!opt.inner && W <= H * 1.2) return drawSimpleStory(ctx, W, H, t, meta, p, opt);      // post + story = floating card; wide stays full-bleed
-  const so = { ...simpleOpts(), ...(opt.so || {}) };
+  const so = { ...simpleOpts(), ...(opt.so || {}) }, flat = so.layout === 'minimal';
   const win = t.pnl >= 0, own = bgReady();
   const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
   const wide = W > H * 1.2, story = H / W > 1.5, u = Math.min(W, H) / 1080;
@@ -215,13 +221,13 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
     drawBg(ctx, W, H, 1.06 - 0.06 * easeOut(seg(p, 0, 1)));
     const g = wide ? ctx.createLinearGradient(0, 0, W * 0.75, 0) : ctx.createLinearGradient(0, H, 0, H * 0.1);
     g.addColorStop(0, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  } else presetBg(ctx, W, H, so.bg, main, t, p, u);
+  } else presetBg(ctx, W, H, so.bg, main, t, p, u, flat);
   const pad = (wide ? 84 : story ? 84 : 72) * u, L = pad, Rr = W - pad, maxW = wide ? W * 0.56 : W - 2 * pad;
   const lift = own || so.bg === 'coin';                                  // text sits on an image: add a soft shadow
   const sh = on => { if(on && lift){ ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 2 * u; } else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; } };
-  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = !!(img && img.complete && img.naturalWidth);
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = so.coin && !!(img && img.complete && img.naturalWidth);
   // wide hero: the coin, big, on the right (only when the right side is ours)
-  if(wide && !own){
+  if(wide && !own && (hasImg || !flat)){
     const k = easeOutBack(seg(p, 0.06, 0.3)), s = H * 0.5, cx = W * 0.79, cy = H * 0.5 + Math.sin(p * Math.PI) * 6 * u;
     ctx.save(); ctx.globalAlpha = clamp01(k);
     for(let i = 0; i < 3; i++){ ctx.strokeStyle = hexA(main, 0.10 - i * 0.025); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(cx, cy, s * (0.78 + i * 0.2) * (0.9 + 0.1 * k), 0, Math.PI * 2); ctx.stroke(); }
@@ -264,10 +270,10 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   const bigIsPnl = so.big === 'pnl' && !opt.hideUsd;
   const bigTxt = v => bigIsPnl ? fmt.usd(t.pnl * v) : fmt.pct(t.roi * v);
   const subTxt = v => bigIsPnl ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
-  const showSub = !opt.hideUsd;
+  const showSub = !opt.hideUsd && so.sub;
   const bigSize = fitFont(ctx, bigTxt(1), 900, MONO, S.big, maxW);
   const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
-  const rows = !so.stats ? [] : money
+  const rows = !so.stats ? [] : flat ? (money ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)]] : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)]]) : money
     ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['MC', mcShort(t.entryMc) + ' → ' + mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]]
     : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
   const headH = Math.max(S.coin, S.tick) + 28 * u;
@@ -301,10 +307,10 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   const cnt = easeOut(seg(p, 0.06, 0.55));
   ctx.globalAlpha = fa(0.05, 0.14);
   ctx.font = `900 ${bigSize}px ${MONO}`; y += bigSize * 0.8;
-  const pulse = seg(p, 0.55, 0.62), glow = 50 + 40 * Math.sin(pulse * Math.PI);
+  const pulse = seg(p, 0.55, 0.62), glow = flat ? (lift ? 24 : 0) : 50 + 40 * Math.sin(pulse * Math.PI);
   ctx.fillStyle = main; ctx.shadowColor = hexA(main, lift ? 0.7 : 0.55); ctx.shadowBlur = glow * u; ctx.shadowOffsetY = 0;
   ctx.fillText(bigTxt(cnt), L - 4 * u, y); ctx.shadowBlur = 0;
-  const sw = seg(p, 0.82, 0.97);
+  const sw = flat ? 0 : seg(p, 0.82, 0.97);
   if(sw > 0 && sw < 1){
     const bw = ctx.measureText(bigTxt(1)).width, sx = L - bw * 0.3 + bw * 1.6 * easeOut(sw);
     const lg = ctx.createLinearGradient(sx - 120 * u, 0, sx + 120 * u, 0);
@@ -334,15 +340,26 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   ctx.globalAlpha = fa(0.5, 0.65); sh(true);
   ctx.textAlign = 'left'; ctx.font = `700 ${(story ? 30 : 26) * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('degencards.vercel.app', L, H - pad + 6 * u);
   ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 27 : 24) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (t.source === 'wallet' ? '  ·  ON-CHAIN' : ''), Rr, H - pad + 6 * u);
+  if(so.tradeNo) ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (t.source === 'wallet' ? '  ·  ON-CHAIN' : ''), Rr, H - pad + 6 * u);
   sh(false); ctx.globalAlpha = 1;
-  if(!opt.video && !own && so.bg !== 'coin'){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
+  if(!opt.video && !own && so.bg !== 'coin' && !flat){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
   const intro = fa(0, 0.04); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
 }
 
+/* ---------- CARD layout options (simplify the card, Axiom-like): saved on this device ---------- */
+const CO_KEY = 'dc_card_opts';
+const CO_DEF = { layout:'full', coin:true, roi:true, chart:true, stats:true, ach:true, badge:true };
+const CO_SHOW = [['coin','Coin logo'],['roi','ROI pill'],['chart','Chart'],['stats','Stats'],['ach','Achievements'],['badge','Rarity & grade']];
+const CO_LAYOUTS = { full:{ coin:true, roi:true, chart:true, stats:true, ach:true, badge:true }, clean:{ coin:true, roi:true, chart:true, stats:true, ach:false, badge:false }, minimal:{ coin:true, roi:true, chart:false, stats:true, ach:false, badge:false } };
+let CO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(CO_KEY) || '{}') || {}; }catch(e){} const o = { ...CO_DEF };
+  if(CO_LAYOUTS[v.layout]) o.layout = v.layout; for(const [k] of CO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k]; return o; })();
+/* static cards: no animation at all (image and video show the finished card) */
+let STATIC = (() => { try{ return localStorage.getItem('dc_share_static') === '1'; }catch(e){ return false; } })();
+
 /* ---------- one frame; p = animation progress 0..1 (1 = final still) ---------- */
 function drawFrame(ctx, W, H, t, meta, p, opt){
+  const co = { ...CO_SAVED, ...(opt.co || {}) }, flat = co.layout === 'minimal';
   const win = t.pnl >= 0, main = win ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8';
   const story = H / W > 1.5, u = W / 1080, inner = !!opt.inner;      // u = unit scale; 9:16 = full-size card, as before
   ctx.save();
@@ -357,7 +374,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
 
   if(!inner && !ownBg){ ctx.fillStyle = '#050507'; ctx.fillRect(-W, -H, W*3, H*3); }
   // background glows (rarity + result)
-  if(!inner && !ownBg){
+  if(!inner && !ownBg && !flat){
   let g = ctx.createRadialGradient(W*0.2, H*0.12, 0, W*0.2, H*0.12, W*1.0);
   g.addColorStop(0, hexA(rar, 0.30)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   g = ctx.createRadialGradient(W*0.85, H*0.62, 0, W*0.85, H*0.62, W*0.95);
@@ -373,7 +390,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.save();
   rrect(ctx, cx, cy, cw, chh, 44*u);
   ctx.fillStyle = 'rgba(14,14,20,0.82)'; ctx.fill();
-  ctx.lineWidth = 4*u; ctx.strokeStyle = hexA(main, 0.55); ctx.shadowColor = hexA(main, 0.6); ctx.shadowBlur = 40*u; ctx.stroke();
+  ctx.lineWidth = (flat ? 2 : 4)*u; ctx.strokeStyle = flat ? 'rgba(255,255,255,0.14)' : hexA(main, 0.55); ctx.shadowColor = hexA(main, flat ? 0 : 0.6); ctx.shadowBlur = flat ? 0 : 40*u; ctx.stroke();
   ctx.restore();
 
   const P = cx + 60*u, R = cx + cw - 60*u, midX = W/2;
@@ -388,6 +405,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.font = `600 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.fillText('#' + String(t.tradeId).padStart(4,'0') + (t.source==='wallet' ? '  ·  ON-CHAIN' : ''), P, y + 44*u);
   // grade box
+  if(co.badge){
   const gs = 92*u, gx = R - gs, gy = y - 66*u;
   rrect(ctx, gx, gy, gs, gs, 22*u); ctx.fillStyle = hexA(rar, 0.14); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = rar; ctx.stroke();
   ctx.textAlign = 'center'; ctx.fillStyle = rar; ctx.font = `900 ${56*u}px ${SANS}`; ctx.fillText(meta.grade, gx + gs/2, gy + gs/2 + 20*u);
@@ -395,12 +413,19 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.font = `800 ${24*u}px ${SANS}`; const rt = meta.rarity.toUpperCase(), rw = ctx.measureText(rt).width + 40*u;
   rrect(ctx, gx - rw - 18*u, gy + gs/2 - 24*u, rw, 48*u, 24*u); ctx.fillStyle = hexA(rar, 0.16); ctx.fill();
   ctx.fillStyle = rar; ctx.fillText(rt, gx - rw/2 - 18*u, gy + gs/2 + 9*u);
+  }
   ctx.globalAlpha = 1;
 
   // coin image (as-is, rounded square) + ticker; the space it takes is given back by the chart below
   const img = t.image ? IMG_CACHE.get(t.image) : null;
-  const hasImg = !!(img && img.complete && img.naturalWidth);
+  const hasImg = co.coin && !!(img && img.complete && img.naturalWidth);
   let extra = 0;
+  // hidden blocks give their room back: the rest of the card is re-centered
+  const achList = meta.achievements.slice(0, story ? 3 : 2).map(a => a.name);
+  const extra0 = hasImg ? (story ? 170 : 128)*u + 132*u - (story ? 230 : 175)*u : 0;
+  const freed = (co.chart ? 0 : (story ? 110 : 70)*u + (story ? 520 : 330)*u - extra0) + (co.stats ? 0 : (story ? 120 : 92)*u)
+    + (co.ach || !achList.length ? 0 : (story ? 110 : 88)*u) + (!opt.hideUsd && !co.roi ? 88*u : 0);
+  ctx.save(); ctx.translate(0, freed / 2);
   if(hasImg){
     const s = (story ? 170 : 128)*u, ix = midX - s/2, iy = y + 28*u;
     const k = easeOutBack(seg(p, 0.02, 0.14));
@@ -432,9 +457,9 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   const big = opt.hideUsd ? fmt.pct(roiNow) : fmt.usd(pnlNow);
   ctx.globalAlpha = clamp01(seg(p, 0.05, 0.1));
   fitFont(ctx, opt.hideUsd ? fmt.pct(t.roi) : fmt.usd(t.pnl), 800, MONO, (story ? 190 : 170)*u, cw - 120*u);
-  ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.75); ctx.shadowBlur = 60*u;
+  ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.75); ctx.shadowBlur = flat ? 0 : 60*u;
   ctx.fillText(big, midX, y); ctx.shadowBlur = 0;
-  if(!opt.hideUsd){
+  if(!opt.hideUsd && co.roi){
     y += 88*u;
     ctx.font = `800 ${50*u}px ${MONO}`; const rtx = fmt.pct(roiNow), rwid = ctx.measureText(fmt.pct(t.roi)).width + 56*u;
     rrect(ctx, midX - rwid/2, y - 48*u, rwid, 68*u, 34*u); ctx.fillStyle = hexA(main, 0.14); ctx.fill();
@@ -443,6 +468,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   ctx.globalAlpha = 1;
 
   // chart panel
+  if(co.chart){
   y += story ? 110*u : 70*u;
   const chH = (story ? 520*u : 330*u) - extra, chX = P, chW = R - P;
   const a3 = easeOut(seg(p, 0.12, 0.24));
@@ -452,22 +478,25 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   drawChart(ctx, t, chX + 26*u, y + 70*u, chW - 52*u, chH - 100*u, p, u, opt);
   ctx.globalAlpha = 1;
   y += chH;
+  }
 
   // stats
+  if(co.stats){
   y += story ? 120*u : 92*u;
   const a4 = easeOut(seg(p, 0.5, 0.64));
   ctx.globalAlpha = a4;
   const stats = [['ENTRY', mcShort(t.entryMc)], ['EXIT', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
-  const colW = chW / 3;
+  const colW = (R - P) / 3;
   stats.forEach(([l, v], i) => {
     const x = P + colW*i + colW/2;
     ctx.textAlign = 'center';
     ctx.font = `700 ${24*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillText(l, x, y - 44*u + (1-a4)*20*u);
     ctx.font = `800 ${46*u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(v, x, y + 8*u + (1-a4)*20*u);
   });
+  }
   // achievements
-  const ach = meta.achievements.slice(0, story ? 3 : 2).map(a => a.name);
-  if(ach.length){
+  const ach = achList;
+  if(co.ach && ach.length){
     y += story ? 110*u : 88*u;
     ctx.font = `800 ${26*u}px ${SANS}`;
     const pads = ach.map(n => ctx.measureText(n).width + 44*u), tot = pads.reduce((s,w)=>s+w,0) + 16*u*(ach.length-1);
@@ -484,6 +513,7 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
     });
   }
   ctx.globalAlpha = 1;
+  ctx.restore();                                                      // end of the re-centered block
 
   // footer (inside card)
   const a5 = easeOut(seg(p, 0.68, 0.8));
@@ -744,12 +774,12 @@ function recordAnim(W, H, total, frameAt, onProgress, audio){
     requestAnimationFrame(tick);
   });
 }
-const animMs = opt => opt.style === 'simple' ? SIMPLE_MS : VIDEO_MS;
+const animMs = opt => STATIC ? 3000 : opt.style === 'simple' ? SIMPLE_MS : VIDEO_MS;
 /* total length: with a background video, at least one full loop of it (max 15 s) */
 const videoTotal = opt => { const a = animMs(opt); return BG.kind === 'video' && bgReady() && BG.dur ? Math.max(a, Math.min(15000, Math.round(BG.dur * 1000))) : a; };
 async function recordVideo(t, meta, fmtKey, opt, onProgress){
   const F = FORMATS[fmtKey], simple = opt.style === 'simple', A = animMs(opt), total = videoTotal(opt);
-  const frame = (ctx, W, H, el) => (simple ? drawSimple : drawFrame)(ctx, W, H, t, meta, Math.min(1, el / (A - 1200)), { ...opt, video:true });   // last 1.2 s of the animation = hold
+  const frame = (ctx, W, H, el) => (simple ? drawSimple : drawFrame)(ctx, W, H, t, meta, STATIC ? 1 : Math.min(1, el / (A - 1200)), { ...opt, video:true });   // last 1.2 s of the animation = hold
   const vid = BG.kind === 'video' && bgReady();
   if(vid) BG.el.pause();
   try{ const b = await encodeOffline(F.w, F.h, total, frame, onProgress, null, vid ? bgSeek : null); if(b){ if(vid) BG.el.play().catch(()=>{}); return b; } }catch(e){ console.warn('webcodecs export failed, real-time fallback', e); }
@@ -874,7 +904,7 @@ function preview(){
       if(c !== cycle){ cycle = c; if(state.sound) playPreviewSound(); }       // soundtrack restarts with each loop
       R.draw(ctx, F.w, F.h, state.t, state.meta, Math.min(el, D), ro);
     }
-    else { const A = animMs(state), el = (performance.now() - t0) % (A + 900), p = Math.min(1, el / (A - 1200)); (state.style === 'simple' ? drawSimple : drawFrame)(ctx, F.w, F.h, state.t, state.meta, p, state); }
+    else { const A = animMs(state), el = (performance.now() - t0) % (A + 900), p = STATIC ? 1 : Math.min(1, el / (A - 1200)); (state.style === 'simple' ? drawSimple : drawFrame)(ctx, F.w, F.h, state.t, state.meta, p, state); }
     if(sheet().classList.contains('show')) state.anim = requestAnimationFrame(loop);
   };
   loop();
@@ -895,6 +925,9 @@ function syncButtons(){
   document.querySelectorAll('[data-share-fmt]').forEach(b => { if(b.dataset.shareFmt === 'wide') b.hidden = state.style !== 'simple'; b.classList.toggle('on', b.dataset.shareFmt === curFmt()); });
   syncBg();
   const sbx = document.getElementById('shareSimple'); if(sbx){ sbx.hidden = state.style !== 'simple'; if(!sbx.hidden) renderSimple(); }
+  const cbx = document.getElementById('shareCardOpts'); if(cbx){ cbx.hidden = state.style !== 'card'; if(!cbx.hidden) renderCardOpts(); }
+  const mo = document.getElementById('shareMotion'); if(mo){ mo.hidden = state.style === 'replay';
+    mo.querySelectorAll('[data-share-motion]').forEach(b => { const on = (b.dataset.shareMotion === 'static') === STATIC; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }); }
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
@@ -955,8 +988,19 @@ function renderSimple(){
     <div class="rc-group"><div class="rc-label">Show</div><div class="rc-row">${SO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-ss="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>
     ${BG.kind ? '<p class="share-note" style="margin:8px 0 0">Your own background is on: it replaces the background preset.</p>' : ''}`;
   const save = () => { try{ localStorage.setItem(SO_KEY, JSON.stringify(SO_SAVED)); }catch(e){} renderSimple(); };
-  box.querySelectorAll('[data-sk]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); SO_SAVED = { ...SO_SAVED, [b.dataset.sk]: b.dataset.sv }; save(); }));
+  box.querySelectorAll('[data-sk]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); SO_SAVED = { ...SO_SAVED, [b.dataset.sk]: b.dataset.sv, ...(b.dataset.sk === 'layout' ? SO_LAYOUTS[b.dataset.sv] : {}) }; save(); }));
   box.querySelectorAll('[data-ss]').forEach(b => b.addEventListener('click', () => { SO_SAVED = { ...SO_SAVED, [b.dataset.ss]: !SO_SAVED[b.dataset.ss] }; save(); }));
+}
+/* CARD customization: simplify the card (free) */
+function renderCardOpts(){
+  const box = document.getElementById('shareCardOpts'); if(!box) return;
+  const o = CO_SAVED, L = [['full','Full'],['clean','Clean'],['minimal','Minimal']];
+  box.innerHTML = `<div class="rc-head"><span>Customize</span></div>
+    <div class="rc-group"><div class="rc-label" id="ccl-layout">Style</div><div class="rc-row" role="radiogroup" aria-labelledby="ccl-layout">${L.map(([v, l]) => `<button type="button" class="rc-chip ${o.layout === v ? 'on' : ''}" role="radio" aria-checked="${o.layout === v}" data-cl="${v}">${l}</button>`).join('')}</div></div>
+    <div class="rc-group"><div class="rc-label">Show</div><div class="rc-row">${CO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-cs="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>`;
+  const save = () => { try{ localStorage.setItem(CO_KEY, JSON.stringify(CO_SAVED)); }catch(e){} renderCardOpts(); };
+  box.querySelectorAll('[data-cl]').forEach(b => b.addEventListener('click', () => { CO_SAVED = { ...CO_SAVED, layout:b.dataset.cl, ...CO_LAYOUTS[b.dataset.cl] }; save(); }));
+  box.querySelectorAll('[data-cs]').forEach(b => b.addEventListener('click', () => { CO_SAVED = { ...CO_SAVED, [b.dataset.cs]: !CO_SAVED[b.dataset.cs] }; save(); }));
 }
 async function pickBg(file){
   if(!file) return;
@@ -997,6 +1041,7 @@ function init(){
   document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); if(state.style === 'replay') renderCustomize(); preview(); }));
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
+  document.querySelectorAll('[data-share-motion]').forEach(b => b.addEventListener('click', () => { STATIC = b.dataset.shareMotion === 'static'; try{ localStorage.setItem('dc_share_static', STATIC ? '1' : '0'); }catch(e){} syncButtons(); preview(); }));
   document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { if(b.dataset.shareQ !== '1080' && proLocked()) return window.dcPro.open(); state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
   document.getElementById('shareBgAdd').addEventListener('click', () => { if(proLocked()) return window.dcPro.open(); document.getElementById('shareBgFile').click(); });
   document.getElementById('shareBgFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; pickBg(f); });

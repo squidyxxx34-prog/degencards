@@ -169,3 +169,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - `whop` sync (v3) ne rétrograde jamais un `gift` actif (pas de membership Whop, ou membership terminée). Un vrai abonnement Whop actif remplace la ligne.
 - Account : « PRO offered by DEGENCARDS », pas de bouton MANAGE.
 - Retirer un cadeau : `delete from public.subscriptions where plan_id = 'gift' and user_id = '…';` (ou tous). Offrir à une date limite : mettre `renews_at`.
+
+## Partage : cartes statiques + cartes simplifiées
+- « Motion : Animated / Static » (CARD et SIMPLE, pas le Replay), mémorisé (`localStorage dc_share_static`). Static = aucune animation : aperçu et vidéo montrent la carte finie (vidéo 3 s, ou la longueur de la vidéo de fond).
+- CARD : panneau Customize (gratuit, `localStorage dc_card_opts`) : Style Full / Clean (sans badges ni rareté) / Minimal (sans graphe, look plat sans halo ni grille), + interrupteurs Coin logo, ROI pill, Chart, Stats, Achievements, Rarity & grade. Les blocs masqués rendent leur place : le contenu est recentré.
+- SIMPLE : Style Full / Minimal (façon Axiom : fond plat, pas de halo ni reflet, 2 lignes Invested / Sold) + interrupteurs Coin logo, 2nd number, Stats, Date, Rarity, Trade #. Choisir Minimal coupe 2nd number / Date / Rarity / Trade # (rallumables).
