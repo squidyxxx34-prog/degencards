@@ -170,7 +170,7 @@ function presetBg(ctx, W, H, kind, main, t, p, u, flat){
 const STORY_CARD = document.createElement('canvas');
 function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   const so = { ...simpleOpts(), ...(opt.so || {}) }, u = W / 1080, win = t.pnl >= 0, story = H / W > 1.5;
-  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
+  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : ACCENT[so.accent];
   const img = t.image ? IMG_CACHE.get(t.image) : null, hero = story && so.coin && !!(img && img.complete && img.naturalWidth);
   ctx.save();
   // backdrop: same background as the card, blurred and darker, so the card reads as an object on top of it
@@ -231,7 +231,7 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   if(!opt.inner && W <= H * 1.2) return drawSimpleStory(ctx, W, H, t, meta, p, opt);      // post + story = floating card; wide stays full-bleed
   const so = { ...simpleOpts(), ...(opt.so || {}) }, flat = so.layout === 'minimal';
   const win = t.pnl >= 0, own = bgReady();
-  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
+  const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : ACCENT[so.accent];
   const inner = !!opt.inner, wide = !inner && W > H * 1.2, story = !inner && H / W > 1.5, u = inner ? W / 980 : Math.min(W, H) / 1080;
   const S = inner ? { coin:92, tick:74, big:230, pnl:68, lab:30, val:38, rowH:68, gap:52 } : story ? { coin:118, tick:84, big:250, pnl:74, lab:30, val:40, rowH:78, gap:56 } : wide ? { coin:78, tick:62, big:186, pnl:58, lab:24, val:32, rowH:56, gap:44 } : { coin:86, tick:68, big:212, pnl:62, lab:26, val:34, rowH:60, gap:48 };
   for(const k in S) S[k] *= u;
