@@ -121,6 +121,7 @@
       <button data-v="history">HISTORY</button>
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
+      <button data-v="radar">RADAR</button>
       <button data-v="account">ACCOUNT</button>
     </nav>
     <div class="headerright">
@@ -233,6 +234,26 @@
 
     <div class="detail-stats stats-3" id="statsGrid"></div>
     <button type="button" class="pro-cta" id="statsPro" hidden><span class="pro-tag">PRO</span> Unlock full stats: profit factor, streaks, drawdown, best hour, top coin…</button>
+  </div>
+
+  <div id="radarView" style="display:none;">
+    <div class="sectionhead">
+      <h2>RADAR · <span id="radarCount">0</span> tokens</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="filters" id="radarFilters">
+          <button class="chip active" data-min="80">SCORE 80+</button>
+          <button class="chip" data-min="90">90+</button>
+        </div>
+        <select class="sortsel" id="radarSort" aria-label="Sort tokens">
+          <option value="score">Best score</option>
+          <option value="vol">Volume 1h</option>
+          <option value="new">Newest</option>
+        </select>
+      </div>
+    </div>
+    <p class="radar-note">Active Solana tokens that pass on-chain safety checks: authorities, token extensions, holder concentration, dev wallet, liquidity, activity and RugCheck flags. A high score means fewer rug signals right now, not a buy signal. It can't see bundles, insiders or a dev who sells later. Not financial advice.</p>
+    <div class="radar-list" id="radarList"></div>
+    <div class="radar-foot" id="radarFoot"></div>
   </div>
 
   <div id="accountView" style="display:none;">
@@ -378,6 +399,7 @@
       <button data-v="history">HISTORY</button>
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
+      <button data-v="radar">RADAR</button>
       <button data-v="account">ACCOUNT</button>
     </div>
   </div>

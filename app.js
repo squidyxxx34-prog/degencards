@@ -105,6 +105,9 @@ const ICON_PATHS = {
   link:"M9 12a4 4 0 004 4h3a4 4 0 000-8h-1 M15 12a4 4 0 00-4-4H8a4 4 0 000 8h1",
   layers:"M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5 M3 9l9 5 9-5",
   check:"M4 12l5 5 11-11",
+  radar:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 16a4 4 0 100-8 4 4 0 000 8z M12 12l6-6",
+  minus:"M5 12h14",
+  copy:"M9 9h11v11H9z M5 15H4V4h11v1",
   x:"M5 5l14 14 M19 5L5 19",
   target:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 16a4 4 0 100-8 4 4 0 000 8z M12 13a1 1 0 100-2 1 1 0 000 2z",
   coin:"M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v10 M9 9.5c0-1 1-2 3-2s3 .8 3 1.8-1 1.5-3 1.7-3 .8-3 1.8 1 1.8 3 1.8 3-.8 3-1.8"
@@ -1082,10 +1085,98 @@ function renderHome(){
 function goToView(v){
   view = v;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
-  ['home','collection','history','achievements','stats','account'].forEach(k=>{
+  ['home','collection','history','achievements','stats','radar','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
+  if(v==='radar') radar.open(); else radar.close();
 }
+
+/* ---------- RADAR: active Solana tokens with an on-chain safety score (filled by the `radar` edge function) ---------- */
+const radar = {
+  rows: [], min: 80, sort: 'score', timer: null, loading: false, openMint: null, loadedAt: 0, failed: false,
+  open(){ if(Date.now()-this.loadedAt > 30000) this.load(); else this.render(); clearInterval(this.timer); this.timer = setInterval(()=>{ if(!document.hidden) this.load(); }, 60000); },
+  close(){ clearInterval(this.timer); this.timer = null; },
+  async load(){
+    if(this.loading) return; this.loading = true;
+    if(!this.rows.length) document.getElementById('radarList').innerHTML = `<div class="radar-skel"></div><div class="radar-skel"></div><div class="radar-skel"></div>`;
+    try{
+      const since = new Date(Date.now() - 45*60000).toISOString();
+      const {data, error} = await sb.from('radar_tokens')
+        .select('mint,symbol,name,source,graduated,image,score,checks,mc,liq,vol_h1,buys_h1,sells_h1,change_h1,top10_pct,dev_pct,created_at_ms,scanned_at')
+        .gte('score', 80).gt('scanned_at', since).order('score', {ascending:false}).limit(80);
+      if(error) throw error;
+      this.rows = (data||[]).map(radarRow).filter(Boolean); this.failed = false; this.loadedAt = Date.now();
+    }catch(_){ this.failed = true; }
+    this.loading = false; this.render();
+  },
+  render(){
+    const list = document.getElementById('radarList'); if(!list) return;
+    let rows = this.rows.filter(r=>r.score >= this.min);
+    if(this.sort==='vol') rows.sort((a,b)=>b.volH1-a.volH1);
+    else if(this.sort==='new') rows.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    else rows.sort((a,b)=>b.score-a.score || b.volH1-a.volH1);
+    document.getElementById('radarCount').textContent = rows.length;
+    const last = this.rows.reduce((m,r)=>Math.max(m, r.scannedAt), 0);
+    document.getElementById('radarFoot').textContent = this.failed ? 'Radar unavailable right now. Retrying every minute.'
+      : last ? 'Last scan '+radarAgo(last)+' ago · refreshes every minute' : '';
+    if(!rows.length){
+      list.innerHTML = this.failed ? '' : `<div class="empty"><b>NOTHING ABOVE ${this.min} RIGHT NOW.</b>The radar rescans active tokens every 5 minutes. Most don't pass.</div>`;
+      return;
+    }
+    list.innerHTML = rows.map(r=>radarCardHTML(r, r.mint===this.openMint)).join('');
+  }
+};
+function radarAgo(ts){ const s = Math.max(0, Math.round((Date.now()-ts)/1000)); if(s<60) return s+'s'; const m=Math.round(s/60); if(m<60) return m+' min'; const h=Math.round(m/60); return h<48 ? h+' h' : Math.round(h/24)+' days'; }
+function radarRow(r){
+  if(!r || !B58.test(String(r.mint||''))) return null;
+  const n = (v,max)=> v==null ? null : num(v, -1e15, max);
+  const checks = (Array.isArray(r.checks)?r.checks:[]).slice(0,12).filter(c=>c && typeof c==='object')
+    .map(c=>({ s: [0,1,2].includes(c.s)?c.s:0, t: String(c.t||'').slice(0,40), d: String(c.d||'').slice(0,120) }));
+  return { mint:r.mint, symbol:cleanTicker(r.symbol)||'?', name:String(r.name||'').replace(/[\u0000-\u001f]/g,'').slice(0,64),
+    pump: r.source==='pumpfun', graduated: !!r.graduated, image: safeImg(r.image), score: num(r.score,0,100),
+    checks, mc:n(r.mc,1e15)||0, liq:n(r.liq,1e15)||0, volH1:n(r.vol_h1,1e15)||0, buys:num(r.buys_h1,0,1e7), sells:num(r.sells_h1,0,1e7),
+    changeH1:n(r.change_h1,1e7), top10:n(r.top10_pct,100), dev:n(r.dev_pct,100), createdAt:n(r.created_at_ms,4102444800000), scannedAt: Date.parse(r.scanned_at)||0 };
+}
+function radarCardHTML(r, isOpen){
+  const ch = r.changeH1==null ? '' : `<span class="${r.changeH1>=0?'pos':'neg'}">${fmt.pct(r.changeH1)}</span>`;
+  const tier = r.score>=90 ? 'hi' : 'ok';
+  const age = r.createdAt ? radarAgo(r.createdAt) : '—';
+  const mark = s => s===2 ? icon('check',14,'var(--green)') : s===1 ? icon('minus',14,'var(--gold)') : icon('x',14,'var(--red)');
+  const links = [
+    r.pump ? `<a href="https://pump.fun/coin/${r.mint}" target="_blank" rel="noopener noreferrer">pump.fun</a>` : '',
+    `<a href="https://dexscreener.com/solana/${r.mint}" target="_blank" rel="noopener noreferrer">DexScreener</a>`,
+    `<a href="https://rugcheck.xyz/tokens/${r.mint}" target="_blank" rel="noopener noreferrer">RugCheck</a>`,
+    `<a href="https://solscan.io/token/${r.mint}" target="_blank" rel="noopener noreferrer">Solscan</a>`].join('');
+  return `<div class="radar-item${isOpen?' open':''}" data-mint="${r.mint}">
+    <button type="button" class="radar-row" aria-expanded="${isOpen}" aria-label="${esc(tk(r.symbol))}, safety score ${r.score}">
+      ${coinImg({image:r.image, ticker:r.symbol}, 40)}
+      <span class="radar-main">
+        <span class="radar-tk">${esc(tk(r.symbol))}<span class="radar-name">${esc(r.name)}</span>${r.pump?`<span class="radar-tag">${r.graduated?'PUMP · GRADUATED':'PUMP · CURVE'}</span>`:''}</span>
+        <span class="radar-meta">MC ${fmt.mc(r.mc)} · Vol 1h ${fmt.mc(r.volH1)} · ${ch ? '1h '+ch+' · ' : ''}${age}</span>
+      </span>
+      <span class="radar-score ${tier}"><b>${r.score}</b><small>SAFETY</small></span>
+    </button>
+    ${isOpen ? `<div class="radar-detail">
+      <ul class="radar-checks">${r.checks.map(c=>`<li>${mark(c.s)}<span class="rc-t">${esc(c.t)}</span><span class="rc-d">${esc(c.d)}</span></li>`).join('')}</ul>
+      <div class="radar-stats"><span>Liquidity <b>${fmt.mc(r.liq)}</b></span><span>Trades 1h <b>${r.buys+r.sells}</b></span>${r.top10!=null?`<span>Top 10 <b>${r.top10.toFixed(1)}%</b></span>`:''}${r.dev!=null?`<span>Dev <b>${r.dev.toFixed(1)}%</b></span>`:''}</div>
+      <div class="radar-links">${links}<button type="button" class="radar-copy" data-mint="${r.mint}">${icon('copy',13)} COPY CA</button></div>
+      <p class="radar-warn">Checked ${radarAgo(r.scannedAt)} ago. Fewer rug signals is not a guarantee. DYOR, not financial advice.</p>
+    </div>` : ''}
+  </div>`;
+}
+document.getElementById('radarList').addEventListener('click', async e=>{
+  const cp = e.target.closest('.radar-copy');
+  if(cp){ try{ await navigator.clipboard.writeText(cp.dataset.mint); showToast('Contract address copied'); }catch(_){ showToast('Could not copy'); } return; }
+  const row = e.target.closest('.radar-row'); if(!row) return;
+  const m = row.closest('.radar-item').dataset.mint;
+  radar.openMint = radar.openMint===m ? null : m; radar.render();
+});
+document.getElementById('radarFilters').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#radarFilters .chip').forEach(x=>x.classList.toggle('active', x===b));
+  radar.min = Number(b.dataset.min)||80; radar.render();
+});
+document.getElementById('radarSort').addEventListener('change', e=>{ radar.sort = e.target.value; radar.render(); });
 function renderHistory(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
   const ids = new Set(all.map(t=>t.id));
