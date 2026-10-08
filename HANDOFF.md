@@ -162,3 +162,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 ## Trade Replay : options PRO visibles en free
 - En free (PRO actif sur le site, user non abonné), le panneau Customize du Replay affiche TOUTES les options : le choix par défaut de chaque groupe est utilisable, toute autre valeur (couleurs, intro, texte, graphe, caméra, vitesse, fond, effets, effet de vente, son, fin, langue), les interrupteurs « Show » et les préréglages autres que Hype portent la pastille PRO et ouvrent le paywall. Bandeau GO PRO en haut du panneau.
 - Sécurité inchangée : le rendu ignore toute option tant que le code studio PRO n'est pas chargé (servi par l'edge function `pro` aux seuls abonnés).
+
+## PRO offert (2026-10-08)
+- Les 4 comptes existants au 2026-10-08 ont reçu le PRO à vie : ligne `subscriptions` avec `plan_id = 'gift'`, `status = 'active'`, `renews_at = null`, sans membership Whop. Les nouveaux inscrits restent en free.
+- `whop` sync (v3) ne rétrograde jamais un `gift` actif (pas de membership Whop, ou membership terminée). Un vrai abonnement Whop actif remplace la ligne.
+- Account : « PRO offered by DEGENCARDS », pas de bouton MANAGE.
+- Retirer un cadeau : `delete from public.subscriptions where plan_id = 'gift' and user_id = '…';` (ou tous). Offrir à une date limite : mettre `renews_at`.

@@ -1960,7 +1960,12 @@ function renderPro(){
   blk.style.display = PRO_LIVE ? '' : 'none'; if(!PRO_LIVE) return;
   const p = window.dcPro, s = p.sub, st = document.getElementById('proState'), sub = document.getElementById('proSub'), btn = document.getElementById('btnPro');
   const when = s && s.renews_at ? new Date(s.renews_at).toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' }) : '';
-  if(p.active){
+  btn.hidden = false;
+  if(p.active && s && s.plan_id === 'gift'){                         // offered PRO: nothing to manage or renew
+    st.innerHTML = 'PRO <span class="pro-tag">ACTIVE</span>';
+    sub.textContent = when ? `PRO offered by DEGENCARDS until ${when}` : 'PRO offered by DEGENCARDS — free, nothing to renew';
+    btn.hidden = true;
+  } else if(p.active){
     st.innerHTML = 'PRO <span class="pro-tag">ACTIVE</span>';
     sub.textContent = s.status === 'canceling' ? (when ? `Cancelled — PRO until ${when}` : 'Cancelled — PRO until the end of the period')
       : s.status === 'past_due' ? 'Payment failed — update your card on Whop to keep PRO' : (when ? `Renews ${when}` : 'Renews automatically');

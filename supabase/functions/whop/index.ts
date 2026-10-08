@@ -101,8 +101,11 @@ Deno.serve(async (req) => {
       return json({ url }, 200, origin);
     }
     if (body.action === "sync") {
+      // offered PRO (plan_id "gift", granted by the owner in SQL): never downgraded by a missing / ended Whop membership
+      const { data: cur } = await db.from("subscriptions").select("*").eq("user_id", uid).maybeSingle();
+      const gift = !!(cur && cur.plan_id === "gift" && PRO_STATUSES.has(cur.status) && (!cur.renews_at || new Date(cur.renews_at).getTime() > Date.now()));
       const m = await findMembership(uid);
-      if (!m) return json({ pro: false }, 200, origin);
+      if (!m || (gift && !PRO_STATUSES.has(rowOf(uid, m).status))) return json(gift ? { pro: true, sub: cur } : { pro: false }, 200, origin);
       const row = rowOf(uid, m);
       await db.from("subscriptions").upsert(row, { onConflict: "user_id" });
       return json({ pro: PRO_STATUSES.has(row.status), sub: row }, 200, origin);
