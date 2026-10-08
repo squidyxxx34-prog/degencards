@@ -2,7 +2,7 @@
 // Feed of active Solana tokens with an on-chain SAFETY score (0-100). Run by pg_cron every 5 min (x-cron-key, same key as sync-trades).
 // A high score only means fewer rug signals in what the chain and public APIs show right now: never a guarantee, never advice.
 // Sources: pump.fun lists (unofficial API), DexScreener (activity, liquidity), Solana RPC (authorities, Token-2022 extensions,
-// holders), RugCheck summary (extra risk flags). Writes public.radar_tokens with the service role; users only read it.
+// holders, bundles), RugCheck report (linked holders, risk flags). Writes public.radar_tokens with the service role; users only read it.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL") || "http://x", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "x", { auth: { persistSession: false, autoRefreshToken: false } });
@@ -12,7 +12,7 @@ const RPC_GAP = HELIUS ? 120 : 280;                                   // public 
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SYSTEM = "11111111111111111111111111111111";
 const POOL_AUTH = new Set(["5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL"]);   // Raydium AMM v4 / CPMM authorities
-const BUDGET_MS = 115_000, MAX_DEEP = 24, MAX_IMAGES = 6;
+const BUDGET_MS = 115_000, MAX_DEEP = 36, MAX_IMAGES = 6;
 const MIN_MC = 15_000, MIN_VOL_H1 = 3_000, MIN_TX_H1 = 40;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>&"'`\\]/g, "").trim().slice(0, n);
@@ -69,7 +69,7 @@ function pumpInfo(c: any): Pump | null {
     links: [c.twitter, c.telegram, c.website].filter((x) => typeof x === "string" && x),
     curvePct: c.complete ? 100 : rtr == null ? null : Math.max(0, Math.min(100, (CURVE_TOKENS - rtr) / CURVE_TOKENS * 100)), live: !!c.is_currently_live };
 }
-async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump> }> {
+async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump>; feed: Set<string> }> {
   const pump = new Map<string, Pump>(), set = new Set<string>();
   const lists = await Promise.all([
     getJson("https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false"),
@@ -86,8 +86,9 @@ async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump> 
   }
   // keep the current feed fresh: tokens that scored well recently are re-checked every pass (they drop out if they degrade)
   const { data: prev } = await db.from("radar_tokens").select("mint").gte("score", 70).gt("scanned_at", new Date(Date.now() - 3 * 3600e3).toISOString()).limit(40);
-  for (const r of prev || []) set.add(r.mint);
-  return { mints: [...set], pump };
+  const feed = new Set<string>((prev || []).map((r: any) => r.mint));
+  for (const m of feed) set.add(m);
+  return { mints: [...set], pump, feed };
 }
 
 /* ---------- 2. market data (DexScreener, 30 mints per call) ---------- */
@@ -132,6 +133,7 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
   const checks: Check[] = []; let score = 0, cap = 100;
   const add = (k: string, pts: number, max: number, t: string, d: string) => { score += pts; checks.push({ k, s: pts >= max ? 2 : pts > 0 ? 1 : 0, t, d }); };
 
+  const rcP = getJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, 12_000);   // runs while the chain is read
   const acc = await rpc("getAccountInfo", [mint, { encoding: "jsonParsed" }]);
   const info = acc?.value?.data?.parsed?.info;
   if (!info || acc?.value?.data?.parsed?.type !== "mint") return null;
@@ -182,6 +184,13 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
     });
   }
   const held = [...owners.entries()].sort((a, b) => b[1] - a[1]);
+  // bundles: a dev splitting supply over many wallets with the SAME balance hides from the top-10 metric (SARP: 19/19 at 0.198 %)
+  const same = new Map<string, number>();
+  for (const [, v] of held) if (v > 0) { const key = v.toPrecision(9); same.set(key, (same.get(key) || 0) + 1); }
+  const clones = Math.max(0, ...same.values());
+  if (clones >= 5) { checks.push({ k: "bundle", s: 0, t: "Bundled wallets", d: `${clones} of the top ${held.length} wallets hold the exact same amount` }); cap = Math.min(cap, 40); }
+  else if (clones >= 3) checks.push({ k: "bundle", s: 1, t: "Bundled wallets", d: `${clones} top wallets hold the exact same amount` });
+  else checks.push({ k: "bundle", s: 2, t: "Bundled wallets", d: "No same-size wallet cluster in the top holders" });
   const top10 = held.slice(0, 10).reduce((s, [, v]) => s + v, 0) / supply * 100;
   const biggest = held.length ? held[0][1] / supply * 100 : 0;
   add("top10", top10 <= 15 ? 20 : top10 <= 25 ? 15 : top10 <= 35 ? 8 : 0, 20, "Top 10 holders", pct(top10) + " of supply (pools excluded)");
@@ -200,6 +209,9 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
     const ratio = mk.mc > 0 ? mk.liq / mk.mc : 0;
     add("liq", mk.liq >= 25_000 && ratio >= 0.05 ? 10 : mk.liq >= 10_000 ? 6 : 0, 10, "Liquidity", mk.liq < 1 ? "No pool liquidity found" : "$" + Math.round(mk.liq).toLocaleString("en-US") + " in pools");
     if (mk.liq < 5_000) cap = Math.min(cap, 70);
+    if (mk.mc >= 300_000 && ratio < 0.03) {                           // a pool drained right after graduation: the market cap is not real
+      checks.push({ k: "mcliq", s: 0, t: "Market cap vs liquidity", d: `Only ${(ratio * 100).toFixed(1)}% of the market cap is in the pool: price pushed, exits impossible` }); cap = Math.min(cap, 40);
+    } else if (mk.mc >= 300_000 && ratio < 0.06) { checks.push({ k: "mcliq", s: 1, t: "Market cap vs liquidity", d: `${(ratio * 100).toFixed(1)}% of the market cap is in the pool` }); cap = Math.min(cap, 75); }
   }
 
   const tx = mk.buys + mk.sells, ratio = mk.sells ? mk.buys / mk.sells : mk.buys ? 99 : 0;
@@ -209,15 +221,27 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
 
   const ageH = mk.createdAt ? (Date.now() - mk.createdAt) / 3600e3 : 0;
   if (mk.createdAt && ageH < 0.5) cap = Math.min(cap, 70);          // too fresh to judge holders and dev behaviour
+  else if (mk.createdAt && ageH < 1) cap = Math.min(cap, 75);
+  const jump = Math.max(mk.changeH1 ?? 0, ageH < 6 ? (mk.changeH6 ?? 0) : 0);
+  const drop = Math.min(mk.changeH1 ?? 0, mk.changeH6 ?? 0);
+  if ((mk.changeH1 ?? 0) <= -60 || (mk.changeH6 ?? 0) <= -80) {    // a crash in progress (dev or bundle dumping)
+    checks.push({ k: "dump", s: 0, t: "Price move", d: `${Math.round(drop)}% in ${(mk.changeH1 ?? 0) <= -60 ? "1 h" : "6 h"}: being dumped` }); cap = Math.min(cap, 60);
+  }
+  if (jump >= 2000) { checks.push({ k: "pump", s: 0, t: "Price move", d: `+${Math.round(jump).toLocaleString("en-US")}% in ${ageH < 1 || (mk.changeH1 ?? 0) >= 2000 ? "1 h" : "6 h"}: vertical pump` }); cap = Math.min(cap, 60); }
   add("age", ageH >= 6 ? 5 : ageH >= 1 ? 3 : 0, 5, "Age", !mk.createdAt ? "Unknown" : ageH < 1 ? Math.round(ageH * 60) + " min" : ageH < 48 ? Math.round(ageH) + " h" : Math.round(ageH / 24) + " days");
 
-  const rc = await getJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, 8000);
+  const rc = (await rcP) || (await getJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, 8000));
   const risks: any[] = Array.isArray(rc?.risks) ? rc.risks : [];
   if (!rc) add("rugcheck", 5, 10, "RugCheck", "Unavailable");
   else {
+    // linked holders / insiders are rug set-ups even when RugCheck only "warns" about them
+    const linked = risks.filter((r) => /correlat|insider|bundle|sniper|same (owner|funder)/i.test(String(r?.name || "")));
     const danger = risks.filter((r) => r?.level === "danger").map((r) => clean(r.name, 40));
-    const warns = risks.filter((r) => r?.level === "warn").length;
-    if (danger.length) { add("rugcheck", 0, 10, "RugCheck", danger.slice(0, 3).join(", ")); cap = Math.min(cap, 60); }
+    const warns = risks.filter((r) => r?.level === "warn" && !linked.includes(r)).length;
+    if (linked.length) {                                              // insider counts alone are noisy (big healthy coins have hundreds): not used
+      add("rugcheck", 0, 10, "RugCheck", linked.map((r) => clean(r.name, 40) + (r.value ? " " + clean(r.value, 12) : "")).slice(0, 3).join(", "));
+      cap = Math.min(cap, 40);
+    } else if (danger.length) { add("rugcheck", 0, 10, "RugCheck", danger.slice(0, 3).join(", ")); cap = Math.min(cap, 60); }
     else add("rugcheck", warns > 2 ? 6 : 10, 10, "RugCheck", warns ? `${warns} warning${warns > 1 ? "s" : ""}, no danger` : "No risk flagged");
   }
 
@@ -263,10 +287,14 @@ async function copyImage(mint: string, srcs: string[]): Promise<string | null> {
 /* ---------- pass ---------- */
 async function pass() {
   const t0 = Date.now(), deadline = t0 + BUDGET_MS;
-  const { mints, pump } = await candidates();
+  const { mints, pump, feed } = await candidates();
   const mk = await markets(mints);
-  const pre = mints.filter((m) => { const x = mk.get(m); return x && x.mc >= MIN_MC && x.volH1 >= MIN_VOL_H1 && x.buys + x.sells >= MIN_TX_H1; })
-    .sort((a, b) => mk.get(b)!.volH1 - mk.get(a)!.volH1).slice(0, MAX_DEEP);
+  const active = (m: string) => { const x = mk.get(m); return !!x && x.mc >= MIN_MC && x.volH1 >= MIN_VOL_H1 && x.buys + x.sells >= MIN_TX_H1; };
+  const byVol = (a: string, b: string) => mk.get(b)!.volH1 - mk.get(a)!.volH1;
+  // what is on screen is re-checked first, every pass, so a coin that turns bad leaves the feed within 5 min
+  const pre = [...[...feed].filter(active).sort(byVol), ...mints.filter((m) => !feed.has(m) && active(m)).sort(byVol)].slice(0, MAX_DEEP);
+  const gone = [...feed].filter((m) => !active(m));                 // no longer active (volume dried up, pool gone): out of the feed
+  if (gone.length) await db.from("radar_tokens").delete().in("mint", gone);
   // tokens re-checked from the feed may be missing from this pass's pump.fun lists: fetch their pump.fun details one by one
   for (const mint of pre) if (!pump.has(mint) && (mint.endsWith("pump") || mk.get(mint)!.dexIds.some((d) => d.startsWith("pump")))) {
     const p = pumpInfo(await getJson(`https://frontend-api-v3.pump.fun/coins-v2/${mint}`, 8000)); if (p) pump.set(mint, p);

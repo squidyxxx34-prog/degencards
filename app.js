@@ -1101,7 +1101,7 @@ const radar = {
     if(this.loading) return; this.loading = true;
     if(!this.rows.length) document.getElementById('radarList').innerHTML = `<div class="radar-skel"></div><div class="radar-skel"></div><div class="radar-skel"></div>`;
     try{
-      const since = new Date(Date.now() - 45*60000).toISOString();
+      const since = new Date(Date.now() - 15*60000).toISOString();     // re-checked every 5 min: older = failed rechecks, hide it
       const {data, error} = await sb.from('radar_tokens').select(RADAR_COLS)
         .gte('score', 80).gt('scanned_at', since).order('score', {ascending:false}).limit(80);
       if(error) throw error;
