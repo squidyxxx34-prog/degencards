@@ -165,30 +165,37 @@ function presetBg(ctx, W, H, kind, main, t, p, u, flat){
     for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
   }
 }
-/* STORY and POST: the SIMPLE card stays a card (rounded, floating) on a darker, blurred backdrop + CTA, not a full-screen video frame */
+/* STORY and POST: the SIMPLE card stays a card (rounded, floating) on a darker, blurred backdrop + CTA, not a full-screen video frame.
+   The card's height follows its content (no empty band inside), and card + CTA (+ the coin, in Story) are centered as one group. */
 const STORY_CARD = document.createElement('canvas');
 function drawSimpleStory(ctx, W, H, t, meta, p, opt){
-  const so = { ...simpleOpts(), ...(opt.so || {}) }, u = W / 1080, win = t.pnl >= 0;
+  const so = { ...simpleOpts(), ...(opt.so || {}) }, u = W / 1080, win = t.pnl >= 0, story = H / W > 1.5;
   const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hero = story && so.coin && !!(img && img.complete && img.naturalWidth);
   ctx.save();
   // backdrop: same background as the card, blurred and darker, so the card reads as an object on top of it
   if(bgReady()){ const b = BG.blur; BG.blur = true; drawBg(ctx, W, H, 1.12); BG.blur = b; }
-  else if(so.bg === 'coin') presetBg(ctx, W, H, 'coin', main, t, p, u);
-  else { presetBg(ctx, W, H, so.bg, main, t, p, u, so.layout === 'minimal'); }
+  else presetBg(ctx, W, H, so.bg, main, t, p, u, so.layout === 'minimal');
   ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, 0, W, H);
-  const v = ctx.createRadialGradient(W / 2, H * 0.45, W * 0.3, W / 2, H * 0.5, H * 0.75);
+  const v = ctx.createRadialGradient(W / 2, H * 0.5, W * 0.3, W / 2, H * 0.5, H * 0.75);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
-  // the card, rendered at its own resolution (4:5)
-  const story = H / W > 1.5, cw = Math.round(W - 2 * (story ? 72 : 96) * u), ch = Math.round(cw * (story ? 1.25 : 1.2)), r = (story ? 46 : 40) * u;
+  // the card: width fixed, height = what its content needs
+  const io = { ...opt, inner:true, so:{ ...(opt.so || {}), ...(hero ? { coin:false } : {}) } };
+  const cw = Math.round(W - 2 * (story ? 64 : 84) * u), r = (story ? 46 : 40) * u;
+  const heroS = hero ? 250 * u : 0, heroGap = hero ? 44 * u : 0;
+  const ctaGap = (story ? 64 : 42) * u, ctaBlock = (story ? 92 : 74) * u, margin = (story ? 90 : 48) * u;
+  const need = drawSimple(ctx, cw, cw, t, meta, p, { ...io, measure:true });
+  const maxCh = H - 2 * margin - heroS - heroGap - ctaGap - ctaBlock;
+  const ch = Math.round(Math.max(Math.min(cw * 0.62, maxCh), Math.min(need, cw * 1.3, maxCh)));
   if(STORY_CARD.width !== cw || STORY_CARD.height !== ch){ STORY_CARD.width = cw; STORY_CARD.height = ch; }
   const cc = STORY_CARD.getContext('2d'); cc.setTransform(1, 0, 0, 1, 0, 0); cc.clearRect(0, 0, cw, ch);
-  drawSimple(cc, cw, ch, t, meta, p, { ...opt, inner:true });
-  const ctaH = (story ? 210 : 150) * u, cx = W / 2, cy = (H - ctaH) / 2 + (story ? 30 : 18) * u;
+  drawSimple(cc, cw, ch, t, meta, p, io);
+  const total = heroS + heroGap + ch + ctaGap + ctaBlock, top = Math.max(margin, (H - total) / 2);
+  const cardTop = top + heroS + heroGap, cx = W / 2, cy = cardTop + ch / 2;
   const k = easeOutBack(seg(p, 0, 0.2)), e = easeOut(seg(p, 0, 0.2));
   ctx.save();
   ctx.translate(cx, cy + (1 - e) * 90 * u); ctx.rotate((1 - e) * -0.05); ctx.scale(0.9 + 0.1 * k, 0.9 + 0.1 * k);
   ctx.globalAlpha = clamp01(e * 1.4);
-  // drop shadow + soft result glow
   ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 90 * u; ctx.shadowOffsetY = 34 * u;
   rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.fillStyle = '#07080B'; ctx.fill();
   if(so.layout !== 'minimal'){ ctx.shadowColor = hexA(main, 0.35); ctx.shadowBlur = 70 * u; ctx.shadowOffsetY = 0; ctx.fill(); }
@@ -197,11 +204,25 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.stroke();
   if(so.layout !== 'minimal'){ rrect(ctx, -cw / 2 + 3 * u, -ch / 2 + 3 * u, cw - 6 * u, ch - 6 * u, r - 3 * u); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(main, 0.22); ctx.stroke(); }
   ctx.restore();
-  // CTA under the card
-  const a = easeOut(seg(p, 0.55, 0.7)); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  // Story: the coin, big, above the card
+  if(hero){
+    const hk = easeOutBack(seg(p, 0.1, 0.3)), hy = top + heroS / 2 + Math.sin(p * Math.PI) * 6 * u, s0 = heroS;
+    ctx.save(); ctx.globalAlpha = clamp01(hk);
+    for(let i = 0; i < 2; i++){ ctx.strokeStyle = hexA(main, 0.12 - i * 0.05); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(cx, hy, s0 * (0.78 + i * 0.22), 0, Math.PI * 2); ctx.stroke(); }
+    ctx.translate(cx, hy); ctx.scale(hk, hk); ctx.rotate(-0.08 * (1 - p));
+    ctx.shadowColor = so.layout === 'minimal' ? 'rgba(0,0,0,0.6)' : hexA(main, 0.5); ctx.shadowBlur = 70 * u;
+    rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.save(); rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.clip();
+    const rr = Math.min(s0 / img.naturalWidth, s0 / img.naturalHeight), iw = img.naturalWidth * rr, ih = img.naturalHeight * rr;
+    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih); ctx.restore();
+    rrect(ctx, -s0 / 2, -s0 / 2, s0, s0, s0 * 0.26); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.stroke();
+    ctx.restore();
+  }
+  // CTA right under the card
+  const a = easeOut(seg(p, 0.55, 0.7)), cY = cardTop + ch + ctaGap; ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16 * u;
-  ctx.font = `800 ${(story ? 40 : 32) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, H - (story ? 118 : 84) * u + (1 - a) * 16 * u);
-  ctx.font = `700 ${(story ? 30 : 24) * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, H - (story ? 68 : 44) * u + (1 - a) * 16 * u);
+  ctx.font = `800 ${(story ? 40 : 32) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, cY + (story ? 36 : 28) * u + (1 - a) * 16 * u);
+  ctx.font = `700 ${(story ? 30 : 24) * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, cY + (story ? 84 : 66) * u + (1 - a) * 16 * u);
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   const intro = easeOut(seg(p, 0, 0.04)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
@@ -211,10 +232,24 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   const so = { ...simpleOpts(), ...(opt.so || {}) }, flat = so.layout === 'minimal';
   const win = t.pnl >= 0, own = bgReady();
   const main = so.accent === 'auto' || !ACCENT[so.accent] ? (win ? GREEN : RED) : (win || so.accent === 'mono' ? ACCENT[so.accent] : RED);
-  const wide = W > H * 1.2, story = H / W > 1.5, u = Math.min(W, H) / 1080;
-  const S = story ? { coin:118, tick:84, big:250, pnl:74, lab:30, val:40, rowH:78, gap:56 } : wide ? { coin:78, tick:62, big:186, pnl:58, lab:24, val:32, rowH:56, gap:44 } : { coin:86, tick:68, big:212, pnl:62, lab:26, val:34, rowH:60, gap:48 };
+  const inner = !!opt.inner, wide = !inner && W > H * 1.2, story = !inner && H / W > 1.5, u = inner ? W / 980 : Math.min(W, H) / 1080;
+  const S = inner ? { coin:92, tick:74, big:230, pnl:68, lab:30, val:38, rowH:68, gap:52 } : story ? { coin:118, tick:84, big:250, pnl:74, lab:30, val:40, rowH:78, gap:56 } : wide ? { coin:78, tick:62, big:186, pnl:58, lab:24, val:32, rowH:56, gap:44 } : { coin:86, tick:68, big:212, pnl:62, lab:26, val:34, rowH:60, gap:48 };
   for(const k in S) S[k] *= u;
   const fa = (a, b) => easeOut(seg(p, a, b));
+  const pad = (wide ? 84 : story ? 84 : inner ? 64 : 72) * u, L = pad, Rr = W - pad, maxW = wide ? W * 0.56 : W - 2 * pad;
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = so.coin && !!(img && img.complete && img.naturalWidth);
+  const bigIsPnl = so.big === 'pnl' && !opt.hideUsd;
+  const bigTxt = v => bigIsPnl ? fmt.usd(t.pnl * v) : fmt.pct(t.roi * v);
+  const subTxt = v => bigIsPnl ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
+  const showSub = !opt.hideUsd && so.sub;
+  const bigSize = fitFont(ctx, bigTxt(1), 900, MONO, S.big, maxW);
+  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
+  const rows = !so.stats ? [] : flat ? (money ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)]] : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)]]) : money
+    ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['MC', mcShort(t.entryMc) + ' → ' + mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]]
+    : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
+  const headH = Math.max(hasImg && !(wide && !bgReady()) ? S.coin : 0, S.tick) + 28 * u;
+  const blockH = headH + bigSize * 0.95 + (showSub ? S.pnl + 24 * u : 0) + (rows.length ? S.gap + rows.length * S.rowH : 0);
+  if(opt.measure) return Math.ceil(pad + 70 * u + 52 * u + blockH + 52 * u + 60 * u + pad);      // floating card: the height its content needs
   ctx.save();
   // background: own photo / video (slow push-in), else a preset
   if(own){
@@ -222,10 +257,8 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
     const g = wide ? ctx.createLinearGradient(0, 0, W * 0.75, 0) : ctx.createLinearGradient(0, H, 0, H * 0.1);
     g.addColorStop(0, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   } else presetBg(ctx, W, H, so.bg, main, t, p, u, flat);
-  const pad = (wide ? 84 : story ? 84 : 72) * u, L = pad, Rr = W - pad, maxW = wide ? W * 0.56 : W - 2 * pad;
   const lift = own || so.bg === 'coin';                                  // text sits on an image: add a soft shadow
   const sh = on => { if(on && lift){ ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 2 * u; } else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; } };
-  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = so.coin && !!(img && img.complete && img.naturalWidth);
   // wide hero: the coin, big, on the right (only when the right side is ours)
   if(wide && !own && (hasImg || !flat)){
     const k = easeOutBack(seg(p, 0.06, 0.3)), s = H * 0.5, cx = W * 0.79, cy = H * 0.5 + Math.sin(p * Math.PI) * 6 * u;
@@ -267,17 +300,6 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   const dw = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', L + dw, pad + 36 * u);
   if(so.date){ ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 28 : 25) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.fillText(fmt.date(t.timestamp).toUpperCase(), Rr, pad + 32 * u); }
   // body content
-  const bigIsPnl = so.big === 'pnl' && !opt.hideUsd;
-  const bigTxt = v => bigIsPnl ? fmt.usd(t.pnl * v) : fmt.pct(t.roi * v);
-  const subTxt = v => bigIsPnl ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
-  const showSub = !opt.hideUsd && so.sub;
-  const bigSize = fitFont(ctx, bigTxt(1), 900, MONO, S.big, maxW);
-  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
-  const rows = !so.stats ? [] : flat ? (money ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)]] : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)]]) : money
-    ? [['INVESTED', '$' + inv.toFixed(2)], ['SOLD', '$' + Math.max(0, inv + t.pnl).toFixed(2)], ['MC', mcShort(t.entryMc) + ' → ' + mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]]
-    : [['ENTRY MC', mcShort(t.entryMc)], ['EXIT MC', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
-  const headH = Math.max(S.coin, S.tick) + 28 * u;
-  const blockH = headH + bigSize * 0.95 + (showSub ? S.pnl + 24 * u : 0) + (rows.length ? S.gap + rows.length * S.rowH : 0);
   const areaT = heroS ? pad + 150 * u + heroS + 90 * u : pad + 70 * u, areaB = H - pad - 60 * u;
   let y = Math.max(areaT, areaT + (areaB - areaT - blockH) * (story ? 0.56 : 0.5));
   // coin + ticker + rarity pill
@@ -326,7 +348,7 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   // rows
   if(rows.length){
     y += S.gap;
-    const rw = wide ? Math.min(maxW, 620 * u) : Math.min(maxW, (story ? 900 : 760) * u);
+    const rw = wide ? Math.min(maxW, 620 * u) : maxW;                // rows run the full width of the card
     rows.forEach(([l, v], i) => {
       const a = fa(0.3 + i * 0.06, 0.45 + i * 0.06); ctx.globalAlpha = a; const dx = (1 - a) * -30 * u;
       sh(false); ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(L + dx, y); ctx.lineTo(L + rw + dx, y); ctx.stroke();
