@@ -2281,6 +2281,11 @@ async function loadPro(force){
   }
 }
 function openPro(){ if(!PRO_LIVE) return; document.getElementById('proNote').textContent = ''; document.getElementById('proOverlay').classList.add('show'); }
+// close: the × button, a tap outside the box, or Escape
+function closePro(){ document.getElementById('proOverlay').classList.remove('show'); document.querySelectorAll('.pro-plan').forEach(x => x.disabled = false); document.getElementById('proNote').textContent = ''; }
+window.addEventListener('pageshow', e => { if(e.persisted) closePro(); });           // back from Whop (page restored from cache): never stuck
+document.getElementById('proOverlay').addEventListener('click', e => { if(e.target.id === 'proOverlay' || e.target.closest('[data-close]')) closePro(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && document.getElementById('proOverlay').classList.contains('show')) closePro(); });
 document.getElementById('btnPro').addEventListener('click', ()=>{
   const s = window.dcPro.sub;
   if(window.dcPro.active) window.open((s && s.manage_url) || 'https://whop.com/@me/settings/memberships/', '_blank', 'noopener');

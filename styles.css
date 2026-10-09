@@ -739,3 +739,4 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
   .rd-chart-box{height:280px;}
 }
 @media(max-width:400px){ .radar-meta{font-size:11px;} .radar-score{min-width:50px;} .radar-open{min-width:46px;} }
+#proOverlay .closebtn{width:44px;height:44px;top:10px;right:10px;font-size:26px;z-index:2;}
