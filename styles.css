@@ -1042,9 +1042,11 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 .acc-av{width:72px; height:72px; border-radius:22px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:900 32px var(--font); color:#05070a; background:linear-gradient(135deg,var(--purple),var(--gold));}
 .acc-name{font-size:clamp(22px,3.6vw,34px); letter-spacing:-.02em; overflow-wrap:anywhere;}
 .acc-head .btn-logout{min-height:40px;}
-.acc-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; margin-bottom:60px;}
+.acc-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; margin-bottom:110px;}
 .acc-grid .acc-block{margin:0; border-radius:18px; padding:20px; background:linear-gradient(160deg,var(--surf2),var(--surf) 60%);}
 .acc-wide{grid-column:1/-1;}
+.acc-cols{grid-column:1/-1; columns:2; column-gap:16px;}
+.acc-cols > .acc-block{break-inside:avoid; display:inline-block; width:100%; margin:0 0 16px;}
 .acc-block h4{font:800 11px var(--mono); letter-spacing:.1em; color:var(--tx2);}
 .acc-desc{font-size:13px; color:var(--tx2); line-height:1.5; margin:-4px 0 6px; max-width:640px;}
 .acc-wrap{white-space:normal;}
@@ -1053,6 +1055,7 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
   .st-top{grid-template-columns:1fr;}
   .st-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
   .acc-grid{grid-template-columns:1fr;}
+  .acc-cols{columns:1;}
 }
 @media(max-width:640px){
   .pg-head{padding-top:24px;}
