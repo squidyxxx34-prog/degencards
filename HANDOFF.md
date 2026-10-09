@@ -218,3 +218,11 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - 8 cartes récentes (défilement horizontal sur téléphone), aperçu RADAR (3 coins 80+ les plus tradés, sans DUMPING, rechargé au plus toutes les 2 min) → ouvre l'onglet Radar sur le coin.
 - Nouveau compte sans trade : bloc « Your first card is one trade away » (CONNECT A WALLET / LOG A TRADE).
 - Objectif mensuel : calculé sur le mois calendaire en cours (avant : P&L de tous les temps malgré le libellé « monthly »), sur Home et Stats. Anneau de la Home avec son propre dégradé (`goalGradHome` : celui de Stats est dans une vue cachée et ne s'affichait pas).
+
+## Pages v2 (2026-10-09) : même langage que la Home
+- En-tête commun `.pg-head` (kicker mono, gros titre, ligne résumé) sur Collection, History, Achievements, Stats, Account.
+- Collection : résumé (victoires / défaites, carte la plus rare), barre de rareté + pastilles cliquables (filtre par rareté, toutes les raretés), recherche par ticker, filtres ALL / WINS / LOSSES, tris en plus (Rarest, Worst P&L), état vide « NO CARD MATCHES » avec reset. `RARITY_HEX` dans app.js.
+- History : résumé (net, W/L, frais), recherche + filtres, trades regroupés par jour avec le net du jour (TODAY / YESTERDAY / date), une ligne ouvre sa carte (clavier : Entrée), rareté en couleur ; sur téléphone chaque trade devient une ligne 2 niveaux (coin + heure / P&L + ROI). Mode SELECT / CLEAR HISTORY inchangés.
+- Achievements : titre « X / 29 unlocked » + « Closest next » (badge verrouillé le plus avancé, via `achProgress`).
+- Stats : objectif mensuel enrichi (rythme : reste à faire, jours restants, $/jour ; trades / win rate / meilleur jour du mois) + calendrier du mois (P&L net par jour, vert/rouge, semaine du lundi). Tuiles refaites ; tuiles PRO verrouillées cliquables (ouvrent le paywall). Le calcul des stats PRO ne change pas (toujours servi par le studio PRO).
+- Account : en-tête profil (avatar, email, plan, niveau, cartes, membre depuis) + LOG OUT ; blocs en grille 2 colonnes (auto-import en pleine largeur et en premier, PRO, mot de passe, récupération, aide, légal).

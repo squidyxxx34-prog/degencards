@@ -45,6 +45,8 @@ let goalTarget = 0;
 let view = "home";
 let activeFilter = "all";
 let sortMode = "newest";
+let rarityFilter = null, colQuery = '';
+const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
 
 const RARITY_ORDER=["common","uncommon","rare","epic","legendary","mythic"];
 const ACH_CATALOG = [
@@ -642,26 +644,48 @@ function growGrid(){
   bindCards(grid);
   if(gridLimit >= gridList.length){ gridMore?.unobserve(more); more.remove(); }
 }
+/* collection header: summary line + rarity bar (each segment filters the grid) */
+function renderColHead(all){
+  const wins = all.filter(t=>t.pnl>=0).length, counts = Object.fromEntries(RARITY_ORDER.map(r=>[r,0]));
+  all.forEach(t=>counts[t.meta.rarity] = (counts[t.meta.rarity]||0) + 1);
+  const top = [...RARITY_ORDER].reverse().find(r=>counts[r]);
+  const best = all.reduce((m,t)=>!m || RARITY_ORDER.indexOf(t.meta.rarity) > RARITY_ORDER.indexOf(m.meta.rarity) || (t.meta.rarity===m.meta.rarity && t.pnl>m.pnl) ? t : m, null);
+  document.getElementById('colSummary').innerHTML = !all.length ? 'Every closed trade becomes a card here.'
+    : `<b class="pos">${wins} wins</b> · <b class="neg">${all.length-wins} losses</b>${best ? ` · rarest pull <b style="color:${RARITY_HEX[best.meta.rarity]}">${best.meta.rarity.toUpperCase()} ${esc(tk(best.ticker))}</b>` : ''}`;
+  const box = document.getElementById('colRarity');
+  if(!all.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="cr-bar" aria-hidden="true">${RARITY_ORDER.filter(r=>counts[r]).map(r=>`<i style="flex:${counts[r]};background:${RARITY_HEX[r]}"></i>`).join('')}</div>
+    <div class="cr-legend" role="group" aria-label="Filter by rarity">${RARITY_ORDER.map(r=>`<button type="button" class="cr-chip${rarityFilter===r?' on':''}" data-rarity="${r}" ${counts[r]?'':'disabled'} aria-pressed="${rarityFilter===r}" style="--rc:${RARITY_HEX[r]}"><i></i>${r.toUpperCase()}<em>${counts[r]}</em></button>`).join('')}</div>`;
+}
 function renderGrid(reset){
   if(reset) gridLimit = GRID_STEP;
   const all = computedTrades();
   let filtered = all;
   if(activeFilter==="win") filtered=all.filter(t=>t.pnl>=0);
   else if(activeFilter==="loss") filtered=all.filter(t=>t.pnl<0);
-  else if(["rare","epic","legendary"].includes(activeFilter)) filtered=all.filter(t=>t.meta.rarity===activeFilter);
-
+  if(rarityFilter) filtered = filtered.filter(t=>t.meta.rarity===rarityFilter);
+  const q = colQuery.trim().toLowerCase().replace(/^\$/,'');
+  if(q) filtered = filtered.filter(t=>String(t.ticker).toLowerCase().replace(/^\$/,'').includes(q));
+  const rank = r => RARITY_ORDER.indexOf(r);
   filtered = [...filtered].sort((a,b)=>{
     if(sortMode==="newest") return b.timestamp-a.timestamp;
     if(sortMode==="oldest") return a.timestamp-b.timestamp;
     if(sortMode==="roi") return b.roi-a.roi;
     if(sortMode==="pnl") return b.pnl-a.pnl;
+    if(sortMode==="worst") return a.pnl-b.pnl;
+    if(sortMode==="rarity") return rank(b.meta.rarity)-rank(a.meta.rarity) || b.pnl-a.pnl;
+    return 0;
   });
-
+  renderColHead(all);
   const grid = document.getElementById('grid');
   document.getElementById('countLabel').textContent = all.length;
   if(filtered.length===0){
-    const msgs = {all:"YOUR COLLECTION IS EMPTY.", win:"No wins yet.", loss:"No losses. Clean sheet.", rare:"No rare cards yet.", epic:"No epic trades yet.", legendary:"No legendary cards yet."};
-    grid.innerHTML = `<div class="empty"><b>${msgs[activeFilter]||"Nothing here."}</b>Make your first trade card.<br><button id="emptyCreate">CREATE YOUR FIRST CARD</button></div>`;
+    const msgs = {all:"YOUR COLLECTION IS EMPTY.", win:"No wins yet.", loss:"No losses. Clean sheet."};
+    const narrowed = all.length && (rarityFilter || q || activeFilter!=='all');
+    grid.innerHTML = narrowed ? `<div class="empty"><b>NO CARD MATCHES.</b>Clear the search or the filters to see your whole collection.<br><button id="emptyReset">SHOW ALL CARDS</button></div>`
+      : `<div class="empty"><b>${msgs[activeFilter]||"Nothing here."}</b>Make your first trade card.<br><button id="emptyCreate">CREATE YOUR FIRST CARD</button></div>`;
+    document.getElementById('emptyReset')?.addEventListener('click', ()=>{ rarityFilter = null; colQuery = ''; activeFilter = 'all'; document.getElementById('colSearch').value = '';
+      document.querySelectorAll('#filterRow .chip').forEach(x=>x.classList.toggle('active', x.dataset.f==='all')); renderGrid(true); });
     document.getElementById('emptyCreate')?.addEventListener('click', openNewModal);
     return;
   }
@@ -868,6 +892,11 @@ function renderAchievements(){
   const total = ACH_CATALOG.length, got = unlocked.size, pct = total ? Math.round(got/total*100) : 0;
   document.getElementById('achCount').textContent = got;
   document.getElementById('achTotal').textContent = total;
+  { // closest locked badge, to give a next target
+    const next = ACH_CATALOG.filter(a=>!unlocked.has(a.key)).map(a=>{ const pr = achProgress(a.key, all); return pr ? { a, pr, f: pr[0]/pr[1] } : null; })
+      .filter(x=>x && x.f < 1).sort((x,y)=>y.f-x.f)[0];
+    document.getElementById('achLead').innerHTML = got===total ? 'Every badge unlocked. Legend.'
+      : next ? `Closest next: <b>${esc(next.a.name)}</b> · ${esc(next.pr[2])}` : `${total-got} badges left to unlock.`; }
 
   // summary
   const tierCount = { bronze:0, silver:0, gold:0, legend:0 };
@@ -950,13 +979,35 @@ function renderStatsView(){
       {i:"rocket", l:"Best ROI", v: fmt.pct(trades.length? Math.max(...trades.map(t=>t.roi)):0)},
       {i:"skull", l:"Biggest loss", v: fmt.usd(trades.length? Math.min(...trades.map(t=>t.pnl)):0)});
   }
-  const tile = r => `<div style="padding:14px 12px;"><div style="margin-bottom:6px;color:var(--purple);">${icon(r.i,20)}</div><div class="l">${r.l}</div><div class="v">${r.v}</div></div>`;
+  const tone = v => { const t = String(v); return /^\+/.test(t) ? 'pos' : /^-\$|^-\d/.test(t) ? 'neg' : ''; };
+  const tile = r => `<div class="st-tile"><span class="st-ic">${icon(r.i,18)}</span><div class="l">${r.l}</div><div class="v ${tone(r.v)}">${r.v}</div></div>`;
   const locked = free ? ['Best ROI','Biggest loss','Profit factor','Avg win / loss','Win streaks','Max drawdown','Avg hold','Best hour','Top coin']
-    .map(l => `<div class="stat-locked" style="padding:14px 12px;"><div style="margin-bottom:6px;"><span class="pro-tag">PRO</span></div><div class="l">${l}</div><div class="v">\u2022\u2022\u2022</div></div>`).join('') : '';
+    .map(l => `<button type="button" class="st-tile stat-locked" data-pro-open><span class="pro-tag">PRO</span><div class="l">${l}</div><div class="v">\u2022\u2022\u2022</div></button>`).join('') : '';
+  document.getElementById('statsLead').innerHTML = !trades.length ? 'Your stats fill in as your trades come in.'
+    : `<b class="${totalPnl>=0?'pos':'neg'}">${usdBig(totalPnl)}</b> all time over ${trades.length} trades · ${Math.round(wins.length/trades.length*100)}% wins`;
+  renderStatsCal();
   document.getElementById('statsGrid').innerHTML = rows.map(tile).join('') + locked;
+  document.querySelectorAll('#statsGrid [data-pro-open]').forEach(b=>b.addEventListener('click', ()=>window.dcPro.open()));
   const cta = document.getElementById('statsPro');
   if(cta) cta.hidden = !free;
   renderGoal(totalPnl);
+}
+/* this month, day by day: net P&L per day (goes with the monthly goal) */
+function renderStatsCal(){
+  const box = document.getElementById('statsCal'); if(!box) return;
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth(), days = new Date(y, m+1, 0).getDate();
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7;                    // weeks start on Monday
+  const per = Array(days+1).fill(null);
+  trades.forEach(t=>{ const d = new Date(t.timestamp); if(d.getFullYear()===y && d.getMonth()===m){ const k = d.getDate(); per[k] = per[k] || { p:0, n:0 }; per[k].p += t.pnl; per[k].n++; } });
+  const max = Math.max(1, ...per.filter(Boolean).map(x=>Math.abs(x.p)));
+  const active = per.filter(Boolean), green = active.filter(x=>x.p>=0).length;
+  const cells = Array.from({length:lead}, ()=>'<i class="cal-pad"></i>').join('') + Array.from({length:days}, (_,i)=>{
+    const d = i+1, x = per[d], fut = d > now.getDate(), a = x ? (0.18 + 0.72*Math.min(1, Math.abs(x.p)/max)).toFixed(2) : 0;
+    const bg = x ? (x.p>=0 ? `rgba(61,255,160,${a})` : `rgba(255,92,108,${a})`) : '';
+    return `<span class="cal-d${fut?' fut':''}${d===now.getDate()?' today':''}${x ? (x.p>=0?' up':' dn') : ''}" style="${bg?`background:${bg}`:''}" title="${x ? `${new Date(y,m,d).toLocaleDateString('en-US',{month:'short',day:'numeric'})}: ${fmt.usd(x.p)} · ${x.n} trade${x.n>1?'s':''}` : ''}"><b>${d}</b>${x ? `<em>${usdShort(x.p)}</em>` : ''}</span>`;
+  }).join('');
+  box.innerHTML = `<div class="cal-head"><div><div class="hm-label">THIS MONTH, DAY BY DAY</div><b>${active.length ? `${green} green day${green!==1?'s':''} · ${active.length-green} red` : 'No trade this month yet'}</b></div></div>
+    <div class="cal-wk">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="cal-grid">${cells}</div>`;
 }
 function renderGoal(){
   const m0 = new Date(); m0.setDate(1); m0.setHours(0,0,0,0);
@@ -964,8 +1015,19 @@ function renderGoal(){
   const circumference = 213.6;
   const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
   const offset = circumference*(1-pct);
-  document.getElementById('goalCurrent').textContent = fmt.usd(totalPnl);
-  document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
+  document.getElementById('goalCurrent').textContent = usdBig(totalPnl);
+  document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget.toLocaleString('en-US') : 'No goal set yet';
+  document.getElementById('goalMonth').textContent = new Date().toLocaleDateString('en-US',{month:'long'}).toUpperCase();
+  { const now = new Date(), end = new Date(now.getFullYear(), now.getMonth()+1, 0), left = end.getDate() - now.getDate() + 1, need = goalTarget - totalPnl;
+    document.getElementById('goalPace').innerHTML = !(goalTarget>0) ? 'Set a target below: the ring tracks this month\'s P&amp;L.'
+      : need <= 0 ? `<b class="pos">Goal reached</b> with ${left} day${left>1?'s':''} to spare. Raise the bar?`
+      : `<b>${'$'+need.toLocaleString('en-US',{maximumFractionDigits:0})}</b> to go · ${left} day${left>1?'s':''} left · about <b>${'$'+(need/left).toLocaleString('en-US',{maximumFractionDigits:0})}/day</b>`; }
+  { const mt = trades.filter(t=>t.timestamp >= m0.getTime()), mw = mt.filter(t=>t.pnl>0).length, byDay = {};
+    mt.forEach(t=>{ const k = new Date(t.timestamp).getDate(); byDay[k] = (byDay[k]||0) + t.pnl; });
+    const bestDay = Object.values(byDay).length ? Math.max(...Object.values(byDay)) : null;
+    const box = document.getElementById('goalMonthStats');
+    if(box) box.innerHTML = [['TRADES', mt.length], ['WIN RATE', mt.length ? Math.round(mw/mt.length*100)+'%' : '—'], ['BEST DAY', bestDay!=null ? usdShort(bestDay) : '—']]
+      .map(([l,v])=>`<div><span>${l}</span><b class="${l==='BEST DAY' && bestDay!=null ? (bestDay>=0?'pos':'neg') : ''}">${v}</b></div>`).join(''); }
   document.getElementById('goalPct').textContent = Math.round(pct*100)+'%';
   document.getElementById('goalRing').style.strokeDashoffset = offset;
   document.getElementById('goalInput').value = goalTarget>0 ? goalTarget : '';
@@ -1100,6 +1162,10 @@ function renderAccount(){
   document.getElementById('accEmail').textContent = idLabel;
   renderPasswordBlock();
   document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
+  document.getElementById('accAvatar').textContent = idLabel[0].toUpperCase();
+  { const lvl = levelFromXP(computeXP().total).lvl, since = session?.user?.created_at ? new Date(session.user.created_at).toLocaleDateString('en-US',{month:'short', year:'numeric'}) : '';
+    const plan = window.dcPro?.active ? '<span class="pro-tag">PRO</span>' : window.dcPro?.enabled ? 'Free plan' : '';
+    document.getElementById('accLead').innerHTML = [plan, `LVL ${lvl} ${levelTitle(lvl)}`, `${trades.length} card${trades.length!==1?'s':''}`, since ? 'member since '+since : ''].filter(Boolean).join(' · '); }
   document.getElementById('providerList').innerHTML = PROVIDERS.map(p=>{
     const acc = connectedAccounts.find(a=>a.provider===p.key);
     let status = esc(p.sub);
@@ -1562,11 +1628,21 @@ document.getElementById('radarMin').addEventListener('click', e=>{
 });
 let radarQT = null;
 document.getElementById('radarSearch').addEventListener('input', e=>{ clearTimeout(radarQT); radarQT = setTimeout(()=>{ radar.q = e.target.value.slice(0,64); radar.render(); }, 150); });
+let histFilter = 'all', histQuery = '';
+document.getElementById('histFilter').addEventListener('click', e=>{ const b = e.target.closest('[data-hf]'); if(!b) return;
+  histFilter = b.dataset.hf; document.querySelectorAll('#histFilter .chip').forEach(x=>x.classList.toggle('active', x===b)); renderHistory(); });
+let histQT = null;
+document.getElementById('histSearch').addEventListener('input', e=>{ clearTimeout(histQT); histQT = setTimeout(()=>{ histQuery = e.target.value.slice(0,32); renderHistory(); }, 150); });
 function renderHistory(){
-  const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
+  const every = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
+  const q = histQuery.trim().toLowerCase().replace(/^\$/,'');
+  const all = every.filter(t=>(histFilter==='all' || (histFilter==='win') === (t.pnl>=0)) && (!q || String(t.ticker).toLowerCase().replace(/^\$/,'').includes(q)));
+  { const net = every.reduce((s,t)=>s+t.pnl,0), w = every.filter(t=>t.pnl>=0).length, fees = every.reduce((s,t)=>s+(t.fees>0?t.fees:0),0);
+    document.getElementById('histSummary').innerHTML = !every.length ? 'Your closed trades, one line each.'
+      : `Net <b class="${net>=0?'pos':'neg'}">${usdBig(net)}</b> · ${w} W / ${every.length-w} L${fees>0.005 ? ` · fees ${'$'+fees.toFixed(2)}` : ''}${all.length!==every.length ? ` · showing ${all.length}` : ''}`; }
   const ids = new Set(all.map(t=>t.id));
   for(const id of [...histSel]) if(!ids.has(id)) histSel.delete(id);
-  document.getElementById('histCount').textContent = all.length;
+  document.getElementById('histCount').textContent = every.length;
   const view = document.getElementById('historyView');
   view.classList.toggle('selecting', histSelect);
   const bar = document.getElementById('histBar');
@@ -1578,22 +1654,27 @@ function renderHistory(){
        <button class="hbtn danger" id="histClear">CLEAR HISTORY</button>`;
   const head = document.getElementById('histHeadSel');
   head.innerHTML = histSelect ? `<input type="checkbox" id="histAll" aria-label="Select all" ${all.length && histSel.size===all.length?'checked':''}>` : '';
-  document.getElementById('historyBody').innerHTML = all.map(t=>{
+  // one block per day, with the day's net result
+  const days = []; for(const t of all){ const k = new Date(t.timestamp).toDateString(); const d = days[days.length-1]; if(d && d.k===k) d.l.push(t); else days.push({ k, l:[t] }); }
+  document.getElementById('historyBody').innerHTML = days.map(d=>{
+    const net = d.l.reduce((s,t)=>s+t.pnl,0), dt = new Date(d.l[0].timestamp);
+    const label = dt.toDateString()===new Date().toDateString() ? 'TODAY' : dt.toDateString()===new Date(Date.now()-864e5).toDateString() ? 'YESTERDAY' : dt.toLocaleDateString('en-US',{weekday:'short', month:'short', day:'numeric'}).toUpperCase();
+    return `<tr class="hist-day"><td colspan="11"><span>${label}</span><em>${d.l.length} trade${d.l.length>1?'s':''}</em><b class="${net>=0?'pos':'neg'}">${usdBig(net)}</b></td></tr>` + d.l.map(t=>{
     const win = t.pnl>=0;
-    return `<tr style="border-top:1px solid var(--border);" data-id="${t.id}" class="${histSel.has(t.id)?'is-sel':''}">
+    return `<tr class="hist-row${histSel.has(t.id)?' is-sel':''}" data-id="${t.id}" tabindex="0">
       <td class="sel-cell">${histSelect?`<input type="checkbox" class="hist-chk" data-id="${t.id}" ${histSel.has(t.id)?'checked':''} aria-label="Select trade">`:''}</td>
-      <td style="padding:9px 12px; color:var(--tx2);">${fmt.date(t.timestamp)}</td>
-      <td style="padding:9px 12px; font-weight:700;"><span class="hist-tk">${coinImg(t, 22)}${esc(tk(t.ticker))}</span></td>
-      <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.entryMc)}</td>
-      <td style="padding:9px 12px; color:var(--tx2);">${fmt.mc(t.exitMc)}</td>
-      <td style="padding:9px 12px; color:var(--tx2);">${fmt.hold(t.holdTime)}</td>
-      <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.usd(t.pnl)}</td>
-      <td style="padding:9px 12px;" class="${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
-      <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${t.meta.rarity}</td>
-      <td style="padding:9px 12px; color:var(--tx2); text-transform:uppercase;">${esc(t.source||'manual')}</td>
-      <td style="padding:9px 12px;">${histSelect?'':`<button class="hist-del" data-id="${t.id}" aria-label="Delete trade" style="color:var(--red);">${icon('x',16,'var(--red)')}</button>`}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="11" style="padding:24px; text-align:center; color:var(--tx2);">No trades yet.</td></tr>`;
+      <td class="h-time">${new Date(t.timestamp).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="h-coin"><span class="hist-tk">${coinImg(t, 24)}${esc(tk(t.ticker))}</span></td>
+      <td class="h-entry">${fmt.mc(t.entryMc)}</td>
+      <td class="h-exit">${fmt.mc(t.exitMc)}</td>
+      <td class="h-hold">${fmt.hold(t.holdTime)}</td>
+      <td class="h-pnl num ${win?'pos':'neg'}">${fmt.usd(t.pnl)}</td>
+      <td class="h-roi num ${win?'pos':'neg'}">${fmt.pct(t.roi)}</td>
+      <td class="h-card"><span class="h-rar" style="--rc:${RARITY_HEX[t.meta.rarity]}">${t.meta.rarity} ${t.meta.grade}</span></td>
+      <td class="h-src">${esc(t.source||'manual')}</td>
+      <td class="h-del">${histSelect?'':`<button class="hist-del" data-id="${t.id}" aria-label="Delete trade">${icon('x',16,'var(--red)')}</button>`}</td>
+    </tr>`; }).join(''); }).join('')
+    || `<tr><td colspan="11" class="hist-none">${every.length ? 'No trade matches. Clear the search or the filter.' : 'No trades yet.'}</td></tr>`;
 
   const body = document.getElementById('historyBody');
   body.querySelectorAll('.hist-del').forEach(b=>b.addEventListener('click', async ()=>{
@@ -1604,10 +1685,15 @@ function renderHistory(){
   body.querySelectorAll('.hist-chk').forEach(c=>c.addEventListener('change', ()=>{
     c.checked ? histSel.add(c.dataset.id) : histSel.delete(c.dataset.id); renderHistory();
   }));
-  if(histSelect) body.querySelectorAll('tr[data-id]').forEach(tr=>tr.addEventListener('click', e=>{
-    if(e.target.closest('input,button')) return;
-    const id = tr.dataset.id; histSel.has(id) ? histSel.delete(id) : histSel.add(id); renderHistory();
-  }));
+  body.querySelectorAll('tr[data-id]').forEach(tr=>{
+    tr.addEventListener('click', e=>{
+      if(e.target.closest('input,button')) return;
+      const id = tr.dataset.id;
+      if(histSelect){ histSel.has(id) ? histSel.delete(id) : histSel.add(id); renderHistory(); }
+      else openDetail(id);                                             // a row opens its card
+    });
+    tr.addEventListener('keydown', e=>{ if(e.key==='Enter' && !histSelect && !e.target.closest('button,input')) openDetail(tr.dataset.id); });
+  });
   document.getElementById('histAll')?.addEventListener('change', e=>{
     histSel.clear(); if(e.target.checked) all.forEach(t=>histSel.add(t.id)); renderHistory();
   });
@@ -2067,6 +2153,9 @@ document.getElementById('filterRow').addEventListener('click', e=>{
   b.classList.add('active'); activeFilter=b.dataset.f; renderGrid(true);
 });
 document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderGrid(true); });
+document.getElementById('colRarity').addEventListener('click', e=>{ const b = e.target.closest('[data-rarity]'); if(!b || b.disabled) return; rarityFilter = rarityFilter===b.dataset.rarity ? null : b.dataset.rarity; renderGrid(true); });
+let colQT = null;
+document.getElementById('colSearch').addEventListener('input', e=>{ clearTimeout(colQT); colQT = setTimeout(()=>{ colQuery = e.target.value.slice(0,32); renderGrid(true); }, 150); });
 document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 /* RGPD erasure: deletes the auth user server-side (delete_my_account), trades / wallets / goal cascade */
@@ -2465,6 +2554,7 @@ async function loadStudio(){
   }catch(e){}
 }
 window.addEventListener('dc-studio', () => { renderStatsView(); window.dispatchEvent(new Event('dc-pro')); });
+window.addEventListener('dc-pro', () => { try{ if(session) renderAccount(); }catch(_){} });
 async function loadPro(force){
   if(!session) return;
   if(!PRO_LIVE){

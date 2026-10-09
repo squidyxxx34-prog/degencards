@@ -200,34 +200,44 @@
   </div>
 
   <div id="collectionView" style="display:none;">
-    <div class="sectionhead">
-      <h2>COLLECTION · <span id="countLabel">0</span> cards</h2>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <div class="filters" id="filterRow">
-          <button class="chip active" data-f="all">ALL</button>
-          <button class="chip" data-f="win">WINS</button>
-          <button class="chip" data-f="loss">LOSSES</button>
-          <button class="chip" data-f="rare">RARE</button>
-          <button class="chip" data-f="epic">EPIC</button>
-          <button class="chip" data-f="legendary">LEGENDARY</button>
-        </div>
-        <select class="sortsel" id="sortSel">
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-          <option value="roi">Best ROI</option>
-          <option value="pnl">Best P&L</option>
-        </select>
+    <section class="pg-head">
+      <div><div class="hm-kicker">COLLECTION</div><h1 class="pg-title"><span id="countLabel">0</span> cards</h1><p class="hm-summary" id="colSummary"></p></div>
+    </section>
+    <div class="col-rarity" id="colRarity"></div>
+    <div class="pg-tools">
+      <label class="rd-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 100-14 7 7 0 000 14z M20 20l-4-4"/></svg><input id="colSearch" type="search" placeholder="Search a ticker" autocomplete="off" spellcheck="false" aria-label="Search cards by ticker"></label>
+      <div class="filters" id="filterRow" role="group" aria-label="Filter">
+        <button class="chip active" data-f="all">ALL</button>
+        <button class="chip" data-f="win">WINS</button>
+        <button class="chip" data-f="loss">LOSSES</button>
       </div>
+      <select class="sortsel" id="sortSel" aria-label="Sort cards">
+        <option value="newest">Newest</option>
+        <option value="oldest">Oldest</option>
+        <option value="pnl">Best P&amp;L</option>
+        <option value="roi">Best ROI</option>
+        <option value="rarity">Rarest</option>
+        <option value="worst">Worst P&amp;L</option>
+      </select>
     </div>
     <div class="grid" id="grid"></div>
   </div>
 
   <div id="historyView" style="display:none;">
-    <div class="sectionhead hist-head"><h2>HISTORY · <span id="histCount">0</span> trades</h2><div class="hist-bar" id="histBar"></div></div>
-    <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;">
-      <table style="width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; min-width:640px;">
-        <thead><tr style="background:var(--surf2); text-align:left; color:var(--tx); font-weight:700;">
-          <th class="sel-cell" id="histHeadSel"></th><th style="padding:10px 12px;">DATE</th><th style="padding:10px 12px;">TICKER</th><th style="padding:10px 12px;">ENTRY</th><th style="padding:10px 12px;">EXIT</th><th style="padding:10px 12px;">HOLD</th><th style="padding:10px 12px;">P&L</th><th style="padding:10px 12px;">ROI</th><th style="padding:10px 12px;">RARITY</th><th style="padding:10px 12px;">SRC</th><th style="padding:10px 12px;"></th>
+    <section class="pg-head">
+      <div><div class="hm-kicker">HISTORY</div><h1 class="pg-title"><span id="histCount">0</span> trades</h1><p class="hm-summary" id="histSummary"></p></div>
+      <div class="hist-bar" id="histBar"></div>
+    </section>
+    <div class="pg-tools">
+      <label class="rd-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 100-14 7 7 0 000 14z M20 20l-4-4"/></svg><input id="histSearch" type="search" placeholder="Search a ticker" autocomplete="off" spellcheck="false" aria-label="Search trades by ticker"></label>
+      <div class="filters" id="histFilter" role="group" aria-label="Filter trades">
+        <button class="chip active" data-hf="all">ALL</button><button class="chip" data-hf="win">WINS</button><button class="chip" data-hf="loss">LOSSES</button>
+      </div>
+    </div>
+    <div class="hist-wrap">
+      <table class="hist-table">
+        <thead><tr>
+          <th class="sel-cell" id="histHeadSel"></th><th>TIME</th><th>COIN</th><th>ENTRY</th><th>EXIT</th><th>HOLD</th><th class="num">P&amp;L</th><th class="num">ROI</th><th>CARD</th><th>SOURCE</th><th></th>
         </tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
@@ -235,37 +245,48 @@
   </div>
 
   <div id="achievementsView" style="display:none;">
-    <div class="sectionhead"><h2>ACHIEVEMENTS UNLOCKED · <span id="achCount">0</span> / <span id="achTotal">0</span></h2></div>
+    <section class="pg-head">
+      <div><div class="hm-kicker">ACHIEVEMENTS</div><h1 class="pg-title"><span id="achCount">0</span> <span class="pg-of">/ <span id="achTotal">0</span></span> unlocked</h1><p class="hm-summary" id="achLead"></p></div>
+    </section>
     <div class="ach-summary" id="achSummary"></div>
     <div class="ach-filters" id="achFilters"></div>
     <div id="achAll"></div>
   </div>
 
   <div id="statsView" style="display:none;">
-    <div class="sectionhead"><h2>STATISTICS</h2></div>
+    <section class="pg-head">
+      <div><div class="hm-kicker">STATS</div><h1 class="pg-title">Your numbers</h1><p class="hm-summary" id="statsLead"></p></div>
+    </section>
 
-    <div class="goal-card">
-      <div class="goal-top">
-        <div>
-          <div class="goal-label">MONTHLY GOAL</div>
-          <div class="goal-amounts"><span id="goalCurrent">$0</span><span class="goal-sep">/</span><span id="goalTarget">—</span></div>
+    <div class="st-top">
+      <div class="goal-card st-goal">
+        <div class="goal-top">
+          <div>
+            <div class="goal-label">MONTHLY GOAL · <span id="goalMonth"></span></div>
+            <div class="goal-amounts"><span id="goalCurrent">$0</span></div>
+            <div class="hm-goal-of" id="goalTarget">—</div>
+          </div>
+          <div class="goal-ring-wrap">
+            <svg viewBox="0 0 80 80" width="72" height="72">
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
+              <circle id="goalRing" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
+              <defs><linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B084FF"/><stop offset="1" stop-color="#F5C542"/></linearGradient></defs>
+            </svg>
+            <div class="goal-pct" id="goalPct">0%</div>
+          </div>
         </div>
-        <div class="goal-ring-wrap">
-          <svg viewBox="0 0 80 80" width="72" height="72">
-            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
-            <circle id="goalRing" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
-            <defs><linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B084FF"/><stop offset="1" stop-color="#F5C542"/></linearGradient></defs>
-          </svg>
-          <div class="goal-pct" id="goalPct">0%</div>
+        <div class="st-pace" id="goalPace"></div>
+        <div class="st-month" id="goalMonthStats"></div>
+        <div class="goal-editrow">
+          <input id="goalInput" type="number" min="0" max="1000000000" step="any" placeholder="Set a $ profit target, e.g. 500" aria-label="Monthly profit target in dollars">
+          <button id="btnSaveGoal">SAVE GOAL</button>
         </div>
       </div>
-      <div class="goal-editrow">
-        <input id="goalInput" type="number" min="0" max="1000000000" step="any" placeholder="Set a $ profit target, e.g. 500">
-        <button id="btnSaveGoal">SAVE GOAL</button>
-      </div>
+      <div class="hm-panel st-cal" id="statsCal"></div>
     </div>
 
-    <div class="detail-stats stats-3" id="statsGrid"></div>
+    <div class="sectionhead"><h2>OVERVIEW</h2></div>
+    <div class="detail-stats stats-3 st-grid" id="statsGrid"></div>
     <button type="button" class="pro-cta" id="statsPro" hidden><span class="pro-tag">PRO</span> Unlock full stats: profit factor, streaks, drawdown, best hour, top coin…</button>
   </div>
 
@@ -288,55 +309,56 @@
   </div>
 
   <div id="accountView" style="display:none;">
-    <div class="sectionhead"><h2>MANAGE ACCOUNT</h2></div>
-    <div class="acc-block" id="proBlock" style="display:none;">
-      <h4>DEGENCARDS PRO</h4>
-      <div class="provider-row" style="border-top:none;">
-        <div><div class="provider-name" id="proState">Free plan</div><div class="provider-sub" id="proSub">Every replay theme, background, sell effect, intro, hook and the short-logo ending.</div></div>
-        <button type="button" class="btn-logout pro-btn" id="btnPro">GO PRO</button>
+    <section class="pg-head acc-head">
+      <div class="acc-id">
+        <div class="acc-av" id="accAvatar">·</div>
+        <div><div class="hm-kicker">ACCOUNT</div><h1 class="pg-title acc-name" id="accEmail">—</h1><p class="hm-summary" id="accLead"></p></div>
       </div>
-    </div>
-    <div class="acc-block">
-      <h4>GETTING STARTED</h4>
-      <div class="provider-row" style="border-top:none;">
-        <div><div class="provider-name">Guided tour</div><div class="provider-sub">A 1-minute walkthrough of DEGENCARDS. Skip anytime.</div></div>
-        <button type="button" class="btn-connect" data-guide-start>REPLAY GUIDE</button>
+      <button class="btn-logout" id="btnLogout">LOG OUT</button>
+    </section>
+    <div class="acc-grid">
+      <div class="acc-block acc-wide">
+        <h4>AUTO-IMPORT TRADES</h4>
+        <p class="acc-desc">Connect the wallets you trade with. Every closed trade turns into a card by itself, about every 10 minutes. Watch-only: your public address, never a key.</p>
+        <div id="providerList"></div>
       </div>
-    </div>
-    <div class="acc-block">
-      <h4>SIGNED IN AS</h4>
-      <div class="provider-row" style="border-top:none;">
-        <div><div class="provider-name" id="accEmail">—</div><div class="provider-sub">Free plan</div></div>
-        <button class="btn-logout" id="btnLogout">LOG OUT</button>
+      <div class="acc-block" id="proBlock" style="display:none;">
+        <h4>DEGENCARDS PRO</h4>
+        <div class="provider-row" style="border-top:none;">
+          <div><div class="provider-name" id="proState">Free plan</div><div class="provider-sub acc-wrap" id="proSub">Every replay theme, background, sell effect, intro, hook and the short-logo ending.</div></div>
+          <button type="button" class="btn-logout pro-btn" id="btnPro">GO PRO</button>
+        </div>
       </div>
-    </div>
-    <div class="acc-block" id="pwBlock" style="display:none;">
-      <h4 id="pwTitle">PASSWORD</h4>
-      <div class="acc-form">
-        <input id="accPassword" type="password" placeholder="New password (8+ characters)" minlength="8" maxlength="72" autocomplete="new-password">
-        <input id="accPassword2" type="password" placeholder="Confirm password" minlength="8" maxlength="72" autocomplete="new-password">
-        <input id="accNonce" type="text" inputmode="numeric" placeholder="Code received by email" maxlength="10" autocomplete="one-time-code" style="display:none;">
-        <button id="btnAccPassword">SAVE PASSWORD</button>
-        <div class="authnote" id="accPwNote" style="text-align:left;"></div>
+      <div class="acc-block" id="pwBlock" style="display:none;">
+        <h4 id="pwTitle">PASSWORD</h4>
+        <div class="acc-form">
+          <input id="accPassword" type="password" placeholder="New password (8+ characters)" minlength="8" maxlength="72" autocomplete="new-password" aria-label="New password">
+          <input id="accPassword2" type="password" placeholder="Confirm password" minlength="8" maxlength="72" autocomplete="new-password" aria-label="Confirm password">
+          <input id="accNonce" type="text" inputmode="numeric" placeholder="Code received by email" maxlength="10" autocomplete="one-time-code" style="display:none;" aria-label="Code received by email">
+          <button id="btnAccPassword">SAVE PASSWORD</button>
+          <div class="authnote" id="accPwNote" style="text-align:left;"></div>
+        </div>
       </div>
-    </div>
-    <div class="acc-block">
-      <h4>AUTO-IMPORT TRADES</h4>
-      <div id="providerList"></div>
-      <div class="authnote" style="margin-top:10px; text-align:left;">Connecting pulls in your recent activity as trade cards automatically. Manual entry still works for anything a connector misses.</div>
-    </div>
-    <div class="acc-block">
-      <h4>RECOVER TRADES <span id="recoverCount"></span></h4>
-      <div id="recoverBlock"></div>
-    </div>
-    <div class="acc-block">
-      <h4>LEGAL &amp; DATA</h4>
-      <div class="provider-row" style="border-top:none;">
-        <div><div class="provider-name">Your data</div><div class="provider-sub"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/legal">Legal notice</a></div></div>
+      <div class="acc-block">
+        <h4>RECOVER TRADES <span id="recoverCount"></span></h4>
+        <div id="recoverBlock"></div>
       </div>
-      <div class="provider-row">
-        <div><div class="provider-name">Delete account</div><div class="provider-sub">Erases your account, trades, connected wallets and goal for good. Cannot be undone.</div></div>
-        <button type="button" class="btn-logout btn-danger" id="btnDeleteAccount">DELETE ACCOUNT</button>
+      <div class="acc-block">
+        <h4>HELP</h4>
+        <div class="provider-row" style="border-top:none;">
+          <div><div class="provider-name">Guided tour</div><div class="provider-sub acc-wrap">A 1-minute walkthrough of DEGENCARDS. Skip anytime.</div></div>
+          <button type="button" class="btn-connect" data-guide-start>REPLAY GUIDE</button>
+        </div>
+      </div>
+      <div class="acc-block">
+        <h4>LEGAL &amp; DATA</h4>
+        <div class="provider-row" style="border-top:none;">
+          <div><div class="provider-name">Your data</div><div class="provider-sub"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/legal">Legal notice</a></div></div>
+        </div>
+        <div class="provider-row">
+          <div><div class="provider-name">Delete account</div><div class="provider-sub acc-wrap">Erases your account, trades, connected wallets and goal for good. Cannot be undone.</div></div>
+          <button type="button" class="btn-logout btn-danger" id="btnDeleteAccount">DELETE</button>
+        </div>
       </div>
     </div>
   </div>
