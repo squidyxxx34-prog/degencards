@@ -237,23 +237,21 @@
   </div>
 
   <div id="radarView" style="display:none;">
-    <div class="sectionhead">
-      <h2>RADAR · <span id="radarCount">0</span> tokens</h2>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <div class="filters" id="radarFilters">
-          <button class="chip active" data-min="80">SCORE 80+</button>
-          <button class="chip" data-min="90">90+</button>
-        </div>
-        <select class="sortsel" id="radarSort" aria-label="Sort tokens">
-          <option value="score">Best score</option>
-          <option value="vol">Volume 1h</option>
-          <option value="new">Newest</option>
-        </select>
-      </div>
+    <div class="sectionhead rd-top">
+      <h2>RADAR <span class="rd-count"><span id="radarCount">0</span> coins</span></h2>
+      <span class="rd-live" id="radarLive"><i></i><span>Live</span></span>
     </div>
-    <p class="radar-note">Active Solana tokens that pass on-chain safety checks: authorities, token extensions, holder concentration, same-size wallet bundles, dev wallet, liquidity behind the market cap, price moves, activity and RugCheck flags. A high score means fewer rug signals right now, not a buy signal. It can still miss insiders spread over varied wallets, or a dev who sells later. Not financial advice.</p>
+    <div class="rd-cats" id="radarCats" role="tablist" aria-label="Coin categories"></div>
+    <div class="rd-tools">
+      <label class="rd-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 100-14 7 7 0 000 14z M20 20l-4-4"/></svg><input id="radarSearch" type="search" placeholder="Search ticker, name or CA" autocomplete="off" spellcheck="false" aria-label="Search coins"></label>
+      <div class="rd-min"><span>Safety</span><div class="filters" id="radarMin" role="group" aria-label="Minimum safety score"></div></div>
+    </div>
+    <p class="rd-catdesc" id="radarCatDesc"></p>
     <div class="radar-list" id="radarList"></div>
     <div class="radar-foot" id="radarFoot"></div>
+    <details class="radar-about"><summary>How the safety score works</summary>
+      <p class="radar-note">Every coin is checked on-chain: mint and freeze authorities, token extensions, holder concentration, same-size wallet bundles, dev wallet, liquidity behind the market cap, price moves, activity and RugCheck flags. A high score means fewer rug signals right now, not a buy signal. It can still miss insiders spread over varied wallets, or a dev who sells later. Not financial advice.</p>
+    </details>
   </div>
 
   <div id="accountView" style="display:none;">

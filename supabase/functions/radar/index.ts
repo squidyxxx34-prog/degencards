@@ -1,8 +1,11 @@
 // DEGENCARDS — radar
 // Feed of active Solana tokens with an on-chain SAFETY score (0-100). Run by pg_cron every 5 min (x-cron-key, same key as sync-trades).
 // A high score only means fewer rug signals in what the chain and public APIs show right now: never a guarantee, never advice.
-// Sources: pump.fun lists (unofficial API), DexScreener (activity, liquidity), Solana RPC (authorities, Token-2022 extensions,
-// holders, bundles), RugCheck report (linked holders, risk flags). Writes public.radar_tokens with the service role; users only read it.
+// Sources: pump.fun lists (unofficial API), DexScreener (activity, liquidity), GeckoTerminal (new / trending pools, optional),
+// Solana RPC (authorities, Token-2022 extensions, holders, bundles), RugCheck report (linked holders, risk flags).
+// Writes public.radar_tokens with the service role; users only read it.
+// v4: candidates are gathered per CATEGORY (new, movers, final stretch, migrated, trending, live, safest feed) and the scan budget
+// is shared round-robin between them, so every tab of the app gets fresh coins (before: the old feed took every slot).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL") || "http://x", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "x", { auth: { persistSession: false, autoRefreshToken: false } });
@@ -12,8 +15,11 @@ const RPC_GAP = HELIUS ? 120 : 280;                                   // public 
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SYSTEM = "11111111111111111111111111111111";
 const POOL_AUTH = new Set(["5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL"]);   // Raydium AMM v4 / CPMM authorities
-const BUDGET_MS = 115_000, MAX_DEEP = 36, MAX_IMAGES = 6;
+const BUDGET_MS = 115_000, MAX_DEEP = 72, MAX_IMAGES = 10;
 const MIN_MC = 15_000, MIN_VOL_H1 = 3_000, MIN_TX_H1 = 40;
+const LOW_MC = 10_000, LOW_VOL_H1 = 2_000, LOW_TX_H1 = 30;            // new coins / final stretch: younger, smaller, still trading
+const RESCAN_MS = 8 * 60_000;                                         // a coin scanned less than 8 min ago waits for the next pass
+const MAJORS = new Set(["So11111111111111111111111111111111111111112", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>&"'`\\]/g, "").trim().slice(0, n);
 const fin = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
@@ -69,31 +75,50 @@ function pumpInfo(c: any): Pump | null {
     links: [c.twitter, c.telegram, c.website].filter((x) => typeof x === "string" && x),
     curvePct: c.complete ? 100 : rtr == null ? null : Math.max(0, Math.min(100, (CURVE_TOKENS - rtr) / CURVE_TOKENS * 100)), live: !!c.is_currently_live };
 }
-async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump>; feed: Set<string> }> {
+type Hints = { neu: Set<string>; final: Set<string>; migrated: Set<string>; hot: Set<string>; live: Set<string> };
+/* GeckoTerminal pools -> base token mints (optional source: it can refuse cloud IPs, then it just adds nothing) */
+async function gtMints(path: string): Promise<string[]> {
+  const j = await getJson("https://api.geckoterminal.com/api/v2/networks/solana/" + path, 8000);
+  const out: string[] = [];
+  for (const p of Array.isArray(j?.data) ? j.data : []) {
+    const id = String(p?.relationships?.base_token?.data?.id || "").replace(/^solana_/, "");
+    if (B58.test(id) && !MAJORS.has(id)) out.push(id);
+  }
+  return out;
+}
+async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump>; feed: Set<string>; hints: Hints }> {
   const pump = new Map<string, Pump>(), set = new Set<string>();
-  const lists = await Promise.all([
-    getJson("https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false"),
-    getJson("https://frontend-api-v3.pump.fun/coins/currently-live?offset=0&limit=50&includeNsfw=false"),
-    getJson("https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=market_cap&order=DESC&includeNsfw=false&complete=false"),
+  const hints: Hints = { neu: new Set(), final: new Set(), migrated: new Set(), hot: new Set(), live: new Set() };
+  const P = "https://frontend-api-v3.pump.fun/coins";
+  const [active, live, curveTop, newest, graduated, gtNew, gtHot] = await Promise.all([
+    getJson(`${P}?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false`),
+    getJson(`${P}/currently-live?offset=0&limit=50&includeNsfw=false`),
+    getJson(`${P}?offset=0&limit=50&sort=market_cap&order=DESC&includeNsfw=false&complete=false`),
+    getJson(`${P}?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false&complete=false`),
+    getJson(`${P}?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false&complete=true`),   // recently created + graduated = just migrated
+    gtMints("new_pools?page=1"),
+    gtMints("trending_pools?page=1&duration=1h"),
   ]);
-  for (const list of lists) for (const c of Array.isArray(list) ? list : []) {
-    const p = pumpInfo(c); if (!p) continue;
-    set.add(c.mint); pump.set(c.mint, p);
-  }
-  for (const u of ["https://api.dexscreener.com/token-profiles/latest/v1", "https://api.dexscreener.com/token-boosts/latest/v1"]) {
+  const take = (list: any, tag?: Set<string>) => { for (const c of Array.isArray(list) ? list : []) {
+    const p = pumpInfo(c); if (!p) continue; set.add(c.mint); pump.set(c.mint, p); if (tag) tag.add(c.mint); } };
+  take(active, hints.hot); take(live, hints.live); take(curveTop, hints.final); take(newest, hints.neu); take(graduated, hints.migrated);
+  for (const m of gtNew) { set.add(m); hints.neu.add(m); }
+  for (const m of gtHot) { set.add(m); hints.hot.add(m); }
+  for (const [u, tag] of [["https://api.dexscreener.com/token-profiles/latest/v1", hints.neu], ["https://api.dexscreener.com/token-boosts/latest/v1", hints.hot],
+    ["https://api.dexscreener.com/token-boosts/top/v1", hints.hot]] as [string, Set<string>][]) {
     const arr = await getJson(u);
-    for (const p of Array.isArray(arr) ? arr : []) if (p?.chainId === "solana" && B58.test(p.tokenAddress || "")) set.add(p.tokenAddress);
+    for (const p of Array.isArray(arr) ? arr : []) if (p?.chainId === "solana" && B58.test(p.tokenAddress || "") && !MAJORS.has(p.tokenAddress)) { set.add(p.tokenAddress); tag.add(p.tokenAddress); }
   }
-  // keep the current feed fresh: tokens that scored well recently are re-checked every pass (they drop out if they degrade)
-  const { data: prev } = await db.from("radar_tokens").select("mint").gte("score", 70).gt("scanned_at", new Date(Date.now() - 3 * 3600e3).toISOString()).limit(40);
+  // the safest feed is kept fresh: coins that scored well recently are re-checked (they drop out if they degrade)
+  const { data: prev } = await db.from("radar_tokens").select("mint").gte("score", 80).gt("scanned_at", new Date(Date.now() - 3 * 3600e3).toISOString()).limit(60);
   const feed = new Set<string>((prev || []).map((r: any) => r.mint));
   for (const m of feed) set.add(m);
-  return { mints: [...set], pump, feed };
+  return { mints: [...set], pump, feed, hints };
 }
 
 /* ---------- 2. market data (DexScreener, 30 mints per call) ---------- */
 type Market = { name: string; symbol: string; mc: number; liq: number; volH1: number; volH24: number; buys: number; sells: number; changeH1: number | null;
-  createdAt: number | null; pairs: string[]; mainPair: string; image: string; dexIds: string[];
+  createdAt: number | null; migratedAt: number | null; pairs: string[]; mainPair: string; image: string; dexIds: string[];
   changeM5: number | null; changeH6: number | null; changeH24: number | null; buys24: number; sells24: number; links: string[] };
 async function markets(mints: string[]): Promise<Map<string, Market>> {
   const out = new Map<string, Market>();
@@ -103,7 +128,7 @@ async function markets(mints: string[]): Promise<Map<string, Market>> {
       const mint = p?.baseToken?.address; if (!B58.test(mint || "")) continue;
       const liq = fin(p.liquidity?.usd) || 0;
       const m = out.get(mint) || { name: clean(p.baseToken.name, 64), symbol: clean(p.baseToken.symbol, 24), mc: 0, liq: 0, volH1: 0, volH24: 0, buys: 0, sells: 0,
-        changeH1: null, createdAt: null, pairs: [], mainPair: "", image: "", dexIds: [], changeM5: null, changeH6: null, changeH24: null, buys24: 0, sells24: 0, links: [], _best: -1 } as Market & { _best: number };
+        changeH1: null, createdAt: null, migratedAt: null, pairs: [], mainPair: "", image: "", dexIds: [], changeM5: null, changeH6: null, changeH24: null, buys24: 0, sells24: 0, links: [], _best: -1 } as Market & { _best: number };
       const best = (m as any)._best;
       m.liq += liq; m.volH1 += fin(p.volume?.h1) || 0; m.volH24 += fin(p.volume?.h24) || 0;
       m.buys += fin(p.txns?.h1?.buys) || 0; m.sells += fin(p.txns?.h1?.sells) || 0;
@@ -112,6 +137,7 @@ async function markets(mints: string[]): Promise<Map<string, Market>> {
       if (B58.test(p.pairAddress || "")) m.pairs.push(p.pairAddress);
       if (p.dexId) m.dexIds.push(String(p.dexId));
       const c = fin(p.pairCreatedAt); if (c && (!m.createdAt || c < m.createdAt)) m.createdAt = c;
+      if (c && p.dexId === "pumpswap" && (!m.migratedAt || c < m.migratedAt)) m.migratedAt = c;   // PumpSwap pool = created at graduation
       if (liq > best) {                                               // the deepest pool gives price, market cap and image
         (m as any)._best = liq; m.mc = fin(p.marketCap) || fin(p.fdv) || m.mc; m.changeH1 = fin(p.priceChange?.h1);
         m.changeM5 = fin(p.priceChange?.m5); m.changeH6 = fin(p.priceChange?.h6); m.changeH24 = fin(p.priceChange?.h24);
@@ -287,20 +313,48 @@ async function copyImage(mint: string, srcs: string[]): Promise<string | null> {
 /* ---------- pass ---------- */
 async function pass() {
   const t0 = Date.now(), deadline = t0 + BUDGET_MS;
-  const { mints, pump, feed } = await candidates();
+  const { mints, pump, feed, hints } = await candidates();
   const mk = await markets(mints);
-  const active = (m: string) => { const x = mk.get(m); return !!x && x.mc >= MIN_MC && x.volH1 >= MIN_VOL_H1 && x.buys + x.sells >= MIN_TX_H1; };
-  const byVol = (a: string, b: string) => mk.get(b)!.volH1 - mk.get(a)!.volH1;
-  // what is on screen is re-checked first, every pass, so a coin that turns bad leaves the feed within 5 min
-  const pre = [...[...feed].filter(active).sort(byVol), ...mints.filter((m) => !feed.has(m) && active(m)).sort(byVol)].slice(0, MAX_DEEP);
-  const gone = [...feed].filter((m) => !active(m));                 // no longer active (volume dried up, pool gone): out of the feed
-  if (gone.length) await db.from("radar_tokens").delete().in("mint", gone);
-  // tokens re-checked from the feed may be missing from this pass's pump.fun lists: fetch their pump.fun details one by one
-  for (const mint of pre) if (!pump.has(mint) && (mint.endsWith("pump") || mk.get(mint)!.dexIds.some((d) => d.startsWith("pump")))) {
-    const p = pumpInfo(await getJson(`https://frontend-api-v3.pump.fun/coins-v2/${mint}`, 8000)); if (p) pump.set(mint, p);
+  const ok = (m: string, mc: number, vol: number, tx: number) => { const x = mk.get(m); return !!x && x.mc >= mc && x.volH1 >= vol && x.buys + x.sells >= tx; };
+  const active = (m: string) => ok(m, MIN_MC, MIN_VOL_H1, MIN_TX_H1);
+  const alive = (m: string) => ok(m, LOW_MC, LOW_VOL_H1, LOW_TX_H1);
+  const M = (m: string) => mk.get(m)!, now = Date.now(), day = 24 * 3600e3;
+  // what we scanned lately: a coin scanned < 8 min ago waits (the app shows rows up to 20 min old)
+  const { data: known } = await db.from("radar_tokens").select("mint,image,image_tries,scanned_at").gt("scanned_at", new Date(now - day).toISOString()).limit(2000);
+  const prev = new Map<string, any>((known || []).map((r: any) => [r.mint, r]));
+  const seenAt = (m: string) => { const p = prev.get(m); return p ? Date.parse(p.scanned_at) || 0 : 0; };
+  const due = (m: string) => now - seenAt(m) > RESCAN_MS;
+  // memecoin radar: established tokens (RAY, JUP…) that show up in trending lists are left out
+  const all = mints.filter((m) => mk.has(m) && (pump.has(m) || !M(m).createdAt || now - M(m).createdAt! < 90 * day));
+  const lists: string[][] = [
+    all.filter((m) => alive(m) && M(m).createdAt && now - M(m).createdAt! < day && (hints.neu.has(m) || now - M(m).createdAt! < 6 * 3600e3))
+      .sort((a, b) => M(b).createdAt! - M(a).createdAt!),                                                   // NEW: newest first
+    all.filter((m) => active(m) && Math.max(M(m).changeH1 ?? 0, M(m).changeM5 ?? 0) >= 10)
+      .sort((a, b) => Math.max(M(b).changeH1 ?? 0, 3 * (M(b).changeM5 ?? 0)) - Math.max(M(a).changeH1 ?? 0, 3 * (M(a).changeM5 ?? 0))),   // MOVERS
+    all.filter((m) => alive(m) && pump.get(m) && !pump.get(m)!.complete && (pump.get(m)!.curvePct ?? 0) >= 40)
+      .sort((a, b) => (pump.get(b)!.curvePct ?? 0) - (pump.get(a)!.curvePct ?? 0)),                         // FINAL STRETCH
+    all.filter((m) => alive(m) && (M(m).migratedAt ? now - M(m).migratedAt! < day : hints.migrated.has(m)))
+      .sort((a, b) => (M(b).migratedAt || 0) - (M(a).migratedAt || 0)),                                    // MIGRATED
+    all.filter(active).sort((a, b) => M(b).volH1 - M(a).volH1),                                            // TRENDING
+    all.filter((m) => alive(m) && pump.get(m)?.live),                                                      // LIVE
+    [...feed].filter(active).sort((a, b) => seenAt(a) - seenAt(b)),                                       // SAFEST feed, stalest first
+  ];
+  // round-robin over the categories so each one gets fresh coins before the budget runs out
+  const pre: string[] = [], picked = new Set<string>(), idx = lists.map(() => 0);
+  for (let more = true; more && pre.length < MAX_DEEP;) {
+    more = false;
+    for (let c = 0; c < lists.length && pre.length < MAX_DEEP; c++) {
+      while (idx[c] < lists[c].length) { const m = lists[c][idx[c]++]; if (picked.has(m) || !due(m)) continue; picked.add(m); pre.push(m); more = true; break; }
+    }
   }
-  const { data: known } = await db.from("radar_tokens").select("mint,image,image_tries").in("mint", pre.length ? pre : ["x"]);
-  const prev = new Map((known || []).map((r: any) => [r.mint, r]));
+  // feed coins with market data that stopped trading leave the feed (no market data at all = API hiccup: keep them)
+  const gone = [...feed].filter((m) => mk.has(m) && !alive(m));
+  if (gone.length) await db.from("radar_tokens").delete().in("mint", gone);
+  // coins picked from other lists may be missing from this pass's pump.fun lists: fetch their pump.fun details one by one
+  const missing = pre.filter((m) => !pump.has(m) && (m.endsWith("pump") || M(m).dexIds.some((d) => d.startsWith("pump"))));
+  for (let i = 0; i < missing.length && Date.now() < deadline - 60_000; i += 6) {
+    await Promise.all(missing.slice(i, i + 6).map(async (mint) => { const p = pumpInfo(await getJson(`https://frontend-api-v3.pump.fun/coins-v2/${mint}`, 8000)); if (p) pump.set(mint, p); }));
+  }
   let scanned = 0, passed = 0, images = 0, errors = 0; const sample: string[] = [];
   for (const mint of pre) {
     if (Date.now() > deadline - 12_000) break;
@@ -315,7 +369,7 @@ async function pass() {
         top10_pct: r.top10, dev_pct: r.devPct, holders_checked: r.holders, created_at_ms: m.createdAt, pair: m.mainPair || null, scanned_at: new Date().toISOString(),
         supply: r.supply, biggest_pct: r.biggest, change_m5: m.changeM5, change_h6: m.changeH6, change_h24: m.changeH24, buys_h24: m.buys24, sells_h24: m.sells24,
         curve_pct: pm?.curvePct ?? null, live: !!pm?.live, description: pm?.description || null, links: links([...(pm?.links || []), ...m.links]),
-        pairs: [...new Set([m.mainPair, ...m.pairs].filter(Boolean))].slice(0, 4) };
+        pairs: [...new Set([m.mainPair, ...m.pairs].filter(Boolean))].slice(0, 4), migrated_at_ms: m.migratedAt };
       const p = prev.get(mint);
       if (r.score >= 80 && !p?.image && (p?.image_tries || 0) < 3 && images < MAX_IMAGES && Date.now() < deadline - 25_000) {
         const url = await copyImage(mint, [pm?.image || "", m.image]).catch(() => null);
@@ -326,7 +380,7 @@ async function pass() {
     } catch (e) { errors++; console.error("scan", mint, (e as Error).message); }
   }
   await db.from("radar_tokens").delete().lt("scanned_at", new Date(Date.now() - 24 * 3600e3).toISOString());   // forget tokens not seen for 24 h
-  const res = { candidates: mints.length, withMarket: mk.size, prefiltered: pre.length, scanned, passed, images, errors, ms: Date.now() - t0, sample };
+  const res = { candidates: mints.length, withMarket: mk.size, lists: lists.map((l) => l.length), prefiltered: pre.length, scanned, passed, images, errors, ms: Date.now() - t0, sample: sample.slice(0, 12) };
   console.log("radar", JSON.stringify(res));
   return res;
 }

@@ -58,3 +58,7 @@ alter table public.radar_tokens
   add column if not exists description text check (description is null or char_length(description) <= 280),
   add column if not exists links       jsonb not null default '[]'::jsonb,
   add column if not exists pairs       jsonb not null default '[]'::jsonb;
+
+-- v4 (migration radar_tokens_categories, 2026-10-09) : catégories de l'onglet RADAR
+alter table public.radar_tokens add column if not exists migrated_at_ms bigint;     -- création du pool PumpSwap = graduation
+create index if not exists radar_tokens_scanned on public.radar_tokens (scanned_at desc);
