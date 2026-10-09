@@ -807,3 +807,5 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
   .radar-score{min-width:50px;}
   .radar-open{min-width:46px;}
 }
+.radar-tag.early{color:var(--gold); background:rgba(255,211,92,.12);}
+.radar-tag.dump{color:#fff; background:#B3261E;}

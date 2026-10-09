@@ -62,3 +62,9 @@ alter table public.radar_tokens
 -- v4 (migration radar_tokens_categories, 2026-10-09) : catégories de l'onglet RADAR
 alter table public.radar_tokens add column if not exists migrated_at_ms bigint;     -- création du pool PumpSwap = graduation
 create index if not exists radar_tokens_scanned on public.radar_tokens (scanned_at desc);
+
+-- v5 (2026-10-09) : rafraîchissement 1 min des coins affichés (marché seul, pas de RPC) -> coins morts retirés, dumps plafonnés en < 1 min
+select cron.schedule('radar-refresh', '* * * * *', $$
+  select net.http_post(url := 'https://wlxyepkewatmwlziybfb.supabase.co/functions/v1/radar',
+    headers := jsonb_build_object('Content-Type','application/json','x-cron-key',(select decrypted_secret from vault.decrypted_secrets where name = 'sync_cron_key')),
+    body := '{"task":"refresh"}'::jsonb, timeout_milliseconds := 50000); $$);

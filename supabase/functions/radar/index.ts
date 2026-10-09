@@ -6,6 +6,7 @@
 // Writes public.radar_tokens with the service role; users only read it.
 // v4: candidates are gathered per CATEGORY (new, movers, final stretch, migrated, trending, live, safest feed) and the scan budget
 // is shared round-robin between them, so every tab of the app gets fresh coins (before: the old feed took every slot).
+// { task:"refresh" } (cron every minute): market data only for the coins on screen -> dead coins removed, dumps capped within a minute.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL") || "http://x", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "x", { auth: { persistSession: false, autoRefreshToken: false } });
@@ -65,7 +66,7 @@ async function rpc(method: string, params: unknown[]): Promise<any> {
 
 /* ---------- 1. candidates ---------- */
 type Pump = { creator: string; curve: string; pool: string; complete: boolean; name: string; symbol: string; image: string;
-  description: string; links: string[]; curvePct: number | null; live: boolean };
+  description: string; links: string[]; curvePct: number | null; live: boolean; createdAt: number | null };
 function pumpInfo(c: any): Pump | null {
   if (!B58.test(c?.mint || "") || c.is_banned || c.nsfw) return null;
   const rtr = fin(c.real_token_reserves);
@@ -73,7 +74,8 @@ function pumpInfo(c: any): Pump | null {
     pool: B58.test(c.pool_address || "") ? c.pool_address : "", complete: !!c.complete, name: clean(c.name, 64), symbol: clean(c.symbol, 24),
     image: typeof c.image_uri === "string" ? c.image_uri : "", description: text(c.description, 280),
     links: [c.twitter, c.telegram, c.website].filter((x) => typeof x === "string" && x),
-    curvePct: c.complete ? 100 : rtr == null ? null : Math.max(0, Math.min(100, (CURVE_TOKENS - rtr) / CURVE_TOKENS * 100)), live: !!c.is_currently_live };
+    curvePct: c.complete ? 100 : rtr == null ? null : Math.max(0, Math.min(100, (CURVE_TOKENS - rtr) / CURVE_TOKENS * 100)), live: !!c.is_currently_live,
+    createdAt: fin(c.created_timestamp) };                            // the real launch: DexScreener drops the curve pair after migration
 }
 type Hints = { neu: Set<string>; final: Set<string>; migrated: Set<string>; hot: Set<string>; live: Set<string> };
 /* GeckoTerminal pools -> base token mints (optional source: it can refuse cloud IPs, then it just adds nothing) */
@@ -119,7 +121,7 @@ async function candidates(): Promise<{ mints: string[]; pump: Map<string, Pump>;
 /* ---------- 2. market data (DexScreener, 30 mints per call) ---------- */
 type Market = { name: string; symbol: string; mc: number; liq: number; volH1: number; volH24: number; buys: number; sells: number; changeH1: number | null;
   createdAt: number | null; migratedAt: number | null; pairs: string[]; mainPair: string; image: string; dexIds: string[];
-  changeM5: number | null; changeH6: number | null; changeH24: number | null; buys24: number; sells24: number; links: string[] };
+  changeM5: number | null; changeH6: number | null; changeH24: number | null; buys24: number; sells24: number; links: string[]; quote: string };
 async function markets(mints: string[]): Promise<Map<string, Market>> {
   const out = new Map<string, Market>();
   for (let i = 0; i < mints.length; i += 30) {
@@ -128,7 +130,7 @@ async function markets(mints: string[]): Promise<Map<string, Market>> {
       const mint = p?.baseToken?.address; if (!B58.test(mint || "")) continue;
       const liq = fin(p.liquidity?.usd) || 0;
       const m = out.get(mint) || { name: clean(p.baseToken.name, 64), symbol: clean(p.baseToken.symbol, 24), mc: 0, liq: 0, volH1: 0, volH24: 0, buys: 0, sells: 0,
-        changeH1: null, createdAt: null, migratedAt: null, pairs: [], mainPair: "", image: "", dexIds: [], changeM5: null, changeH6: null, changeH24: null, buys24: 0, sells24: 0, links: [], _best: -1 } as Market & { _best: number };
+        changeH1: null, createdAt: null, migratedAt: null, pairs: [], mainPair: "", image: "", dexIds: [], changeM5: null, changeH6: null, changeH24: null, buys24: 0, sells24: 0, links: [], quote: "", _best: -1 } as Market & { _best: number };
       const best = (m as any)._best;
       m.liq += liq; m.volH1 += fin(p.volume?.h1) || 0; m.volH24 += fin(p.volume?.h24) || 0;
       m.buys += fin(p.txns?.h1?.buys) || 0; m.sells += fin(p.txns?.h1?.sells) || 0;
@@ -142,11 +144,25 @@ async function markets(mints: string[]): Promise<Map<string, Market>> {
         (m as any)._best = liq; m.mc = fin(p.marketCap) || fin(p.fdv) || m.mc; m.changeH1 = fin(p.priceChange?.h1);
         m.changeM5 = fin(p.priceChange?.m5); m.changeH6 = fin(p.priceChange?.h6); m.changeH24 = fin(p.priceChange?.h24);
         m.mainPair = B58.test(p.pairAddress || "") ? p.pairAddress : m.mainPair; if (p.info?.imageUrl) m.image = String(p.info.imageUrl);
+        m.quote = clean(p.quoteToken?.symbol, 16);
       }
       out.set(mint, m);
     }
   }
   return out;
+}
+
+/* price-action caps, shared by the deep scan and the 1-minute refresh: a crash in progress or a vertical pump */
+function moveChecks(mk: Market, ageH: number): { checks: Check[]; cap: number } {
+  const out: Check[] = []; let cap = 100;
+  const h1 = mk.changeH1 ?? 0, h6 = mk.changeH6 ?? 0, m5 = mk.changeM5 ?? 0;
+  if (m5 <= -35 || h1 <= -60 || h6 <= -80) {                       // dev / bundle / snipers dumping (QFART: -75% in 5 min right after migrating)
+    const [v, w] = m5 <= -35 ? [m5, "5 min"] : h1 <= -60 ? [h1, "1 h"] : [h6, "6 h"];
+    out.push({ k: "dump", s: 0, t: "Price move", d: `${Math.round(v)}% in ${w}: being dumped` }); cap = 60;
+  }
+  const jump = Math.max(h1, ageH < 6 ? h6 : 0);
+  if (jump >= 2000) { out.push({ k: "pump", s: 0, t: "Price move", d: `+${Math.round(jump).toLocaleString("en-US")}% in ${ageH < 1 || h1 >= 2000 ? "1 h" : "6 h"}: vertical pump` }); cap = 60; }
+  return { checks: out, cap };
 }
 
 /* ---------- 3. on-chain + RugCheck checks, score ---------- */
@@ -245,16 +261,14 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
   if (tx >= 100 && ratio > 8) { add("activity", 0, 10, "Activity (1h)", `${mk.buys} buys / ${mk.sells} sells: sells look blocked or botted`); cap = Math.min(cap, 40); }
   else add("activity", tx >= 150 && organic ? 10 : tx >= 60 && organic ? 6 : 2, 10, "Activity (1h)", `${tx} trades, ${mk.buys} buys / ${mk.sells} sells`);
 
-  const ageH = mk.createdAt ? (Date.now() - mk.createdAt) / 3600e3 : 0;
-  if (mk.createdAt && ageH < 0.5) cap = Math.min(cap, 70);          // too fresh to judge holders and dev behaviour
-  else if (mk.createdAt && ageH < 1) cap = Math.min(cap, 75);
-  const jump = Math.max(mk.changeH1 ?? 0, ageH < 6 ? (mk.changeH6 ?? 0) : 0);
-  const drop = Math.min(mk.changeH1 ?? 0, mk.changeH6 ?? 0);
-  if ((mk.changeH1 ?? 0) <= -60 || (mk.changeH6 ?? 0) <= -80) {    // a crash in progress (dev or bundle dumping)
-    checks.push({ k: "dump", s: 0, t: "Price move", d: `${Math.round(drop)}% in ${(mk.changeH1 ?? 0) <= -60 ? "1 h" : "6 h"}: being dumped` }); cap = Math.min(cap, 60);
-  }
-  if (jump >= 2000) { checks.push({ k: "pump", s: 0, t: "Price move", d: `+${Math.round(jump).toLocaleString("en-US")}% in ${ageH < 1 || (mk.changeH1 ?? 0) >= 2000 ? "1 h" : "6 h"}: vertical pump` }); cap = Math.min(cap, 60); }
-  add("age", ageH >= 6 ? 5 : ageH >= 1 ? 3 : 0, 5, "Age", !mk.createdAt ? "Unknown" : ageH < 1 ? Math.round(ageH * 60) + " min" : ageH < 48 ? Math.round(ageH) + " h" : Math.round(ageH / 24) + " days");
+  const born = Math.min(mk.createdAt || Infinity, pm?.createdAt || Infinity), known = Number.isFinite(born);
+  const ageH = known ? (Date.now() - born) / 3600e3 : 0;
+  if (known && ageH < 0.5) cap = Math.min(cap, 70);                 // too fresh to judge holders and dev behaviour
+  else if (known && ageH < 1) cap = Math.min(cap, 75);
+  const mv = moveChecks(mk, ageH); checks.push(...mv.checks); cap = Math.min(cap, mv.cap);
+  add("age", ageH >= 6 ? 5 : ageH >= 1 ? 3 : 0, 5, "Age", !known ? "Unknown" : ageH < 1 ? Math.round(ageH * 60) + " min" : ageH < 48 ? Math.round(ageH) + " h" : Math.round(ageH / 24) + " days");
+  if (mk.quote && !/^(W?SOL|USDC|USDT|USD1)$/i.test(mk.quote))       // liquidity priced in another memecoin: pool value swings with it
+    checks.push({ k: "quote", s: 1, t: "Pool pair", d: `Paired with $${mk.quote}, not SOL: pool value moves with it` });
 
   const rc = (await rcP) || (await getJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, 8000));
   const risks: any[] = Array.isArray(rc?.risks) ? rc.risks : [];
@@ -271,7 +285,7 @@ async function deepScan(mint: string, mk: Market, pm: Pump | undefined) {
     else add("rugcheck", warns > 2 ? 6 : 10, 10, "RugCheck", warns ? `${warns} warning${warns > 1 ? "s" : ""}, no danger` : "No risk flagged");
   }
 
-  return { score: Math.max(0, Math.min(cap, Math.round(score))), checks, top10, devPct, biggest, supply, holders: held.length };
+  return { score: Math.max(0, Math.min(cap, Math.round(score))), checks, top10, devPct, biggest, supply, holders: held.length, born: known ? born : null };
 }
 
 /* ---------- 4. logo copied to our bucket (CSP only allows our storage) ---------- */
@@ -318,7 +332,9 @@ async function pass() {
   const ok = (m: string, mc: number, vol: number, tx: number) => { const x = mk.get(m); return !!x && x.mc >= mc && x.volH1 >= vol && x.buys + x.sells >= tx; };
   const active = (m: string) => ok(m, MIN_MC, MIN_VOL_H1, MIN_TX_H1);
   const alive = (m: string) => ok(m, LOW_MC, LOW_VOL_H1, LOW_TX_H1);
-  const M = (m: string) => mk.get(m)!, now = Date.now(), day = 24 * 3600e3;
+  const now = Date.now(), day = 24 * 3600e3;
+  for (const [m, x] of mk) { const pc = pump.get(m)?.createdAt; if (pc && (!x.createdAt || pc < x.createdAt)) x.createdAt = pc; }   // real launch time
+  const M = (m: string) => mk.get(m)!;
   // what we scanned lately: a coin scanned < 8 min ago waits (the app shows rows up to 20 min old)
   const { data: known } = await db.from("radar_tokens").select("mint,image,image_tries,scanned_at").gt("scanned_at", new Date(now - day).toISOString()).limit(2000);
   const prev = new Map<string, any>((known || []).map((r: any) => [r.mint, r]));
@@ -366,7 +382,7 @@ async function pass() {
       const row: any = { mint, symbol: m.symbol || pm?.symbol || "", name: m.name || pm?.name || "", source: pm ? "pumpfun" : "dex",
         graduated: !!pm?.complete || (!!pm && !m.dexIds.includes("pumpfun")), score: r.score, checks: r.checks,
         mc: m.mc || null, liq: m.liq || null, vol_h1: m.volH1, vol_h24: m.volH24, buys_h1: m.buys, sells_h1: m.sells, change_h1: m.changeH1,
-        top10_pct: r.top10, dev_pct: r.devPct, holders_checked: r.holders, created_at_ms: m.createdAt, pair: m.mainPair || null, scanned_at: new Date().toISOString(),
+        top10_pct: r.top10, dev_pct: r.devPct, holders_checked: r.holders, created_at_ms: r.born ?? m.createdAt, pair: m.mainPair || null, scanned_at: new Date().toISOString(),
         supply: r.supply, biggest_pct: r.biggest, change_m5: m.changeM5, change_h6: m.changeH6, change_h24: m.changeH24, buys_h24: m.buys24, sells_h24: m.sells24,
         curve_pct: pm?.curvePct ?? null, live: !!pm?.live, description: pm?.description || null, links: links([...(pm?.links || []), ...m.links]),
         pairs: [...new Set([m.mainPair, ...m.pairs].filter(Boolean))].slice(0, 4), migrated_at_ms: m.migratedAt };
@@ -385,12 +401,43 @@ async function pass() {
   return res;
 }
 
+/* ---------- 1-minute refresh of what is on screen (market data only, no RPC) ---------- */
+const MARKET_COLS = (m: Market) => ({ mc: m.mc || null, liq: m.liq || null, vol_h1: m.volH1, vol_h24: m.volH24, buys_h1: m.buys, sells_h1: m.sells,
+  buys_h24: m.buys24, sells_h24: m.sells24, change_m5: m.changeM5, change_h1: m.changeH1, change_h6: m.changeH6, change_h24: m.changeH24 });
+async function refresh() {
+  const t0 = Date.now();
+  const { data } = await db.from("radar_tokens").select("mint,score,checks,created_at_ms").gt("scanned_at", new Date(t0 - 20 * 60e3).toISOString()).limit(400);
+  const rows = (data || []) as any[]; if (!rows.length) return { rows: 0 };
+  const mk = await markets(rows.map((r) => r.mint));
+  if (mk.size < rows.length * 0.3) return { rows: rows.length, withMarket: mk.size, skipped: "market data unavailable" };   // API hiccup: change nothing
+  const dead: string[] = [], ups: any[] = [];
+  for (const r of rows) {
+    const m = mk.get(r.mint); if (!m) continue;
+    if (m.mc < LOW_MC || m.volH1 < LOW_VOL_H1 || m.buys + m.sells < LOW_TX_H1) { dead.push(r.mint); continue; }   // stopped trading or crashed below the floor
+    const ageH = r.created_at_ms ? (t0 - Number(r.created_at_ms)) / 3600e3 : 99;
+    const mv = moveChecks(m, ageH);
+    const all = Array.isArray(r.checks) ? r.checks : [], isMove = (c: any) => c?.k === "dump" || c?.k === "pump";
+    // a move cap only lowers the score; it (and its reason) stays until the next deep scan re-scores the coin
+    const moves = mv.checks.length ? mv.checks : all.filter(isMove);
+    ups.push({ mint: r.mint, ...MARKET_COLS(m), score: Math.min(Number(r.score) || 0, mv.cap), checks: [...moves, ...all.filter((c: any) => !isMove(c))] });
+  }
+  if (dead.length) await db.from("radar_tokens").delete().in("mint", dead);
+  let errors = 0;
+  // update (never upsert): a row deleted meanwhile by the full pass must not come back half-empty
+  for (let i = 0; i < ups.length; i += 10) await Promise.all(ups.slice(i, i + 10).map(async ({ mint, ...cols }) => {
+    const { error } = await db.from("radar_tokens").update(cols).eq("mint", mint); if (error) { errors++; console.error("refresh", mint, error.message); } }));
+  const res = { rows: rows.length, withMarket: mk.size, updated: ups.length, removed: dead.length, capped: ups.filter((u) => u.score <= 60).length, errors, ms: Date.now() - t0 };
+  console.log("radar-refresh", JSON.stringify(res));
+  return res;
+}
+
 Deno.serve(async (req) => {
   const h = { "Content-Type": "application/json" };
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const k = req.headers.get("x-cron-key");
   const { data: ok } = k ? await db.rpc("verify_sync_cron_key", { k }) : { data: false };
   if (ok !== true) return new Response('{"error":"forbidden"}', { status: 403, headers: h });
-  try { return new Response(JSON.stringify(await pass()), { headers: h }); }
+  let body: any = {}; try { body = await req.json(); } catch (_) { /* cron sends {} */ }
+  try { return new Response(JSON.stringify(body?.task === "refresh" ? await refresh() : await pass()), { headers: h }); }
   catch (e) { console.error("radar", (e as Error).message); return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: h }); }
 });

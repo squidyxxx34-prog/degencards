@@ -1182,7 +1182,7 @@ function radarRow(r){
   if(!r || !B58.test(String(r.mint||''))) return null;
   const n = (v,max)=> v==null ? null : num(v, -1e15, max);
   const checks = (Array.isArray(r.checks)?r.checks:[]).slice(0,12).filter(c=>c && typeof c==='object')
-    .map(c=>({ s: [0,1,2].includes(c.s)?c.s:0, t: String(c.t||'').slice(0,40), d: String(c.d||'').slice(0,120) }));
+    .map(c=>({ k: String(c.k||'').slice(0,12), s: [0,1,2].includes(c.s)?c.s:0, t: String(c.t||'').slice(0,40), d: String(c.d||'').slice(0,120) }));
   const pairs = [...new Set([r.pair, ...(Array.isArray(r.pairs)?r.pairs:[])].filter(p=>typeof p==='string' && B58.test(p)))].slice(0,4);
   return { mint:r.mint, symbol:cleanTicker(r.symbol)||'?', name:String(r.name||'').replace(/[\u0000-\u001f]/g,'').slice(0,64),
     pump: r.source==='pumpfun', graduated: !!r.graduated, image: safeImg(r.image), score: num(r.score,0,100), checks, pairs,
@@ -1229,7 +1229,9 @@ function radarCardHTML(r, isOpen, cat, isNew){
   const mark = s => s===2 ? icon('check',14,'var(--green)') : s===1 ? icon('minus',14,'var(--gold)') : icon('x',14,'var(--red)');
   const ext = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6 M20 4l-9 9 M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg>`;
   const tag = r.pump ? `<span class="radar-tag" title="${r.graduated ? 'pump.fun coin, graduated to PumpSwap' : 'pump.fun coin, still on the bonding curve'}">${r.graduated ? 'GRADUATED' : 'CURVE'}</span>` : '';
-  const live = r.live ? '<span class="radar-tag live">LIVE</span>' : '';
+  const live = (r.live ? '<span class="radar-tag live">LIVE</span>' : '')
+    + (r.checks.some(c=>c.k==='dump') ? '<span class="radar-tag dump" title="Price crashing right now">DUMPING</span>' : '')
+    + (r.createdAt && Date.now()-r.createdAt < 3600e3 ? '<span class="radar-tag early" title="Under 1 hour old: holders and dev can\'t be judged yet, so the score is capped at 70-75">EARLY</span>' : '');
   const stat = (k, val) => `<div class="rd-stat"><span>${k}</span><b>${val}</b></div>`;
   const curve = r.pump && !r.graduated && r.curve!=null
     ? `<div class="rd-curve"><div class="rd-curve-top"><span>Bonding curve</span><b>${r.curve.toFixed(1)}%</b></div><div class="rd-bar"><i style="width:${r.curve.toFixed(1)}%"></i></div></div>` : '';
