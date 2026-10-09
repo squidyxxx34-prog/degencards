@@ -1288,3 +1288,12 @@ button.levelbar{width:100%;text-align:left;color:inherit;font:inherit;cursor:poi
 }
 @media(prefers-reduced-motion:reduce){ .rk-block,.rk-pod-top,.rk-gold .rk-block::after{animation:none;} }
 .rk-stage{border-bottom:2px solid rgba(255,211,92,.35); margin-bottom:20px;}
+
+/* profile picture (own UI only) */
+.av.has-img,.acc-av.has-img{background:var(--av-img) center/cover no-repeat !important; color:transparent !important; font-size:0 !important;}
+button.acc-av{border:0; cursor:pointer; position:relative; overflow:hidden; padding:0;}
+button.acc-av::after{content:'EDIT'; position:absolute; inset:auto 0 0 0; padding:3px 0; font:800 9px var(--mono); letter-spacing:.1em; color:#fff; background:rgba(0,0,0,.55); opacity:0; transition:opacity .15s;}
+button.acc-av:hover::after,button.acc-av:focus-visible::after{opacity:1;}
+@media(hover:none){button.acc-av::after{opacity:1;}}
+.acc-av.busy{opacity:.5; pointer-events:none;}
+.acc-pic-btns{display:flex; gap:8px; flex-shrink:0;}

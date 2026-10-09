@@ -235,3 +235,7 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Série de jours tradés (`tradingStreak`) : pastille flamme « N-DAY » dans le bloc STREAKS, avertissement si pas encore de trade aujourd'hui.
 - Level up : modale (gros niveau, titre, XP gagnée, prochain titre) + confettis ; petit toast « +X XP » quand l'XP monte sans changer de niveau (`localStorage dc_xp_<uid>`).
 - Onglet RANKS : semaine ISO, compte à rebours de remise à zéro, ma position (ou CTA : choisir un nom / rejoindre / pas encore de trade vérifié), podium top 3, tableau, échelle des 12 titres (XP nécessaire, « YOU ARE HERE »). Les trades manuels ne comptent jamais pour le classement.
+
+## Profile picture (2026-10-09)
+- Table `avatars` (data: URL 256x256, <=80k chars), RLS select own, writes via `set_avatar` / `clear_avatar` (supabase/avatars.sql). Cascade on account deletion.
+- Shown only in the nav chip and the Account header/Profile block. Never on cards, share images or leaderboard.

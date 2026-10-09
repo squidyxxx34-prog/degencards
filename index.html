@@ -330,7 +330,7 @@
   <div id="accountView" style="display:none;">
     <section class="pg-head acc-head">
       <div class="acc-id">
-        <div class="acc-av" id="accAvatar">·</div>
+        <button type="button" class="acc-av" id="accAvatar" aria-label="Change profile picture">·</button>
         <div><div class="hm-kicker">ACCOUNT</div><h1 class="pg-title acc-name" id="accEmail">—</h1><p class="hm-summary" id="accLead"></p></div>
       </div>
       <button class="btn-logout" id="btnLogout">LOG OUT</button>
@@ -341,6 +341,11 @@
         <div class="provider-row" style="border-top:none;">
           <div><div class="provider-name" id="accUser">No username yet</div><div class="provider-sub acc-wrap" id="accUserSub">Pick a @username: it shows on your shared cards and on the weekly leaderboard.</div></div>
           <button type="button" class="btn-connect" data-claim id="accUserBtn">PICK A NAME</button>
+        </div>
+        <div class="provider-row">
+          <div><div class="provider-name">Profile picture</div><div class="provider-sub acc-wrap" id="accPicSub">Only shown in your top bar and here. Never on your cards.</div></div>
+          <div class="acc-pic-btns"><button type="button" class="btn-connect" id="accPicRemove" hidden>REMOVE</button><button type="button" class="btn-connect" id="accPicBtn">UPLOAD</button></div>
+          <input type="file" id="accPicInput" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,image/*" hidden>
         </div>
         <div class="provider-row" id="accBoardRow" hidden>
           <div><div class="provider-name">Weekly leaderboard</div><div class="provider-sub acc-wrap">Shows your @username, weekly P&amp;L, trades and win rate to other users. On-chain trades only.</div></div>

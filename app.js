@@ -1372,6 +1372,69 @@ function renderQuests(all){
 
 /* ---------- PROFILE: @username (unique, chosen by the user) ---------- */
 let profile = null, profileLoaded = false;
+/* ---------- profile picture: own UI only (nav chip + Account), never on cards / share images ---------- */
+let avatarUrl = null;
+const AV_RX = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+function renderAvatar(){
+  ['avInitial','accAvatar'].forEach(id=>{ const el = document.getElementById(id); if(!el) return;
+    if(avatarUrl){ el.style.setProperty('--av-img', `url("${avatarUrl}")`); el.classList.add('has-img'); }
+    else { el.style.removeProperty('--av-img'); el.classList.remove('has-img'); } });
+  const b = document.getElementById('accPicBtn'); if(b) b.textContent = avatarUrl ? 'CHANGE' : 'UPLOAD';
+  const r = document.getElementById('accPicRemove'); if(r) r.hidden = !avatarUrl;
+}
+async function loadAvatar(){
+  if(!session){ avatarUrl = null; renderAvatar(); return; }
+  try{ const { data } = await sb.from('avatars').select('data').maybeSingle();
+    avatarUrl = data && typeof data.data === 'string' && AV_RX.test(data.data) ? data.data : null;
+  }catch(_){ avatarUrl = null; }
+  renderAvatar();
+}
+async function decodeImage(file){
+  if(window.createImageBitmap){ try{ return await createImageBitmap(file, { imageOrientation:'from-image' }); }catch(_){ try{ return await createImageBitmap(file); }catch(__){} } }
+  const url = URL.createObjectURL(file);
+  try{ return await new Promise((res,rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = url; }); }
+  finally{ setTimeout(()=>URL.revokeObjectURL(url), 1000); }
+}
+async function makeAvatarData(file){
+  const img = await decodeImage(file);
+  const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+  if(!w || !h) throw new Error('decode');
+  const side = Math.min(w, h), S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#0b0d12'; ctx.fillRect(0,0,S,S);
+  ctx.drawImage(img, (w-side)/2, (h-side)/2, side, side, 0, 0, S, S);
+  if(img.close) img.close();
+  for(const q of [0.86, 0.75, 0.62, 0.5]){
+    let d = c.toDataURL('image/webp', q);
+    if(!d.startsWith('data:image/webp')) d = c.toDataURL('image/jpeg', q);   // Safari: no webp encoder
+    if(d.length <= 78000 && AV_RX.test(d)) return d;
+  }
+  throw new Error('size');
+}
+async function uploadAvatar(file){
+  if(!file || !session) return;
+  if(file.size > 20*1024*1024){ showToast('Image too large (20 MB max)'); return; }
+  const av = document.getElementById('accAvatar'); av.classList.add('busy');
+  try{
+    const d = await makeAvatarData(file);
+    const { data, error } = await sb.rpc('set_avatar', { p_data: d });
+    if(error || data !== true) throw error || new Error('rejected');
+    avatarUrl = d; renderAvatar(); showToast('Profile picture updated');
+  }catch(e){ showToast(e?.message === 'decode' ? 'Could not read this image — try a JPG or PNG' : 'Could not save the picture — try again'); }
+  finally{ av.classList.remove('busy'); }
+}
+async function removeAvatar(){
+  if(!session) return;
+  try{ const { error } = await sb.rpc('clear_avatar'); if(error) throw error; avatarUrl = null; renderAvatar(); showToast('Profile picture removed'); }
+  catch(_){ showToast('Could not remove the picture — try again'); }
+}
+(()=>{ const inp = document.getElementById('accPicInput'); if(!inp) return;
+  const pick = ()=>{ inp.value = ''; inp.click(); };
+  document.getElementById('accPicBtn').addEventListener('click', pick);
+  document.getElementById('accAvatar').addEventListener('click', pick);
+  document.getElementById('accPicRemove').addEventListener('click', removeAvatar);
+  inp.addEventListener('change', ()=>uploadAvatar(inp.files && inp.files[0]));
+})();
 async function loadProfile(){
   if(!session) return;
   try{ const { data } = await sb.from('profiles').select('username,on_board,username_changed_at,created_at').maybeSingle();
@@ -2716,6 +2779,7 @@ async function showApp(){
   try{ await reload(); }
   finally{ firstLoadDone = true; document.getElementById('homeLoading').hidden = true; }
   loadProfile();
+  loadAvatar();
   maybeAutoSync();
   warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself
@@ -2731,7 +2795,7 @@ let appShown = false;
 function onSession(sess){
   session = sess;
   if(session){ if(!appShown){ appShown = true; showApp(); } proOnSession(); }
-  else { appShown = false; showLanding(); }
+  else { appShown = false; avatarUrl = null; renderAvatar(); showLanding(); }
 }
 /* ---------- PRO (Whop) ----------
    Goes live by itself once the `whop` edge function has its WHOP_API_KEY (status -> live). Then:
