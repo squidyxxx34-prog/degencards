@@ -135,35 +135,68 @@
 
 <div class="wrap">
   <div id="homeView">
-    <section class="hero">
-      <h1>YOUR TRADES.<br><span class="g">TURNED INTO CARDS.</span></h1>
-      <p>Every trade becomes a piece of your trading history.</p>
-      <div class="stats" id="statsRow"></div>
-      <button class="levelbar" id="levelBar" type="button" aria-expanded="false" aria-controls="lvlDetail">
-        <div class="lvl-id"><div class="lvl" id="lvlLabel">LVL 1</div><div class="lvl-title" id="lvlTitle">PAPER HANDS</div></div>
-        <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
-        <div class="xp" id="xpLabel">0 / 100 XP</div>
-      </button>
-      <div class="lvl-detail" id="lvlDetail" hidden></div>
-      <div class="goal-card" style="margin-top:16px;">
-        <div class="goal-top">
-          <div>
-            <div class="goal-label">MONTHLY GOAL</div>
-            <div class="goal-amounts"><span id="goalCurrentHome">$0</span><span class="goal-sep">/</span><span id="goalTargetHome">—</span></div>
-          </div>
-          <div class="goal-ring-wrap">
-            <svg viewBox="0 0 80 80" width="72" height="72">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
-              <circle id="goalRingHome" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
-            </svg>
-            <div class="goal-pct" id="goalPctHome">0%</div>
+    <section class="hm-head">
+      <div class="hm-hello">
+        <div class="hm-kicker" id="hmKicker">GM</div>
+        <h1 class="hm-title">GM<span class="hm-dot">.</span></h1>
+        <p class="hm-summary" id="hmSummary">Loading your desk…</p>
+      </div>
+      <div class="hm-sync" id="hmSync"></div>
+    </section>
+
+    <section class="hm-top">
+      <div class="hm-panel hm-pnl" id="hmPnl">
+        <div class="hm-pnl-head">
+          <span class="hm-label">PROFIT &amp; LOSS</span>
+          <div class="hm-periods" id="hmPeriods" role="tablist" aria-label="Period">
+            <button type="button" role="tab" data-p="1d">24H</button><button type="button" role="tab" data-p="7d">7D</button><button type="button" role="tab" data-p="30d">30D</button><button type="button" role="tab" data-p="all">ALL</button>
           </div>
         </div>
-        <div class="authnote" style="text-align:left; margin-top:12px;">Set or change your goal from the Stats page.</div>
+        <div class="hm-pnl-big" id="hmPnlBig"><i class="sk" style="width:46%;height:44px"></i></div>
+        <div class="hm-pnl-sub" id="hmPnlSub"></div>
+        <div class="hm-curve" id="hmCurve" aria-hidden="true"></div>
+        <div class="stats hm-stats" id="statsRow"></div>
+        <div class="hm-empty" id="hmEmpty" hidden>
+          <b>Your first card is one trade away.</b>
+          <p>Connect the wallet you trade with and every closed trade turns into a card by itself. Or log one by hand.</p>
+          <div class="hm-empty-actions"><button type="button" class="hm-btn primary" id="hmConnect">CONNECT A WALLET</button><button type="button" class="hm-btn" id="hmLogTrade">LOG A TRADE</button></div>
+        </div>
+      </div>
+      <div class="hm-side">
+        <button class="levelbar hm-level" id="levelBar" type="button" aria-expanded="false" aria-controls="lvlDetail">
+          <div class="lvl-id"><div class="lvl" id="lvlLabel">LVL 1</div><div class="lvl-title" id="lvlTitle">PAPER HANDS</div></div>
+          <div class="track"><div class="fill" id="xpFill" style="width:0%"></div></div>
+          <div class="xp" id="xpLabel">0 / 100 XP</div>
+        </button>
+        <div class="lvl-detail" id="lvlDetail" hidden></div>
+        <div class="goal-card hm-goal">
+          <div class="goal-top">
+            <div>
+              <div class="goal-label">MONTHLY GOAL</div>
+              <div class="goal-amounts"><span id="goalCurrentHome">$0</span></div>
+              <div class="hm-goal-of" id="goalTargetHome">—</div>
+            </div>
+            <div class="goal-ring-wrap">
+              <svg viewBox="0 0 80 80" width="72" height="72">
+                <defs><linearGradient id="goalGradHome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C09EFF"/><stop offset="1" stop-color="#FFD35C"/></linearGradient></defs>
+                <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
+                <circle id="goalRingHome" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGradHome)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
+              </svg>
+              <div class="goal-pct" id="goalPctHome">0%</div>
+            </div>
+          </div>
+          <button type="button" class="hm-link" id="hmGoalEdit">Set or change your goal →</button>
+        </div>
+        <div class="hm-panel hm-streak" id="hmStreak"></div>
       </div>
     </section>
-    <div class="sectionhead"><h2>RECENT CARDS <span class="home-loading" id="homeLoading" hidden><span class="hl-dot"></span>Loading your cards</span></h2><button class="chip active" id="homeSeeAll">SEE FULL COLLECTION →</button></div>
-    <div class="grid" id="homeGrid"></div>
+
+    <section class="hm-best" id="hmBest" hidden></section>
+
+    <div class="sectionhead hm-sh"><h2>RECENT CARDS <span class="home-loading" id="homeLoading" hidden><span class="hl-dot"></span>Loading your cards</span></h2><button class="chip active" id="homeSeeAll">SEE ALL →</button></div>
+    <div class="grid hm-recent" id="homeGrid"></div>
+
+    <section class="hm-panel hm-radar" id="hmRadar" hidden></section>
   </div>
 
   <div id="collectionView" style="display:none;">

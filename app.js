@@ -672,20 +672,75 @@ function renderGrid(reset){
   if(more){ if(gridMore) gridMore.observe(more); else { gridLimit = filtered.length; renderGrid(); } }
 }
 
+/* ---------- HOME: P&L panel (period tabs, equity curve, period stats) ---------- */
+const HM_PERIODS = { '1d':[864e5,'24h','today'], '7d':[7*864e5,'7 days','this week'], '30d':[30*864e5,'30 days','this month'], 'all':[Infinity,'all time','all time'] };
+let hmPeriod = (()=>{ try{ const v = localStorage.getItem('dc_home_period'); return HM_PERIODS[v] ? v : '7d'; }catch(_){ return '7d'; } })();
+const usdBig = n => (n<0?'-':'+')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+const usdShort = n => { const a = Math.abs(n), s = n<0?'-':'+'; return a>=1e6 ? s+'$'+(a/1e6).toFixed(2)+'M' : a>=1e4 ? s+'$'+(a/1e3).toFixed(1)+'K' : s+'$'+a.toFixed(a>=100?0:2); };
+function hmWindow(){ const span = HM_PERIODS[hmPeriod][0]; return trades.filter(t=>span===Infinity || t.timestamp >= Date.now()-span).sort((a,b)=>a.timestamp-b.timestamp); }
 function renderStatsRow(){
-  const wins = trades.filter(t=>t.pnl>=0);
-  const totalPnl = trades.reduce((s,t)=>s+t.pnl,0);
-  const winRate = trades.length? Math.round(wins.length/trades.length*100):0;
-  const best = trades.length? Math.max(...trades.map(t=>t.roi)) : 0;
+  const has = trades.length > 0;
+  document.getElementById('hmEmpty').hidden = has;
+  ['hmPnlBig','hmPnlSub','hmCurve','statsRow'].forEach(id=>document.getElementById(id).hidden = !has);
+  document.querySelector('#hmPnl .hm-pnl-head').hidden = !has;
+  document.querySelectorAll('#hmPeriods button').forEach(b=>{ const on = b.dataset.p===hmPeriod; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  if(!has) return;
+  const list = hmWindow(), pnl = list.reduce((s,t)=>s+t.pnl,0), wins = list.filter(t=>t.pnl>0).length;
+  const big = document.getElementById('hmPnlBig');
+  big.textContent = list.length ? usdBig(pnl) : '$0.00'; big.className = 'hm-pnl-big ' + (!list.length ? '' : pnl>=0 ? 'pos' : 'neg');
+  document.getElementById('hmPnlSub').textContent = list.length
+    ? `${list.length} trade${list.length>1?'s':''} · ${Math.round(wins/list.length*100)}% wins · ${HM_PERIODS[hmPeriod][1]}`
+    : `No closed trade in the last ${HM_PERIODS[hmPeriod][1]}. Try a longer period.`;
+  renderCurve(list);
+  const best = list.reduce((m,t)=>!m || t.pnl>m.pnl ? t : m, null), worst = list.reduce((m,t)=>!m || t.pnl<m.pnl ? t : m, null);
+  const holds = list.map(t=>t.holdTime).filter(h=>h>0).sort((a,b)=>a-b), med = holds.length ? holds[holds.length>>1] : 0;
   const rows = [
-    {l:"TOTAL P&L", v:trades.length?fmt.usd(totalPnl):"—", cls:totalPnl>=0?'pos':'neg'},
-    {l:"TRADES", v:trades.length, cls:''},
-    {l:"WIN RATE", v:trades.length? winRate+"%":"—", cls:''},
-    {l:"BEST TRADE", v:trades.length? fmt.pct(best):"—", cls:'pos'},
-    {l:"CARDS", v:trades.length, cls:''},
+    {l:"WIN RATE", v:list.length? Math.round(wins/list.length*100)+"%":"—", cls:''},
+    {l:"BEST", v:best? usdShort(best.pnl) : "—", s: best ? esc(tk(best.ticker)) : '', cls: best && best.pnl>=0 ? 'pos':'neg'},
+    {l:"WORST", v:worst? usdShort(worst.pnl) : "—", s: worst ? esc(tk(worst.ticker)) : '', cls: worst && worst.pnl>=0 ? 'pos':'neg'},
+    {l:"TYPICAL HOLD", v:med? fmt.hold(med) : "—", cls:''},
   ];
-  document.getElementById('statsRow').innerHTML = rows.map(r=>`<div class="stat"><div class="l">${r.l}</div><div class="v ${r.cls}">${r.v}</div></div>`).join('');
+  document.getElementById('statsRow').innerHTML = rows.map(r=>`<div class="stat"><div class="l">${r.l}</div><div class="v ${r.cls}">${r.v}</div>${r.s ? `<div class="s">${r.s}</div>` : ''}</div>`).join('');
 }
+/* cumulative P&L over the period, one step per closed trade (SVG, scales with the panel) */
+function renderCurve(list){
+  const box = document.getElementById('hmCurve');
+  if(list.length < 2){ box.innerHTML = list.length ? '' : '<div class="hm-curve-empty"></div>'; box.classList.toggle('flat', true); return; }
+  box.classList.remove('flat');
+  let acc = 0; const pts = [[list[0].timestamp - 1, 0], ...list.map(t=>[t.timestamp, acc += t.pnl])];
+  const W = 600, H = 150, x0 = pts[0][0], x1 = pts[pts.length-1][0], ys = pts.map(p=>p[1]);
+  let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys); if(hi - lo < 1e-9){ hi += 1; lo -= 1; }
+  const pad = (hi-lo)*0.12; lo -= pad; hi += pad;
+  const X = t => (x1===x0 ? 0 : (t-x0)/(x1-x0)) * W, Y = v => H - (v-lo)/(hi-lo) * H;
+  const up = acc >= 0, col = up ? 'var(--green)' : 'var(--red)', id = 'hmg'+(up?'u':'d');
+  const line = pts.map((p,i)=>`${i?'L':'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="100%">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".28"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="rgba(255,255,255,.18)" stroke-dasharray="4 5" vector-effect="non-scaling-stroke"/>
+    <path d="${line}L${W},${H}L0,${H}Z" fill="url(#${id})"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  </svg><div class="hm-tip" hidden></div><i class="hm-cursor" hidden></i>`;
+  box._pts = pts.slice(1).map((p,i)=>({ x: X(p[0])/W, y: Y(p[1])/H, v: p[1], t: list[i] }));
+}
+document.getElementById('hmCurve').addEventListener('pointermove', e=>{
+  const box = e.currentTarget, pts = box._pts; if(!pts || !pts.length) return;
+  const r = box.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width;
+  const p = pts.reduce((m,q)=>Math.abs(q.x-fx) < Math.abs(m.x-fx) ? q : m, pts[0]);
+  const tip = box.querySelector('.hm-tip'), cur = box.querySelector('.hm-cursor');
+  tip.hidden = cur.hidden = false;
+  cur.style.left = (p.x*100)+'%'; cur.style.top = (p.y*100)+'%';
+  tip.innerHTML = `<b class="${p.v>=0?'pos':'neg'}">${usdBig(p.v)}</b><span>${esc(tk(p.t.ticker))} ${p.t.pnl>=0?'+':''}${fmt.pct(p.t.roi).replace(/^\+/,'')} · ${fmt.date(p.t.timestamp)}</span>`;
+  tip.style.left = Math.min(Math.max(p.x*100, 14), 86)+'%';
+});
+document.getElementById('hmCurve').addEventListener('pointerleave', e=>{ e.currentTarget.querySelectorAll('.hm-tip,.hm-cursor').forEach(x=>x.hidden = true); });
+document.getElementById('hmPeriods').addEventListener('click', e=>{
+  const b = e.target.closest('[data-p]'); if(!b || b.dataset.p===hmPeriod) return;
+  hmPeriod = b.dataset.p; try{ localStorage.setItem('dc_home_period', hmPeriod); }catch(_){}
+  renderStatsRow();
+});
+document.getElementById('hmConnect').addEventListener('click', ()=>goToView('account'));
+document.getElementById('hmLogTrade').addEventListener('click', ()=>openNewModal());
+document.getElementById('hmGoalEdit').addEventListener('click', ()=>{ goToView('stats'); setTimeout(()=>document.getElementById('goalInput')?.focus(), 60); });
 /* ---------- levels ----------
    XP rewards quality and consistency, not spam:
    - base per trade (on-chain imports are worth more than manual entries), max 25 trades/day counted
@@ -903,7 +958,9 @@ function renderStatsView(){
   if(cta) cta.hidden = !free;
   renderGoal(totalPnl);
 }
-function renderGoal(totalPnl){
+function renderGoal(){
+  const m0 = new Date(); m0.setDate(1); m0.setHours(0,0,0,0);
+  const totalPnl = trades.filter(t=>t.timestamp >= m0.getTime()).reduce((s,t)=>s+t.pnl,0);   // MONTHLY goal: this calendar month only
   const circumference = 213.6;
   const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
   const offset = circumference*(1-pct);
@@ -912,8 +969,8 @@ function renderGoal(totalPnl){
   document.getElementById('goalPct').textContent = Math.round(pct*100)+'%';
   document.getElementById('goalRing').style.strokeDashoffset = offset;
   document.getElementById('goalInput').value = goalTarget>0 ? goalTarget : '';
-  document.getElementById('goalCurrentHome').textContent = fmt.usd(totalPnl);
-  document.getElementById('goalTargetHome').textContent = goalTarget>0 ? 'of $'+goalTarget : 'no goal set';
+  document.getElementById('goalCurrentHome').textContent = usdBig(totalPnl);
+  document.getElementById('goalTargetHome').textContent = goalTarget>0 ? `of $${goalTarget.toLocaleString('en-US')} · ${new Date().toLocaleDateString('en-US',{month:'long'})}` : 'No goal set yet';
   document.getElementById('goalPctHome').textContent = Math.round(pct*100)+'%';
   document.getElementById('goalRingHome').style.strokeDashoffset = offset;
   if(goalTarget>0 && totalPnl>=goalTarget){
@@ -1072,16 +1129,100 @@ function renderAccount(){
   }));
 }
 function renderHome(){
-  const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
+  const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
+  renderHomeHead(all); renderStreak(all); renderBest(all); hmRadar.load();
   const grid = document.getElementById('homeGrid');
-  if(all.length===0){
-    grid.innerHTML = `<div class="empty"><b>NO CARDS YET.</b>Log your first trade.<br><button id="homeEmptyCreate">CREATE YOUR FIRST CARD</button></div>`;
-    document.getElementById('homeEmptyCreate')?.addEventListener('click', openNewModal);
-    return;
-  }
-  grid.innerHTML = all.map(cardHTML).join('');
+  if(all.length===0){ grid.innerHTML = ''; document.querySelector('#homeView .hm-sh').hidden = true; return; }
+  document.querySelector('#homeView .hm-sh').hidden = false;
+  grid.innerHTML = all.slice(0,8).map(cardHTML).join('');
   bindCards(grid);
 }
+/* greeting + one-line summary of the week + wallet auto-import status */
+function renderHomeHead(all){
+  const d = new Date(), day = d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
+  const lvl = levelFromXP(computeXP().total).lvl;
+  document.getElementById('hmKicker').textContent = `${day} · LVL ${lvl} ${levelTitle(lvl)}`;
+  const wk = all.filter(t=>t.timestamp >= Date.now()-7*864e5), pnl = wk.reduce((s,t)=>s+t.pnl,0);
+  const last = all[0];
+  document.getElementById('hmSummary').innerHTML = !all.length ? 'Welcome to DEGENCARDS. Your trades, turned into cards.'
+    : wk.length ? `You're <b class="${pnl>=0?'pos':'neg'}">${pnl>=0?'up':'down'} ${usdBig(pnl).slice(1)}</b> this week across ${wk.length} trade${wk.length>1?'s':''}.`
+    : `Quiet week. Your last card was ${ago(last.timestamp)}.`;
+  const sync = document.getElementById('hmSync');
+  if(!connectedAccounts.length){
+    sync.innerHTML = `<div class="hm-sync-txt"><b>Auto-import is off</b><span>Connect your wallet: closed trades become cards by themselves.</span></div><button type="button" class="hm-btn primary" data-hm="connect">CONNECT</button>`;
+  } else {
+    const t = Math.max(0, ...connectedAccounts.map(a=>a.syncedAt||0)), err = connectedAccounts.find(a=>a.error);
+    sync.innerHTML = `<div class="hm-sync-txt"><b><i class="hm-live${err?' err':''}"></i>${err ? 'Import needs attention' : 'Auto-import on'}</b><span>${connectedAccounts.length} wallet${connectedAccounts.length>1?'s':''} · ${t ? 'synced '+ago(t) : 'first sync pending'}</span></div><button type="button" class="hm-btn" data-hm="sync">SYNC</button>`;
+  }
+}
+document.getElementById('hmSync').addEventListener('click', e=>{
+  const b = e.target.closest('[data-hm]'); if(!b) return;
+  if(b.dataset.hm==='connect') goToView('account'); else syncNow(true);
+});
+/* streak: current run, best run, last 12 results as dots */
+function renderStreak(all){
+  const box = document.getElementById('hmStreak');
+  if(!all.length){ box.hidden = true; return; } box.hidden = false;
+  const asc = all.slice().reverse(); let best = 0, run = 0;
+  for(const t of asc){ if(t.pnl>0){ run++; best = Math.max(best, run); } else run = 0; }
+  let cur = 0; const win = all[0].pnl > 0; for(const t of all){ if((t.pnl>0) === win) cur++; else break; }
+  const dots = all.slice(0,12).reverse().map(t=>`<i class="${t.pnl>0?'w':'l'}" title="${esc(tk(t.ticker))} ${fmt.usd(t.pnl)}"></i>`).join('');
+  box.innerHTML = `<div class="hm-label">STREAK</div>
+    <div class="hm-streak-main"><b class="${win?'pos':'neg'}">${cur} ${win ? (cur>1?'WINS':'WIN') : (cur>1?'LOSSES':'LOSS')}</b><span>in a row · best ${best} wins</span></div>
+    <div class="hm-dots" aria-label="Last ${Math.min(12, all.length)} trades">${dots}</div>`;
+}
+/* the card to show off: best trade of the last 7 days (else best ever), with share */
+function renderBest(all){
+  const box = document.getElementById('hmBest');
+  const wk = all.filter(t=>t.timestamp >= Date.now()-7*864e5 && t.pnl > 0);
+  const pool = wk.length ? wk : all.filter(t=>t.pnl > 0);
+  if(!pool.length){ box.hidden = true; return; }
+  const t = pool.reduce((m,x)=>x.pnl>m.pnl ? x : m, pool[0]);
+  box.hidden = false;
+  box.innerHTML = `<div class="hm-best-card grid">${cardHTML(t)}</div>
+    <div class="hm-best-info">
+      <div class="hm-label gold">${wk.length ? 'BEST TRADE THIS WEEK' : 'YOUR BEST TRADE'}</div>
+      <div class="hm-best-pnl pos">${usdBig(t.pnl)}</div>
+      <div class="hm-best-sub">${esc(tk(t.ticker))} · ${fmt.pct(t.roi)} · held ${fmt.hold(t.holdTime)} · ${t.meta.rarity.toUpperCase()} ${t.meta.grade}</div>
+      <p>Post it as a card, a clean PnL image or a trade replay video.</p>
+      <div class="hm-best-actions"><button type="button" class="hm-btn primary" data-best-share="${t.id}">SHARE THIS TRADE</button><button type="button" class="hm-btn" data-best-open="${t.id}">OPEN CARD</button></div>
+    </div>`;
+  bindCards(box);
+}
+document.getElementById('hmBest').addEventListener('click', e=>{
+  const s = e.target.closest('[data-best-share]'), o = e.target.closest('[data-best-open]');
+  if(s){ const t = computedTrades().find(x=>x.id===s.dataset.bestShare); if(t) shareCard(t, t.meta); }
+  else if(o) openDetail(o.dataset.bestOpen);
+});
+/* a peek at the radar: 3 safest coins trading the most right now */
+const hmRadar = {
+  at: 0, rows: [],
+  async load(){
+    if(Date.now()-this.at < 120000){ this.render(); return; }
+    this.at = Date.now();
+    try{
+      const since = new Date(Date.now() - 20*60000).toISOString();
+      const { data, error } = await sb.from('radar_tokens').select(RADAR_COLS).gte('score', 80).gt('scanned_at', since).order('vol_h1', { ascending:false }).limit(12);
+      if(error) throw error;
+      this.rows = (data||[]).map(radarRow).filter(r=>r && !r.checks.some(c=>c.k==='dump')).slice(0,3);
+    }catch(_){ this.rows = []; }
+    this.render();
+  },
+  render(){
+    const box = document.getElementById('hmRadar');
+    if(!this.rows.length){ box.hidden = true; return; } box.hidden = false;
+    box.innerHTML = `<div class="hm-radar-head"><div><div class="hm-label">RADAR</div><b>Safe-scoring coins trading the most right now</b></div><button type="button" class="hm-btn" data-radar-all>OPEN RADAR →</button></div>
+      <div class="hm-radar-list">${this.rows.map(r=>`<button type="button" class="hm-radar-row" data-radar-mint="${r.mint}">
+        ${coinImg({image:r.image, ticker:r.symbol}, 32)}<span class="hm-radar-tk"><b>${esc(tk(r.symbol))}</b><small>MC ${radarMc(r.mc)} · Vol 1h ${radarMc(r.volH1)}</small></span>
+        <span class="hm-radar-ch">${radarPctS(r.changeH1)}<small>1h</small></span><span class="radar-score ${r.score>=90?'hi':'ok'}"><b>${r.score}</b><small>SAFETY</small></span></button>`).join('')}</div>
+      <p class="hm-radar-note">Fewer rug signals is not a buy signal. Not financial advice.</p>`;
+  }
+};
+document.getElementById('hmRadar').addEventListener('click', e=>{
+  const row = e.target.closest('[data-radar-mint]');
+  if(row){ radar.cat = 'trending'; radar.openMint = row.dataset.radarMint; goToView('radar'); window.scrollTo(0,0); return; }
+  if(e.target.closest('[data-radar-all]')){ goToView('radar'); window.scrollTo(0,0); }
+});
 function goToView(v){
   view = v;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
@@ -2250,7 +2391,7 @@ async function reload(){
 let firstLoadDone = false;
 function showLoading(){
   const bar = w => `<i class="sk" style="width:${w}%"></i>`;
-  document.getElementById('statsRow').innerHTML = Array.from({length:5}, ()=>`<div class="stat">${bar(55)}${bar(80)}</div>`).join('');
+  document.getElementById('statsRow').innerHTML = Array.from({length:4}, ()=>`<div class="stat">${bar(55)}${bar(80)}</div>`).join('');
   document.getElementById('homeGrid').innerHTML = Array.from({length:4}, ()=>`<div class="card sk-card" aria-hidden="true">
     <div class="sk-row">${bar(30)}${bar(18)}</div><i class="sk sk-coin"></i>${bar(40)}${bar(70)}${bar(30)}
     <div class="chartbox skel" style="height:66px">${Array.from({length:16}, (_,k)=>`<i style="height:${(18 + 30*Math.abs(Math.sin(k*1.7))).toFixed(0)}%;animation-delay:${k*60}ms"></i>`).join('')}</div>${bar(100)}</div>`).join('');

@@ -209,3 +209,12 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Corrections : âge = `created_timestamp` pump.fun (vrai lancement) ; dump détecté aussi sur 5 min (≤ −35 % → plafond 60, en plus de 1h ≤ −60 / 6h ≤ −80) ; check informatif « Pool pair » quand la paire n'est pas SOL/USDC/USDT.
 - Nouveau cron `radar-refresh` chaque minute (`{task:"refresh"}`) : données DexScreener des coins affichés (scannés < 20 min) → chiffres à jour, coins tombés sous MC 10K / vol 1h 2K / 30 trades supprimés, plafond dump/pump appliqué tout de suite (la raison reste jusqu'au prochain scan complet). `update` ligne par ligne, jamais d'upsert (pas de ligne fantôme si le scan complet vient de la supprimer). ~4 s par passage.
 - Front : badges EARLY (< 1 h, score plafonné 70-75) et DUMPING (check `dump`).
+
+## HOME v2 : « trading desk » (2026-10-09)
+- Plus de hero marketing dans l'app. En-tête : jour + niveau, « GM. », résumé de la semaine (gagné/perdu, nb de trades) ; à droite statut de l'auto-import (wallets, dernière synchro, SYNC) ou CONNECT si aucun wallet.
+- Panneau P&L : périodes 24H / 7D / 30D / ALL (`localStorage dc_home_period`, défaut 7D), gros P&L, courbe de P&L cumulé (SVG, info-bulle au survol : cumul, trade, date), 4 stats de la période (win rate, meilleur, pire, durée médiane). `#statsRow` est réutilisé pour ces 4 stats (`renderStatsRow`).
+- Colonne droite : niveau (`#levelBar`, même logique), objectif mensuel, série en cours (victoires/défaites d'affilée, meilleure série, 12 derniers résultats en pastilles).
+- « Best trade this week » (sinon meilleur trade tout court) : carte + SHARE THIS TRADE (`shareCard`) + OPEN CARD.
+- 8 cartes récentes (défilement horizontal sur téléphone), aperçu RADAR (3 coins 80+ les plus tradés, sans DUMPING, rechargé au plus toutes les 2 min) → ouvre l'onglet Radar sur le coin.
+- Nouveau compte sans trade : bloc « Your first card is one trade away » (CONNECT A WALLET / LOG A TRADE).
+- Objectif mensuel : calculé sur le mois calendaire en cours (avant : P&L de tous les temps malgré le libellé « monthly »), sur Home et Stats. Anneau de la Home avec son propre dégradé (`goalGradHome` : celui de Stats est dans une vue cachée et ne s'affichait pas).
