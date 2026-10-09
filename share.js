@@ -10,6 +10,10 @@ const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:
 const GREEN = '#3DFFA0', RED = '#FF5C6C', CANDLE_UP = '#18C964', CANDLE_DN = '#FF3B4E';
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
 const VIDEO_MS = 6200;
+/* the user's @username on shared images / videos (set by app.js once the profile is loaded; can be turned off in the share sheet) */
+let SHOW_NAME = (() => { try{ return localStorage.getItem('dc_share_name') !== '0'; }catch(e){ return true; } })();
+const handle = () => { const n = window.dcUser && window.dcUser.username; return SHOW_NAME && typeof n === 'string' && /^[a-z0-9_]{3,20}$/.test(n) ? '@' + n : ''; };
+window.dcHandle = handle;
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const seg = (p, a, b) => clamp01((p - a) / (b - a));                 // progress of p inside [a,b]
@@ -360,9 +364,16 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   }
   // footer
   ctx.globalAlpha = fa(0.5, 0.65); sh(true);
-  ctx.textAlign = 'left'; ctx.font = `700 ${(story ? 30 : 26) * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('degencards.vercel.app', L, H - pad + 6 * u);
+  const fy = H - pad + 6 * u, hn = handle(), tno = so.tradeNo ? '#' + String(t.tradeId).padStart(4, '0') + (t.source === 'wallet' ? '  ·  ON-CHAIN' : '') : '';
+  ctx.font = `600 ${(story ? 27 : 24) * u}px ${MONO}`; const tnoW = tno ? ctx.measureText(tno).width + 28 * u : 0;
+  ctx.textAlign = 'left'; ctx.font = `700 ${(story ? 30 : 26) * u}px ${SANS}`;
+  if(hn){
+    ctx.fillStyle = '#FFFFFF'; ctx.fillText(hn, L, fy); const hw = ctx.measureText(hn).width;
+    ctx.font = `600 ${(story ? 26 : 22) * u}px ${SANS}`; const url = '  ·  degencards.vercel.app';
+    if(L + hw + ctx.measureText(url).width <= Rr - tnoW){ ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(url, L + hw, fy); }
+  } else { ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText('degencards.vercel.app', L, fy); }
   ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 27 : 24) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  if(so.tradeNo) ctx.fillText('#' + String(t.tradeId).padStart(4, '0') + (t.source === 'wallet' ? '  ·  ON-CHAIN' : ''), Rr, H - pad + 6 * u);
+  if(tno) ctx.fillText(tno, Rr, fy);
   sh(false); ctx.globalAlpha = 1;
   if(!opt.video && !own && so.bg !== 'coin' && !flat){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); }
   const intro = fa(0, 0.04); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
@@ -540,8 +551,10 @@ function drawFrame(ctx, W, H, t, meta, p, opt){
   // footer (inside card)
   const a5 = easeOut(seg(p, 0.68, 0.8));
   ctx.globalAlpha = a5; ctx.textAlign = 'left';
-  ctx.font = `600 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fillText(fmt.date(t.timestamp).toUpperCase(), P, cy + chh - 48*u);
+  { const hn = handle(), fy = cy + chh - 48*u; let x = P;
+    if(hn){ ctx.font = `700 ${24*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(hn, x, fy); x += ctx.measureText(hn).width; }
+    ctx.font = `600 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText((hn ? '  ·  ' : '') + fmt.date(t.timestamp).toUpperCase(), x, fy); }
   ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = `700 ${24*u}px ${SANS}`;
   ctx.fillText('degencards.vercel.app', R, cy + chh - 48*u);
   ctx.globalAlpha = 1;
@@ -951,6 +964,7 @@ function syncButtons(){
   const mo = document.getElementById('shareMotion'); if(mo){ mo.hidden = state.style === 'replay';
     mo.querySelectorAll('[data-share-motion]').forEach(b => { const on = (b.dataset.shareMotion === 'static') === STATIC; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }); }
   document.getElementById('shareHideUsd').checked = state.hideUsd;
+  { const nr = document.getElementById('shareNameRow'); if(nr){ const n = window.dcUser && window.dcUser.username; nr.hidden = !n; if(n){ document.getElementById('shareNameTxt').textContent = 'Show @' + n; document.getElementById('shareName').checked = SHOW_NAME; } } }
   document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
   v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
@@ -1063,6 +1077,7 @@ function init(){
   document.querySelectorAll('[data-share-style]').forEach(b => b.addEventListener('click', () => { if(b.disabled) return; state.style = b.dataset.shareStyle; syncButtons(); if(state.style === 'replay') renderCustomize(); preview(); }));
   document.getElementById('shareSound').addEventListener('click', () => { state.sound = !state.sound; syncButtons(); if(state.sound) preview(); else stopPreviewSound(); });
   document.getElementById('shareHideUsd').addEventListener('change', e => { state.hideUsd = e.target.checked; });
+  document.getElementById('shareName').addEventListener('change', e => { SHOW_NAME = e.target.checked; try{ localStorage.setItem('dc_share_name', SHOW_NAME ? '1' : '0'); }catch(_){} preview(); });
   document.querySelectorAll('[data-share-motion]').forEach(b => b.addEventListener('click', () => { STATIC = b.dataset.shareMotion === 'static'; try{ localStorage.setItem('dc_share_static', STATIC ? '1' : '0'); }catch(e){} syncButtons(); preview(); }));
   document.querySelectorAll('[data-share-q]').forEach(b => b.addEventListener('click', () => { if(b.dataset.shareQ !== '1080' && proLocked()) return window.dcPro.open(); state.quality = b.dataset.shareQ; try{ localStorage.setItem('dc_video_q', state.quality); }catch(e){} syncButtons(); }));
   document.getElementById('shareBgAdd').addEventListener('click', () => { if(proLocked()) return window.dcPro.open(); document.getElementById('shareBgFile').click(); });

@@ -121,12 +121,13 @@
       <button data-v="history">HISTORY</button>
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
+      <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
       <button data-v="account">ACCOUNT</button>
     </nav>
     <div class="headerright">
       <button type="button" class="guide-help" id="guideHelp" data-guide-start aria-label="Open the getting-started guide" title="Getting started guide">?</button>
-      <div class="profile-chip" id="profileChip"><div class="av" id="avInitial">·</div>Lvl <b id="chipLvl">1</b></div>
+      <div class="profile-chip" id="profileChip" role="button" tabindex="0" aria-label="Your profile and level"><span class="av-ring" id="avRing" style="--xp:0%"><span class="av" id="avInitial">·</span></span><span class="pc-txt"><span class="pc-name" id="chipName" hidden></span><span class="pc-lvl">Lvl <b id="chipLvl">1</b></span></span></div>
     </div>
   </div>
 </header>
@@ -190,6 +191,13 @@
         <div class="hm-panel hm-streak" id="hmStreak"></div>
       </div>
     </section>
+
+    <section class="hm-claim" id="hmClaim" hidden>
+      <div class="hm-claim-txt"><b>Claim your @username</b><span>Your name on shared cards, and a spot on the weekly leaderboard.</span></div>
+      <button type="button" class="hm-btn primary" data-claim>PICK MY NAME</button>
+    </section>
+
+    <section class="hm-quests" id="hmQuests"></section>
 
     <section class="hm-best" id="hmBest" hidden></section>
 
@@ -290,6 +298,17 @@
     <button type="button" class="pro-cta" id="statsPro" hidden><span class="pro-tag">PRO</span> Unlock full stats: profit factor, streaks, drawdown, best hour, top coin…</button>
   </div>
 
+  <div id="ranksView" style="display:none;">
+    <section class="pg-head">
+      <div><div class="hm-kicker">WEEKLY LEADERBOARD</div><h1 class="pg-title" id="rkTitle">This week</h1><p class="hm-summary" id="rkLead"></p></div>
+    </section>
+    <div class="rk-me" id="rkMe"></div>
+    <div class="rk-podium" id="rkPodium"></div>
+    <div class="rk-list hm-panel" id="rkList"></div>
+    <div class="sectionhead"><h2>LEVEL LADDER</h2><span class="rk-xp" id="rkXp"></span></div>
+    <div class="rk-ladder" id="rkLadder"></div>
+  </div>
+
   <div id="radarView" style="display:none;">
     <div class="sectionhead rd-top">
       <h2>RADAR <span class="rd-count"><span id="radarCount">0</span> coins</span></h2>
@@ -317,6 +336,17 @@
       <button class="btn-logout" id="btnLogout">LOG OUT</button>
     </section>
     <div class="acc-grid">
+      <div class="acc-block acc-wide">
+        <h4>PROFILE</h4>
+        <div class="provider-row" style="border-top:none;">
+          <div><div class="provider-name" id="accUser">No username yet</div><div class="provider-sub acc-wrap" id="accUserSub">Pick a @username: it shows on your shared cards and on the weekly leaderboard.</div></div>
+          <button type="button" class="btn-connect" data-claim id="accUserBtn">PICK A NAME</button>
+        </div>
+        <div class="provider-row" id="accBoardRow" hidden>
+          <div><div class="provider-name">Weekly leaderboard</div><div class="provider-sub acc-wrap">Shows your @username, weekly P&amp;L, trades and win rate to other users. On-chain trades only.</div></div>
+          <label class="tgl"><input type="checkbox" id="accBoard"><i></i><span class="sr-only">Show me on the weekly leaderboard</span></label>
+        </div>
+      </div>
       <div class="acc-block acc-wide">
         <h4>AUTO-IMPORT TRADES</h4>
         <p class="acc-desc">Connect the wallets you trade with. Every closed trade turns into a card by itself, about every 10 minutes. Watch-only: your public address, never a key.</p>
@@ -423,6 +453,7 @@
     </div>
     <div class="share-q" id="shareMotion" role="radiogroup" aria-label="Motion"><span>Motion</span><button type="button" data-share-motion="anim" role="radio">Animated</button><button type="button" data-share-motion="static" role="radio">Static</button></div>
     <label class="share-opt"><input type="checkbox" id="shareHideUsd"> Hide $ amount (show % only)</label>
+    <label class="share-opt" id="shareNameRow" hidden><input type="checkbox" id="shareName" checked> <span id="shareNameTxt">Show my @username</span></label>
     <div class="share-q" role="radiogroup" aria-label="Video quality"><span>Video</span><button type="button" data-share-q="4k" role="radio">4K · 60 fps</button><button type="button" data-share-q="1080" role="radio">1080p · 60 fps (faster)</button></div>
     <div class="rc" id="shareCustom" hidden></div>
     <div class="rc" id="shareSimple" hidden></div>
@@ -452,6 +483,7 @@
       <button data-v="history">HISTORY</button>
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
+      <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
       <button data-v="account">ACCOUNT</button>
     </div>

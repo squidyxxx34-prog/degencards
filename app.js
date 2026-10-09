@@ -787,6 +787,41 @@ function unlockedAchievementKeys(){
   ["goal_first_milestone","goal_crusher","goal_smasher","goal_legend"].forEach(k=>{ try{ if(localStorage.getItem(goalFlagKey(k))==='1') set.add(k); }catch(e){} });
   return set;
 }
+/* ---------- QUESTS: daily + weekly goals, measured from the trades themselves (so they also count retroactively,
+   and nothing can be claimed without the trades behind it). Days and weeks are local; weeks start on Monday. ---------- */
+const dayKey = ts => { const d = new Date(ts); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
+const weekStart = ts => { const d = new Date(ts); d.setHours(0,0,0,0); d.setDate(d.getDate() - (d.getDay()+6)%7); return d.getTime(); };
+const qSum = L => L.reduce((s,t)=>s+t.pnl,0);
+const DAILY_QUESTS = [
+  { k:'clock',  i:'flag',   name:'Clock in',   d:'Close a trade today',              xp:20, prog:L=>[Math.min(1,L.length),1,`${Math.min(1,L.length)}/1 trade`] },
+  { k:'green',  i:'arrowUpCircle', name:'Green day', d:'End the day in profit',     xp:40, prog:L=>{ const p = qSum(L); return [p>0?1:0,1, L.length ? `${fmt.usd(p)} today` : 'No trade yet']; } },
+  { k:'sniper', i:'target', name:'Sniper',     d:'Close a trade at +100% or more',   xp:60, prog:L=>{ const b = L.length ? Math.max(...L.map(t=>t.roi)) : 0; return [Math.min(100,Math.max(0,b)),100, L.length ? `Best ${fmt.pct(b)}` : '0/+100%']; } },
+  { k:'grind',  i:'layers', name:'Grinder',    d:'Close 5 trades',                   xp:50, prog:L=>[Math.min(5,L.length),5,`${Math.min(5,L.length)}/5 trades`] },
+];
+const WEEKLY_QUESTS = [
+  { k:'days',  i:'calendar', name:'Show up',    d:'Trade on 4 different days',       xp:120, prog:L=>{ const n = new Set(L.map(t=>dayKey(t.timestamp))).size; return [Math.min(4,n),4,`${Math.min(4,n)}/4 days`]; } },
+  { k:'cons',  i:'check',    name:'Consistent', d:'60%+ wins over 10+ trades',       xp:150, prog:L=>{ const w = L.filter(t=>t.pnl>0).length, r = L.length ? w/L.length : 0;
+      return L.length < 10 ? [L.length*0.6,10*0.6+0.0001,`${L.length}/10 trades`] : [r>=0.6?1:r/0.6*0.99,1,`${Math.round(r*100)}% wins`]; } },
+  { k:'rare',  i:'sparkle',  name:'Rare pull',  d:'Pull a rare card or better',      xp:100, prog:L=>{ const ok = L.some(t=>RARITY_ORDER.indexOf(t.meta.rarity)>=2); return [ok?1:0,1, ok ? 'Pulled' : 'Not yet']; } },
+  { k:'gweek', i:'coin',     name:'Green week', d:'End the week in profit',          xp:120, prog:L=>{ const p = qSum(L); return [p>0?1:0,1, L.length ? `${fmt.usd(p)} this week` : 'No trade yet']; } },
+];
+const questDone = (q, L) => { const [c,n] = q.prog(L); return c >= n; };
+function questXP(all){
+  const byDay = {}, byWeek = {};
+  all.forEach(t=>{ (byDay[dayKey(t.timestamp)] = byDay[dayKey(t.timestamp)] || []).push(t); (byWeek[weekStart(t.timestamp)] = byWeek[weekStart(t.timestamp)] || []).push(t); });
+  let xp = 0, done = 0;
+  Object.values(byDay).forEach(L=>DAILY_QUESTS.forEach(q=>{ if(questDone(q,L)){ xp += q.xp; done++; } }));
+  Object.values(byWeek).forEach(L=>WEEKLY_QUESTS.forEach(q=>{ if(questDone(q,L)){ xp += q.xp; done++; } }));
+  return { xp, done };
+}
+/* trading streak: days in a row with at least one closed trade (alive until the end of today) */
+function tradingStreak(all){
+  const days = new Set(all.map(t=>dayKey(t.timestamp)));
+  const d = new Date(); let n = 0, today = days.has(dayKey(d.getTime()));
+  if(!today) d.setDate(d.getDate()-1);
+  while(days.has(dayKey(d.getTime()))){ n++; d.setDate(d.getDate()-1); }
+  return { n, today };
+}
 function computeXP(){
   const all = computedTrades().slice().sort((a,b)=>a.timestamp-b.timestamp);
   const perDay = {}; let trades_ = 0, quality = 0;
@@ -806,9 +841,10 @@ function computeXP(){
   const activity = days.size * 8;
   const streakXp = best * 10;
   const milestones = XP_MILESTONES.filter(([n])=>all.length>=n).reduce((s,[,x])=>s+x,0);
-  const total = trades_ + quality + ach + activity + streakXp + milestones;
+  const quests = questXP(all).xp;
+  const total = trades_ + quality + ach + activity + streakXp + milestones + quests;
   return { total, parts:[
-    ['Trades logged', trades_], ['Grades & rarity', quality], ['Achievements', ach],
+    ['Trades logged', trades_], ['Grades & rarity', quality], ['Achievements', ach], ['Quests', quests],
     ['Trading days', activity], ['Best win streak', streakXp], ['Milestones', milestones],
   ]};
 }
@@ -825,6 +861,7 @@ function renderLevel(){
   document.getElementById('lvlLabel').textContent = "LVL "+lvl;
   document.getElementById('lvlTitle').textContent = title;
   document.getElementById('chipLvl').textContent = lvl;
+  document.getElementById('avRing').style.setProperty('--xp', pct.toFixed(1)+'%');
   document.getElementById('xpFill').style.width = pct.toFixed(1)+"%";
   document.getElementById('xpLabel').textContent = need ? `${cur.toLocaleString('en-US')} / ${need.toLocaleString('en-US')} XP` : 'MAX LEVEL';
   document.getElementById('lvlDetail').innerHTML = `
@@ -835,8 +872,11 @@ function renderLevel(){
   // level-up toast (per account)
   try{
     const k = 'dc_lvl_'+(session?.user?.id||'anon'), prev = Number(localStorage.getItem(k)||0);
-    if(prev && lvl > prev) showToast(`LEVEL UP — LVL ${lvl} · ${title}`);
+    const kx = 'dc_xp_'+(session?.user?.id||'anon'), px = Number(localStorage.getItem(kx)||0);
+    if(prev && lvl > prev) celebrateLevel(prev, lvl, total - px);
+    else if(px && total > px) showToast(`+${(total - px).toLocaleString('en-US')} XP`);
     if(lvl !== prev) localStorage.setItem(k, String(lvl));
+    localStorage.setItem(kx, String(total));
   }catch(e){}
 }
 /* ---------- achievements screen: summary + categories + medal tiles (responsive: 2 cols phone -> 4-5 cols iPad) ---------- */
@@ -1050,6 +1090,26 @@ function goalAchievementKey(target){
   if(target<2000) return "goal_smasher";
   return "goal_legend";
 }
+function celebrateLevel(from, lvl, gained){
+  setTimeout(spawnConfetti, 150);
+  const title = levelTitle(lvl), newTitle = levelTitle(from) !== title, nt = nextTitle(lvl);
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay goal-overlay';
+  overlay.innerHTML = `<div class="modal goal-modal lvl-modal" role="dialog" aria-modal="true" aria-labelledby="lvlUpTitle">
+    <div class="lvl-burst"><b>${lvl}</b><span>LVL</span></div>
+    <h3 id="lvlUpTitle" style="font-size:24px;">LEVEL UP!</h3>
+    <div class="goal-unlock-label">${newTitle ? 'New title unlocked' : 'Keep stacking'}</div>
+    <div class="lvl-title-big">${title}</div>
+    ${gained > 0 ? `<div class="lvl-gain">+${gained.toLocaleString('en-US')} XP</div>` : ''}
+    <p class="lvl-next">${nt ? `Next title: <b>${nt[1]}</b> at LVL ${nt[0]}` : 'Top title reached.'}</p>
+    <button class="btn-neutral" style="width:100%; padding:13px;" data-lvl-close>LET'S GO</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
+  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); };
+  overlay.addEventListener('click', e=>{ if(e.target===overlay || e.target.closest('[data-lvl-close]')) close(); });
+  overlay.querySelector('[data-lvl-close]').focus();
+}
 function celebrateGoal(target, totalPnl){
   setTimeout(spawnConfetti, 200);
   const ach = ACH_MAP[goalAchievementKey(target)];
@@ -1161,8 +1221,9 @@ function renderAccount(){
   const idLabel = session?.user?.email || (walletAcc ? walletAcc.handle.slice(0,4)+'...'+walletAcc.handle.slice(-4) : 'Anonymous wallet');
   document.getElementById('accEmail').textContent = idLabel;
   renderPasswordBlock();
-  document.getElementById('avInitial').textContent = idLabel[0].toUpperCase();
-  document.getElementById('accAvatar').textContent = idLabel[0].toUpperCase();
+  document.getElementById('avInitial').textContent = (profile ? profile.username : idLabel)[0].toUpperCase();
+  document.getElementById('accAvatar').textContent = (profile ? profile.username : idLabel)[0].toUpperCase();
+  if(profile) document.getElementById('accEmail').textContent = '@' + profile.username;
   { const lvl = levelFromXP(computeXP().total).lvl, since = session?.user?.created_at ? new Date(session.user.created_at).toLocaleDateString('en-US',{month:'short', year:'numeric'}) : '';
     const plan = window.dcPro?.active ? '<span class="pro-tag">PRO</span>' : window.dcPro?.enabled ? 'Free plan' : '';
     document.getElementById('accLead').innerHTML = [plan, `LVL ${lvl} ${levelTitle(lvl)}`, `${trades.length} card${trades.length!==1?'s':''}`, since ? 'member since '+since : ''].filter(Boolean).join(' · '); }
@@ -1196,7 +1257,7 @@ function renderAccount(){
 }
 function renderHome(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
-  renderHomeHead(all); renderStreak(all); renderBest(all); hmRadar.load();
+  renderHomeHead(all); renderStreak(all); renderQuests(all); renderBest(all); hmRadar.load();
   const grid = document.getElementById('homeGrid');
   if(all.length===0){ grid.innerHTML = ''; document.querySelector('#homeView .hm-sh').hidden = true; return; }
   document.querySelector('#homeView .hm-sh').hidden = false;
@@ -1207,7 +1268,8 @@ function renderHome(){
 function renderHomeHead(all){
   const d = new Date(), day = d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
   const lvl = levelFromXP(computeXP().total).lvl;
-  document.getElementById('hmKicker').textContent = `${day} · LVL ${lvl} ${levelTitle(lvl)}`;
+  document.getElementById('hmKicker').textContent = `${day}${profile ? ' · @'+profile.username : ''} · LVL ${lvl} ${levelTitle(lvl)}`;
+  document.getElementById('hmClaim').hidden = !!profile || !profileLoaded;
   const wk = all.filter(t=>t.timestamp >= Date.now()-7*864e5), pnl = wk.reduce((s,t)=>s+t.pnl,0);
   const last = all[0];
   document.getElementById('hmSummary').innerHTML = !all.length ? 'Welcome to DEGENCARDS. Your trades, turned into cards.'
@@ -1233,8 +1295,10 @@ function renderStreak(all){
   for(const t of asc){ if(t.pnl>0){ run++; best = Math.max(best, run); } else run = 0; }
   let cur = 0; const win = all[0].pnl > 0; for(const t of all){ if((t.pnl>0) === win) cur++; else break; }
   const dots = all.slice(0,12).reverse().map(t=>`<i class="${t.pnl>0?'w':'l'}" title="${esc(tk(t.ticker))} ${fmt.usd(t.pnl)}"></i>`).join('');
-  box.innerHTML = `<div class="hm-label">STREAK</div>
+  const ts = tradingStreak(all);
+  box.innerHTML = `<div class="hm-streak-top"><div class="hm-label">STREAKS</div>${ts.n ? `<span class="hm-fire${ts.today?'':' cold'}" title="${ts.today ? 'Traded today' : 'Trade today to keep it'}">${icon('flame',14)} ${ts.n}-DAY</span>` : ''}</div>
     <div class="hm-streak-main"><b class="${win?'pos':'neg'}">${cur} ${win ? (cur>1?'WINS':'WIN') : (cur>1?'LOSSES':'LOSS')}</b><span>in a row · best ${best} wins</span></div>
+    ${ts.n && !ts.today ? `<div class="hm-streak-warn">${ts.n}-day trading streak: close a trade today to keep it.</div>` : ''}
     <div class="hm-dots" aria-label="Last ${Math.min(12, all.length)} trades">${dots}</div>`;
 }
 /* the card to show off: best trade of the last 7 days (else best ever), with share */
@@ -1289,13 +1353,164 @@ document.getElementById('hmRadar').addEventListener('click', e=>{
   if(row){ radar.cat = 'trending'; radar.openMint = row.dataset.radarMint; goToView('radar'); window.scrollTo(0,0); return; }
   if(e.target.closest('[data-radar-all]')){ goToView('radar'); window.scrollTo(0,0); }
 });
+/* ---------- HOME: today's and this week's quests ---------- */
+function renderQuests(all){
+  const box = document.getElementById('hmQuests');
+  const now = Date.now(), today = all.filter(t=>dayKey(t.timestamp)===dayKey(now)), week = all.filter(t=>t.timestamp >= weekStart(now));
+  const endDay = new Date(); endDay.setHours(24,0,0,0); const endWeek = weekStart(now) + 7*864e5;
+  const left = ms => { const m = Math.max(0, Math.round(ms/60000)), d = Math.floor(m/1440), h = Math.floor(m%1440/60); return d ? `${d}d ${h}h` : h ? `${h}h ${m%60}m` : `${m}m`; };
+  const block = (title, qs, L, resetIn) => {
+    const rows = qs.map(q=>{ const [c,n,lab] = q.prog(L), done = c >= n, pct = Math.max(0, Math.min(100, c/n*100));
+      return `<div class="q-row${done?' done':''}"><span class="q-ic">${done ? icon('check',16) : icon(q.i,16)}</span>
+        <div class="q-body"><div class="q-top"><b>${q.name}</b><em>+${q.xp} XP</em></div><span class="q-d">${q.d}</span>
+        <div class="q-bar"><i style="width:${pct.toFixed(1)}%"></i></div><span class="q-lab">${done ? 'Done' : esc(lab)}</span></div></div>`; }).join('');
+    const got = qs.filter(q=>questDone(q,L)), xp = got.reduce((s,q)=>s+q.xp,0), tot = qs.reduce((s,q)=>s+q.xp,0);
+    return `<div class="hm-panel q-panel"><div class="q-head"><div><div class="hm-label">${title}</div><b>${got.length}/${qs.length} done · ${xp}/${tot} XP</b></div><span class="q-reset">resets in ${resetIn}</span></div>${rows}</div>`;
+  };
+  box.innerHTML = block('DAILY QUESTS', DAILY_QUESTS, today, left(endDay - now)) + block('WEEKLY QUESTS', WEEKLY_QUESTS, week, left(endWeek - now));
+}
+
+/* ---------- PROFILE: @username (unique, chosen by the user) ---------- */
+let profile = null, profileLoaded = false;
+async function loadProfile(){
+  if(!session) return;
+  try{ const { data } = await sb.from('profiles').select('username,on_board,username_changed_at,created_at').maybeSingle();
+    profile = data && /^[a-z0-9_]{3,20}$/.test(data.username) ? { username:data.username, onBoard:!!data.on_board, changedAt:Date.parse(data.username_changed_at)||0, createdAt:Date.parse(data.created_at)||0 } : null;
+  }catch(_){ profile = null; }
+  profileLoaded = true; window.dcUser = profile ? { username: profile.username } : null;
+  renderProfileBits();
+}
+function renderProfileBits(){
+  const n = document.getElementById('chipName');
+  n.hidden = !profile; n.textContent = profile ? '@'+profile.username : '';
+  if(profile){
+    document.getElementById('avInitial').textContent = profile.username[0].toUpperCase();
+    document.getElementById('accAvatar').textContent = profile.username[0].toUpperCase();
+    document.getElementById('accEmail').textContent = '@' + profile.username;
+  }
+  if(trades) renderHomeHead(computedTrades().sort((a,b)=>b.timestamp-a.timestamp));
+  const u = document.getElementById('accUser'); if(u){
+    u.textContent = profile ? '@'+profile.username : 'No username yet';
+    document.getElementById('accUserSub').textContent = profile ? 'Shown on your shared cards and on the weekly leaderboard. One change per week.' : 'Pick a @username: it shows on your shared cards and on the weekly leaderboard.';
+    document.getElementById('accUserBtn').textContent = profile ? 'CHANGE' : 'PICK A NAME';
+    document.getElementById('accBoardRow').hidden = !profile;
+    document.getElementById('accBoard').checked = !!profile?.onBoard;
+  }
+  if(view === 'ranks') ranks.render();
+}
+const USER_ERR = { format:'3 to 20 characters: letters, numbers and _ only.', reserved:'That name is reserved. Pick another one.', taken:'Already taken. Try another one.', auth:'Sign in again, then retry.' };
+function openUsername(){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `<div class="modal user-modal" role="dialog" aria-modal="true" aria-labelledby="userTitle">
+    <button class="closebtn" data-close aria-label="Close">×</button>
+    <h3 id="userTitle">${profile ? 'CHANGE YOUR USERNAME' : 'CLAIM YOUR @USERNAME'}</h3>
+    <p class="user-p">Shown on the cards you share and on the weekly leaderboard. ${profile ? 'You can change it once a week.' : 'You can change it later, once a week.'}</p>
+    <label class="user-field"><span>@</span><input id="userInput" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="yourname" value="${profile ? esc(profile.username) : ''}" aria-describedby="userHint"></label>
+    <div class="user-hint" id="userHint" aria-live="polite">3 to 20 characters: letters, numbers and _</div>
+    <label class="user-check"><input type="checkbox" id="userBoard" ${!profile || profile.onBoard ? 'checked' : ''}><span>Show me on the <b>weekly leaderboard</b> (on-chain trades only: your @username, weekly P&amp;L, trades and win rate are visible to other users)</span></label>
+    <button class="share-btn" id="userSave">${profile ? 'SAVE' : 'CLAIM'}</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
+  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 300); };
+  overlay.addEventListener('click', e=>{ if(e.target===overlay || e.target.closest('[data-close]')) close(); });
+  overlay.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+  const inp = overlay.querySelector('#userInput'), hint = overlay.querySelector('#userHint'), save = overlay.querySelector('#userSave');
+  let t = null, seq = 0;
+  const check = async () => {
+    const v = inp.value.trim().toLowerCase(); const my = ++seq;
+    hint.className = 'user-hint';
+    if(!v){ hint.textContent = '3 to 20 characters: letters, numbers and _'; return; }
+    if(!/^[a-z0-9_]{3,20}$/.test(v)){ hint.textContent = USER_ERR.format; hint.classList.add('bad'); return; }
+    if(profile && v === profile.username){ hint.textContent = "That's your current name."; return; }
+    hint.textContent = 'Checking…';
+    try{ const { data } = await sb.rpc('username_available', { p_name: v }); if(my !== seq) return;
+      hint.textContent = data ? `@${v} is available` : 'Taken or reserved. Try another one.'; hint.classList.add(data ? 'ok' : 'bad'); }catch(_){ hint.textContent = ''; }
+  };
+  inp.addEventListener('input', ()=>{ inp.value = inp.value.toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,20); clearTimeout(t); t = setTimeout(check, 300); });
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') save.click(); });
+  save.addEventListener('click', async ()=>{
+    const v = inp.value.trim().toLowerCase(), board = overlay.querySelector('#userBoard').checked;
+    if(!/^[a-z0-9_]{3,20}$/.test(v)){ hint.textContent = USER_ERR.format; hint.className = 'user-hint bad'; inp.focus(); return; }
+    save.disabled = true;
+    try{
+      const { data, error } = await sb.rpc('claim_username', { p_name: v, p_board: board });
+      if(error || !data) throw error || new Error('no data');
+      if(!data.ok){
+        hint.className = 'user-hint bad';
+        hint.textContent = data.error === 'cooldown' ? `One change per week: next change possible ${new Date(data.next).toLocaleDateString('en-US',{month:'short', day:'numeric'})}.` : (USER_ERR[data.error] || 'Could not save. Try again.');
+        save.disabled = false; return;
+      }
+      close(); await loadProfile(); showToast(`You're @${data.username}`);
+    }catch(_){ hint.className = 'user-hint bad'; hint.textContent = 'Could not save. Try again.'; save.disabled = false; }
+  });
+  setTimeout(()=>inp.focus(), 60);
+}
+document.addEventListener('click', e=>{ if(e.target.closest('[data-claim]')) openUsername(); });
+document.getElementById('accBoard').addEventListener('change', async e=>{
+  const on = e.target.checked;
+  try{ const { error } = await sb.rpc('set_leaderboard', { p_on: on }); if(error) throw error; if(profile) profile.onBoard = on; showToast(on ? 'You are on the weekly leaderboard' : 'Removed from the leaderboard'); ranks.at = 0; }
+  catch(_){ e.target.checked = !on; showToast('Could not update — try again'); }
+});
+
+/* ---------- RANKS: weekly leaderboard (verified on-chain P&L) + level ladder ---------- */
+const ranks = {
+  rows: [], at: 0, failed: false, loading: false,
+  async open(){ this.render(); if(Date.now() - this.at > 60000) await this.load(); },
+  async load(){
+    if(this.loading) return; this.loading = true;
+    try{ const { data, error } = await sb.rpc('leaderboard_week'); if(error) throw error;
+      this.rows = (data||[]).map(r=>({ rank:num(r.rank,1,1e6), user:String(r.username||'').replace(/[^a-z0-9_]/g,'').slice(0,20), pnl:num(r.pnl,-1e12,1e12), trades:num(r.trades,0,1e7), wins:num(r.wins,0,1e7), best:num(r.best_roi,-100,1e7), me:!!r.me })).filter(r=>r.user);
+      this.failed = false; this.at = Date.now();
+    }catch(_){ this.failed = true; }
+    this.loading = false; this.render();
+  },
+  render(){
+    const now = Date.now(), t0 = new Date(); t0.setUTCHours(0,0,0,0); t0.setUTCDate(t0.getUTCDate() - (t0.getUTCDay()+6)%7);
+    const reset = t0.getTime() + 7*864e5, ms = reset - now, d = Math.floor(ms/864e5), h = Math.floor(ms%864e5/36e5), m = Math.floor(ms%36e5/6e4);
+    const wk = (()=>{ const x = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth(), t0.getUTCDate()+3)); const y0 = new Date(Date.UTC(x.getUTCFullYear(),0,4)); return 1 + Math.round(((x - y0)/864e5 - 3 + (y0.getUTCDay()+6)%7)/7); })();
+    document.getElementById('rkTitle').textContent = `Week ${wk}`;
+    document.getElementById('rkLead').innerHTML = `Ranked by <b>verified on-chain P&amp;L</b> since Monday 00:00 UTC · resets in <b>${d ? d+'d ' : ''}${h}h ${m}m</b>. Manual trades never count.`;
+    const me = this.rows.find(r=>r.me);
+    const box = document.getElementById('rkMe');
+    box.innerHTML = !profile ? `<div class="hm-panel rk-cta"><div><b>Claim your @username to get ranked</b><span>Your verified on-chain trades of the week put you on the board.</span></div><button type="button" class="hm-btn primary" data-claim>PICK MY NAME</button></div>`
+      : !profile.onBoard ? `<div class="hm-panel rk-cta"><div><b>@${esc(profile.username)}, you're not on the board</b><span>Join to show your weekly P&amp;L, trades and win rate next to your name.</span></div><button type="button" class="hm-btn primary" data-rk-join>JOIN THE LEADERBOARD</button></div>`
+      : me ? `<div class="hm-panel rk-you"><div class="rk-you-rank">#${me.rank}</div><div><b>@${esc(me.user)}</b><span>${me.trades} trade${me.trades>1?'s':''} · ${Math.round(me.wins/me.trades*100)}% wins · best ${fmt.pct(me.best)}</span></div><div class="rk-you-pnl ${me.pnl>=0?'pos':'neg'}">${usdBig(me.pnl)}</div></div>`
+      : `<div class="hm-panel rk-cta"><div><b>@${esc(profile.username)}, no verified trade yet this week</b><span>Trades imported from your connected wallets count here. Connect a wallet if it's not done.</span></div><button type="button" class="hm-btn" data-rk-wallet>WALLETS</button></div>`;
+    const top = this.rows.filter(r=>r.rank<=3).slice(0,3), rest = this.rows.filter(r=>!top.includes(r));
+    const medal = ['gold','silver','bronze'];
+    document.getElementById('rkPodium').innerHTML = this.failed ? '' : top.map((r,i)=>`<div class="rk-pod rk-${medal[i]}${r.me?' me':''}"><div class="rk-pod-rank">${r.rank}</div><div class="rk-pod-av">${esc(r.user[0].toUpperCase())}</div><b>@${esc(r.user)}</b><div class="rk-pod-pnl ${r.pnl>=0?'pos':'neg'}">${usdShort(r.pnl)}</div><span><em>${r.trades} trades · </em>${Math.round(r.wins/r.trades*100)}% wins</span></div>`).join('');
+    document.getElementById('rkList').innerHTML = this.failed ? `<div class="rk-empty">Leaderboard unavailable right now. <button type="button" class="hm-btn" data-rk-retry>RETRY</button></div>`
+      : !this.rows.length ? `<div class="rk-empty"><b>Nobody on the board yet this week.</b><span>First verified trade takes #1.</span></div>`
+      : !rest.length ? '' : `<div class="rk-row rk-h"><span>#</span><span>TRADER</span><span>TRADES</span><span>WIN RATE</span><span>BEST</span><span class="num">P&amp;L</span></div>` + rest.map(r=>`<div class="rk-row${r.me?' me':''}"><span class="rk-n">${r.rank}</span><span class="rk-u"><i>${esc(r.user[0].toUpperCase())}</i>@${esc(r.user)}</span><span>${r.trades}</span><span>${Math.round(r.wins/r.trades*100)}%</span><span>${fmt.pct(r.best)}</span><span class="num ${r.pnl>=0?'pos':'neg'}">${usdBig(r.pnl)}</span></div>`).join('');
+    document.getElementById('rkList').hidden = !this.failed && !!this.rows.length && !rest.length;
+    // level ladder
+    const { total } = computeXP(), lv = levelFromXP(total);
+    document.getElementById('rkXp').textContent = `LVL ${lv.lvl} · ${total.toLocaleString('en-US')} XP`;
+    let acc = 0; const xpAt = l => { let s = 0; for(let i=1;i<l;i++) s += xpForNext(i); return s; };
+    document.getElementById('rkLadder').innerHTML = LVL_TITLES.map(([l,name], i)=>{
+      const nextL = LVL_TITLES[i+1]?.[0], here = lv.lvl >= l && (!nextL || lv.lvl < nextL), got = lv.lvl >= l;
+      return `<div class="rk-step${got?' got':''}${here?' here':''}"><span class="rk-step-l">LVL ${l}</span><b>${name}</b><em>${got ? (here ? 'YOU ARE HERE' : 'UNLOCKED') : xpAt(l).toLocaleString('en-US')+' XP'}</em></div>`; }).join('');
+  }
+};
+document.getElementById('ranksView').addEventListener('click', async e=>{
+  if(e.target.closest('[data-rk-retry]')){ ranks.at = 0; ranks.load(); }
+  else if(e.target.closest('[data-rk-wallet]')) goToView('account');
+  else if(e.target.closest('[data-rk-join]')){
+    try{ const { error } = await sb.rpc('set_leaderboard', { p_on: true }); if(error) throw error; profile.onBoard = true; renderProfileBits(); ranks.at = 0; ranks.load(); showToast('You are on the weekly leaderboard'); }
+    catch(_){ showToast('Could not join — try again'); }
+  }
+});
+
 function goToView(v){
   view = v;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
-  ['home','collection','history','achievements','stats','radar','account'].forEach(k=>{
+  ['home','collection','history','achievements','stats','ranks','radar','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
   if(v==='radar') radar.open(); else radar.close();
+  if(v==='ranks') ranks.open();
 }
 
 /* ---------- RADAR: active Solana tokens with an on-chain safety score (filled by the `radar` edge function) ---------- */
@@ -2157,6 +2372,7 @@ document.getElementById('colRarity').addEventListener('click', e=>{ const b = e.
 let colQT = null;
 document.getElementById('colSearch').addEventListener('input', e=>{ clearTimeout(colQT); colQT = setTimeout(()=>{ colQuery = e.target.value.slice(0,32); renderGrid(true); }, 150); });
 document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
+document.getElementById('profileChip').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); goToView('account'); } });
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 /* RGPD erasure: deletes the auth user server-side (delete_my_account), trades / wallets / goal cascade */
 document.getElementById('btnDeleteAccount').addEventListener('click', async ()=>{
@@ -2494,6 +2710,7 @@ async function showApp(){
   if(!firstLoadDone) showLoading();
   try{ await reload(); }
   finally{ firstLoadDone = true; document.getElementById('homeLoading').hidden = true; }
+  loadProfile();
   maybeAutoSync();
   warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself

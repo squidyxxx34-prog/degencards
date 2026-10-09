@@ -82,6 +82,7 @@ function buyPill(ctx, it, x, y, u, col, center){
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
 // TikTok / Reels / Shorts cover the top (search), the right column (like, comment…) and the bottom (caption)
 const SAFE_T = 250, SAFE_B = 480, SAFE_R = 170;
+const userHandle = () => { try{ return (window.dcHandle && window.dcHandle()) || ''; }catch(e){ return ''; } };
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const seg = (x, a, b) => clamp01((x - a) / (b - a));
@@ -200,6 +201,11 @@ function footer(ctx, W, H, u, a){
   ctx.fillStyle = '#fff'; ctx.fillText('DEGEN', 64*u, H - SAFE_B*u); const dw = ctx.measureText('DEGEN').width;
   ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', 64*u + dw, H - SAFE_B*u);
   ctx.textAlign = 'right'; ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText('degencards.vercel.app', W - SAFE_R*u, H - SAFE_B*u);
+  // the user's @username between the wordmark and the url, shrunk to fit (skipped if it really can't)
+  const hn = userHandle();
+  if(hn){ const urlW = ctx.measureText('degencards.vercel.app').width; ctx.font = `900 ${34*u}px ${SANS}`; const x0 = 64*u + ctx.measureText('DEGENCARDS').width + 26*u, room = W - SAFE_R*u - urlW - 26*u - x0;
+    let fs = 26; ctx.font = `700 ${fs*u}px ${SANS}`; while(fs > 17 && ctx.measureText(hn).width > room){ fs--; ctx.font = `700 ${fs*u}px ${SANS}`; }
+    if(ctx.measureText(hn).width <= room){ ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(hn, x0, H - SAFE_B*u); } }
   ctx.restore();
 }
 
@@ -592,7 +598,9 @@ function brand(ctx, W, H, u, ms, seed){
   ctx.font = `700 ${40*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(L.tag, cx, by + 90*u);
   ctx.font = `800 ${32*u}px ${MONO}`; const url = 'degencards.vercel.app', uw = ctx.measureText(url).width + 60*u;
   rrect(ctx, cx - uw/2, by + 150*u, uw, 70*u, 35*u); ctx.fillStyle = 'rgba(192,158,255,0.16)'; ctx.fill(); ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(192,158,255,0.6)'; ctx.stroke();
-  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(url, cx, by + 186*u); ctx.restore(); ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(url, cx, by + 186*u); ctx.textBaseline = 'alphabetic';
+  const hn = userHandle(); if(hn){ ctx.font = `700 ${34*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText('shared by ' + hn, cx, by + 272*u); }
+  ctx.restore();
   if(k < 0.04){ ctx.fillStyle = `rgba(0,0,0,${1 - k/0.04})`; ctx.fillRect(0,0,W,H); }
 }
 
