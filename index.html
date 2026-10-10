@@ -123,6 +123,7 @@
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
+      <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </nav>
     <div class="headerright">
@@ -309,6 +310,70 @@
     <div class="rk-ladder" id="rkLadder"></div>
   </div>
 
+  <div id="launchView" style="display:none;">
+    <section class="pg-head">
+      <div><div class="hm-kicker">COIN LAUNCHER</div><h1 class="pg-title">Launch a coin</h1><p class="hm-summary">Your wallet signs and pays, DEGENCARDS never holds your funds or keys. Live on Solana in under a minute.</p></div>
+    </section>
+
+    <div class="ln-modes" role="radiogroup" aria-label="Launch type">
+      <button type="button" class="ln-mode on" data-ln-mode="pump" role="radio" aria-checked="true">
+        <span class="ln-mode-top"><b>Bonding curve</b><em class="ln-price free">FREE</em></span>
+        <span class="ln-mode-d">Launched on pump.fun. Price climbs as people buy, and the coin moves to a DEX pool by itself when the curve fills.</span>
+        <span class="ln-mode-l"><i>Starts at ~28 SOL market cap</i><i>No SOL needed besides your buy</i><i>Shows on pump.fun right away</i></span>
+      </button>
+      <button type="button" class="ln-mode" data-ln-mode="lp" role="radio" aria-checked="false">
+        <span class="ln-mode-top"><b>Liquidity pool</b><em class="ln-price" id="lnFee">0.15 SOL</em></span>
+        <span class="ln-mode-d">Trades on a Meteora pool from the first second, routed by Jupiter. You set the starting liquidity.</span>
+        <span class="ln-mode-l"><i>Liquidity locked forever</i><i>Mint revoked, no freeze</i><i>You earn the 1% pool fees</i></span>
+      </button>
+    </div>
+
+    <div class="ln-grid">
+      <form class="ln-form hm-panel" id="lnForm" novalidate>
+        <div class="ln-row ln-id">
+          <label class="ln-img" id="lnImgDrop" tabindex="0" aria-label="Coin image">
+            <input type="file" id="lnImg" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            <img id="lnImgPrev" alt="" hidden><span class="ln-img-ph" id="lnImgPh">+<small>Image</small></span>
+          </label>
+          <div class="ln-id-fields">
+            <label class="ln-f"><span>Name</span><input id="lnName" maxlength="32" placeholder="Degen Cat" autocomplete="off"></label>
+            <label class="ln-f"><span>Ticker</span><input id="lnSymbol" maxlength="10" placeholder="DCAT" autocomplete="off" autocapitalize="characters"></label>
+          </div>
+        </div>
+        <label class="ln-f"><span>Description <em>optional</em></span><textarea id="lnDesc" maxlength="500" rows="3" placeholder="What's the coin about?"></textarea></label>
+        <div class="ln-links">
+          <label class="ln-f"><span>X <em>optional</em></span><input id="lnX" placeholder="x.com/yourcoin" autocomplete="off"></label>
+          <label class="ln-f"><span>Telegram <em>optional</em></span><input id="lnTg" placeholder="t.me/yourcoin" autocomplete="off"></label>
+          <label class="ln-f"><span>Website <em>optional</em></span><input id="lnWeb" placeholder="yourcoin.xyz" autocomplete="off"></label>
+        </div>
+        <div class="ln-f" id="lnLiqRow" hidden>
+          <span>Starting liquidity</span>
+          <div class="ln-amt"><input id="lnLiq" type="number" min="0.5" max="1000" step="0.1" value="2" inputmode="decimal"><b>SOL</b></div>
+          <div class="ln-chips" data-ln-chips="lnLiq"><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="5">5</button><button type="button" data-v="10">10</button></div>
+          <small class="ln-hint">Paired with your whole supply in the pool and locked forever. More SOL = higher starting price, steadier chart.</small>
+        </div>
+        <div class="ln-f">
+          <span>Your first buy <em>optional</em></span>
+          <div class="ln-amt"><input id="lnBuy" type="number" min="0" max="20" step="0.01" value="0" inputmode="decimal"><b>SOL</b></div>
+          <div class="ln-chips" data-ln-chips="lnBuy"><button type="button" data-v="0">0</button><button type="button" data-v="0.1">0.1</button><button type="button" data-v="0.5">0.5</button><button type="button" data-v="1">1</button></div>
+          <small class="ln-hint" id="lnBuyHint">Bought in the same transaction as the launch: nobody can buy before you. Public on-chain.</small>
+        </div>
+        <label class="ln-accept"><input type="checkbox" id="lnAccept"><span>I'm creating this coin myself, with my own wallet. It's a meme coin with no promise of value or profit, not an investment offer. I'm responsible for it and for following the laws where I live. DEGENCARDS only builds the transactions and never holds funds. <a href="/terms.html" target="_blank" rel="noopener">Terms</a></span></label>
+      </form>
+
+      <aside class="ln-side">
+        <div class="ln-preview" id="lnPreview"></div>
+        <div class="hm-panel ln-sum" id="lnSum"></div>
+        <div class="ln-wallet" id="lnWallet"></div>
+        <button type="button" class="share-btn ln-go" id="lnGo" disabled>LAUNCH</button>
+        <div class="ln-steps" id="lnSteps" hidden></div>
+      </aside>
+    </div>
+
+    <div class="sectionhead"><h2>YOUR LAUNCHES</h2></div>
+    <div class="ln-mine" id="lnMine"></div>
+  </div>
+
   <div id="radarView" style="display:none;">
     <div class="sectionhead rd-top">
       <h2>RADAR <span class="rd-count"><span id="radarCount">0</span> coins</span></h2>
@@ -492,6 +557,7 @@
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
+      <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </div>
   </div>
@@ -532,6 +598,7 @@
 <script src="/app.js" defer></script>
 <script src="/share.js" defer></script>
 <script src="/replay.js" defer></script>
+<script src="/launch.js" defer></script>
 <script src="/guide.js" defer></script>
 </body>
 </html>

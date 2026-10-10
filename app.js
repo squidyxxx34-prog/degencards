@@ -24,6 +24,7 @@ function num(v, min, max, dflt){ v = Number(v); if(!Number.isFinite(v)) return d
 const REDIRECT_URL = location.origin + location.pathname;      // never echo query/hash back to the auth server
 let idCounter = 0;
 /* strip any auth code/token leftovers from the visible URL once handled */
+const OPEN_VIEW = (()=>{ try{ const v = new URLSearchParams(location.search).get('v'); return ['launch','ranks','radar'].includes(v) ? v : null; }catch(_){ return null; } })();   // deep links, e.g. a wallet's in-app browser
 function scrubUrl(){
   if(location.search || location.hash){
     history.replaceState(null, '', location.pathname);
@@ -1574,11 +1575,12 @@ document.getElementById('ranksView').addEventListener('click', async e=>{
 function goToView(v){
   view = v;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
-  ['home','collection','history','achievements','stats','ranks','radar','account'].forEach(k=>{
+  ['home','collection','history','achievements','stats','ranks','launch','radar','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
   if(v==='radar') radar.open(); else radar.close();
   if(v==='ranks') ranks.open();
+  if(v==='launch') window.dcLaunch?.open();
 }
 
 /* ---------- RADAR: active Solana tokens with an on-chain safety score (filled by the `radar` edge function) ---------- */
@@ -2780,6 +2782,7 @@ async function showApp(){
   finally{ firstLoadDone = true; document.getElementById('homeLoading').hidden = true; }
   loadProfile();
   loadAvatar();
+  if(OPEN_VIEW && !showApp.opened){ showApp.opened = true; goToView(OPEN_VIEW); }
   maybeAutoSync();
   warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself
