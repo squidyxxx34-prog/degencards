@@ -2291,10 +2291,15 @@ async function buildOneInBrowser(t){
   const reach = cs[0][0] <= Math.min(...ts) + step && cs[cs.length-1][0] + 2*step >= Math.max(...ts);   // candles span buy -> sell
   const chart = { v:2, src:'gt', q: cs.length >= 12 && reach ? 3 : 1, i:step, w:[cs[0][0], cs[cs.length-1][0]+step], c:cs, m:marks.slice(0,20) };
   if(t.chart && t.chart.v === 2 && !t.chart.sparse && parseChart(chart)?.sparse) return false;   // never replace a fuller chart
-  const { error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id);
+  const { data: saved, error } = await sb.from('trades').update({ chart }).eq('id', t.id).eq('user_id', session.user.id).select('chart,chart_tries').maybeSingle();
   if(error){ bumpTries(t.id); return false; }
-  t.chart = parseChart(chart); return true;
+  // read back what the DB kept: its trigger flags minute charts with too few moving candles (coarse / redo) -> rebuilt
+  // right away from the pool's real swaps (second candles) instead of showing a handful of candles
+  if(saved){ t.chartTries = Number(saved.chart_tries)||0; t.chart = parseChart(saved.chart) || parseChart(chart); } else t.chart = parseChart(chart);
+  upgradeSoon(t);
+  return true;
 }
+function upgradeSoon(t){ if(t && t.chart && !t.chart.fine && (t.chart.coarse || t.chart.redo) && (t.chartTries||0) < 8) setTimeout(()=>fineCharts([t.id]), 0); }
 async function buildChartsInBrowser(){
   if(chartQueueRunning || !session) return;
   chartQueueRunning = true;
@@ -2351,7 +2356,7 @@ async function warmCharts(){
         const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', ids: batch.map(t=>t.id) } });
         const { data: rows } = await sb.from('trades').select('id,chart,chart_tries').in('id', batch.map(t=>t.id));
         let changed = 0; const upd = [];
-        (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c){ t.chart = c; changed++; upd.push(t.id); } });
+        (rows||[]).forEach(r=>{ const t = trades.find(x=>x.id===r.id); if(!t) return; t.chartTries = Number(r.chart_tries)||0; const c = parseChart(r.chart); if(c){ t.chart = c; changed++; upd.push(t.id); upgradeSoon(t); } });
         batch.forEach(t=>chartInFlight.delete(t.id));
         if(changed) refreshCharts(upd);
         if(!data?.charts && !changed) break;                           // pump.fun is throttling: the browser fallback / cron will finish
@@ -2401,8 +2406,8 @@ async function ensureChart(t){
     try{                                                               // server: GeckoTerminal minute candles, else pump.fun feed / chain
       const { data } = await sb.functions.invoke('sync-trades', { body:{ task:'chart', id:t.id } });
       if(data?.charts){
-        const { data: row } = await sb.from('trades').select('chart').eq('id', t.id).maybeSingle();
-        const c = parseChart(row?.chart); if(c){ t.chart = c; ok = true; }
+        const { data: row } = await sb.from('trades').select('chart,chart_tries').eq('id', t.id).maybeSingle();
+        const c = parseChart(row?.chart); if(c){ t.chart = c; t.chartTries = Number(row.chart_tries)||0; ok = true; upgradeSoon(t); }
       }
     }catch(e){ /* browser below */ }
     if(!styled(t.chart)){                                              // fallback: the same candles fetched by the browser
