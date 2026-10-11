@@ -631,40 +631,63 @@ function drawChart(ctx, t, x, y, w, h, p, u, opt){
     ctx.beginPath(); ctx.moveTo(X(start), Y(t.entryMc)); ctx.lineTo(X(start) + (X(end)-X(start))*drawP, Y(t.entryMc) + (Y(t.exitMc)-Y(t.entryMc))*drawP); ctx.stroke(); ctx.setLineDash([]);
     marks = [[start,'b',t.entryMc],[end,'s',t.exitMc]];
   }
-  // markers: top row, spread when close; dashed drop to the exact fill
-  const pos = marks.map(([mt,k,v]) => ({ k, x: Math.min(x+w, Math.max(x, X(mt))), y: Math.min(y+h, Math.max(y, Y(v))), mx: 0 }))
-    .sort((a,b)=>a.x-b.x || (a.k==='b'?-1:1));
-  const gap = 64*u; pos.forEach((m,i)=>{ m.mx = m.x; if(i && m.mx - pos[i-1].mx < gap) m.mx = pos[i-1].mx + gap; });
-  const over = Math.max(0, (pos.length ? pos[pos.length-1].mx : 0) - (x + w)); pos.forEach(m => m.mx -= over);
-  const mr = 28*u, my = y - topZone + mr - 30*u;
-  // fill rounds that would overlap are pushed apart (buy down, sell up); a leader keeps pointing at the exact fill
-  pos.forEach(m => { m.dx = m.x; m.dy = m.y; });
-  const minD = 2*dotR + 6*u;
+  // markers. Fills of the same side close in time = ONE group (one top marker "B x5", one round on the best fill,
+  // a thin line through the group's fills). Everything is clamped inside the chart box: nothing can leave the card.
+  const mr = 28*u, my = y - topZone + mr - 30*u, dr = dotR;
+  const raw = marks.map(([mt,k,v]) => ({ k, x: Math.min(x+w, Math.max(x, X(mt))), y: Math.min(y+h, Math.max(y, Y(v))) }))
+    .sort((a,b)=>a.x-b.x || (a.k==='b'?-1:1))
+    // fills stacked on the same x (e.g. several buys before the first candle, clamped to the edge) collapse into one
+    // point, the best of them, that still counts every fill
+    .reduce((acc, m) => { const o = acc.find(q => q.k === m.k && Math.abs(q.x - m.x) < 2*u);
+      if(!o){ acc.push({ ...m, w: 1 }); return acc; } o.w++; if(m.k === 'b' ? m.y > o.y : m.y < o.y){ o.y = m.y; } return acc; }, []);
+  const groups = [], near = Math.max(2*dr + 8*u, w * 0.07);
+  raw.forEach(m => { const g = groups[groups.length-1];
+    if(g && g.k === m.k && m.x - g.items[g.items.length-1].x < near) g.items.push(m); else groups.push({ k: m.k, items: [m] }); });
+  // still too many groups for the width: merge neighbours of the same side until they fit
+  const maxG = Math.max(2, Math.floor(w / (2*mr + 14*u)));
+  while(groups.length > maxG){ let bi = -1, bd = Infinity;
+    for(let i = 1; i < groups.length; i++) if(groups[i].k === groups[i-1].k){ const d = groups[i].items[0].x - groups[i-1].items[groups[i-1].items.length-1].x; if(d < bd){ bd = d; bi = i; } }
+    if(bi < 0) break; groups[bi-1].items.push(...groups[bi].items); groups.splice(bi, 1); }
+  groups.forEach(g => { g.n = g.items.reduce((a,m)=>a + (m.w||1), 0);
+    const best = g.k === 's' ? g.items.reduce((a,m)=>m.y < a.y ? m : a) : g.items.reduce((a,m)=>m.y > a.y ? m : a);
+    g.x = best.x; g.y = best.y; g.best = best; g.dx = g.x; g.dy = g.y;
+    g.mw = (g.n > 1 ? 2*mr + 40*u : 2*mr); });
+  // top row: markers as close as possible to their fill time, never overlapping, never outside [x, x+w]
+  const gapM = 10*u; let need = groups.reduce((s,g)=>s + g.mw, 0) + gapM * Math.max(0, groups.length - 1), sc = need > w ? w / need : 1;
+  let cur = x; groups.forEach(g => { const half = g.mw*sc/2; g.mx = Math.max(cur + half, Math.min(x + w - half, g.x)); cur = g.mx + half + gapM*sc; });
+  for(let i = groups.length - 1; i >= 0; i--){ const g = groups[i], half = g.mw*sc/2, lim = i === groups.length - 1 ? x + w - half : groups[i+1].mx - groups[i+1].mw*sc/2 - gapM*sc - half; g.mx = Math.min(g.mx, lim); g.mx = Math.max(x + half, g.mx); }
+  // rounds that would overlap: pushed apart vertically, then clamped inside the chart
+  const minD = 2*dr + 6*u;
   for(let pass = 0; pass < 8; pass++){ let mv = false;
-    for(let a = 0; a < pos.length; a++) for(let b = a+1; b < pos.length; b++){
-      const P1 = pos[a], Q = pos[b], d = Math.hypot(Q.dx-P1.dx, Q.dy-P1.dy); if(d >= minD) continue;
-      const need = (minD - d)/2 + 0.5, upM = P1.k==='s' && Q.k!=='s' ? P1 : Q.k==='s' && P1.k!=='s' ? Q : (P1.y <= Q.y ? P1 : Q), dnM = upM === P1 ? Q : P1;
-      upM.dy -= need; dnM.dy += need; mv = true; }
+    for(let a = 0; a < groups.length; a++) for(let b = a+1; b < groups.length; b++){
+      const P1 = groups[a], Q = groups[b], d = Math.hypot(Q.dx-P1.dx, Q.dy-P1.dy); if(d >= minD) continue;
+      const nd = (minD - d)/2 + 0.5, upM = P1.k==='s' && Q.k!=='s' ? P1 : Q.k==='s' && P1.k!=='s' ? Q : (P1.y <= Q.y ? P1 : Q), dnM = upM === P1 ? Q : P1;
+      upM.dy -= nd; dnM.dy += nd; mv = true; }
+    groups.forEach(g => { g.dy = Math.min(y + h - dr, Math.max(y + dr, g.dy)); g.dx = Math.min(x + w - dr, Math.max(x + dr, g.dx)); });
     if(!mv) break; }
-  pos.forEach((m, i) => {
+  groups.forEach((g, i) => {
     const k = easeOutBack(seg(p, 0.72 + i*0.05, 0.84 + i*0.05)); if(k <= 0) return;
-    const col = m.k === 'b' ? CANDLE_UP : CANDLE_DN;
-    // drop line
+    const col = g.k === 'b' ? CANDLE_UP : CANDLE_DN, fc = g.k === 'b' ? '#18C964' : '#FF3B4E';
     ctx.save(); ctx.globalAlpha = clamp01(k);
+    // the group's fills, joined in time order
+    if(g.n > 1){ ctx.strokeStyle = hexA(fc, 0.55); ctx.lineWidth = 3*u; ctx.beginPath(); g.items.forEach((m,j)=>{ j ? ctx.lineTo(m.x, m.y) : ctx.moveTo(m.x, m.y); }); ctx.stroke();
+      ctx.fillStyle = fc; g.items.forEach(m => { if(m !== g.best){ ctx.beginPath(); ctx.arc(m.x, m.y, 5*u, 0, Math.PI*2); ctx.fill(); } }); }
+    // drop line from the top marker to the round
     ctx.strokeStyle = col; ctx.lineWidth = 3*u; ctx.setLineDash([10*u, 9*u]);
-    ctx.beginPath(); ctx.moveTo(m.mx, my + mr); ctx.lineTo(m.mx + (m.x - m.mx)*clamp01(k), my + mr + (m.y - my - mr)*clamp01(k)); ctx.stroke(); ctx.setLineDash([]);
-    // fill dot
-    if(k >= 1){ const dr = dotR, fc = m.k === 'b' ? '#18C964' : '#FF3B4E';
-      if(Math.hypot(m.dx - m.x, m.dy - m.y) > 3*u){ ctx.strokeStyle = fc; ctx.lineWidth = 3*u; ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.dx, m.dy); ctx.stroke();
-        ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(m.x, m.y, 6*u, 0, Math.PI*2); ctx.fill(); }
-      ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(m.dx, m.dy, dr, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${dr * 1.1}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.k === 'b' ? 'B' : 'S', m.dx, m.dy + 1*u); ctx.textBaseline = 'alphabetic'; }
-    // marker
-    ctx.translate(m.mx, my); ctx.scale(k, k);
-    ctx.shadowColor = hexA(col === CANDLE_UP ? '#18C964' : '#FF3B4E', 0.8); ctx.shadowBlur = 24*u;
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, mr, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${30*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(m.k === 'b' ? 'B' : 'S', 0, 2*u);
+    ctx.beginPath(); ctx.moveTo(g.mx, my + mr); ctx.lineTo(g.mx + (g.dx - g.mx)*clamp01(k), my + mr + (g.dy - my - mr)*clamp01(k)); ctx.stroke(); ctx.setLineDash([]);
+    if(k >= 1){
+      if(Math.hypot(g.dx - g.x, g.dy - g.y) > 3*u){ ctx.strokeStyle = fc; ctx.lineWidth = 3*u; ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.dx, g.dy); ctx.stroke();
+        ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(g.x, g.y, 6*u, 0, Math.PI*2); ctx.fill(); }
+      ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(g.dx, g.dy, dr, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${dr * 1.1}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.k === 'b' ? 'B' : 'S', g.dx, g.dy + 1*u); ctx.textBaseline = 'alphabetic'; }
+    // top marker (pill with the count when the group has several fills)
+    const ms = Math.min(1, Math.max(sc, 0.6)) * k; ctx.translate(g.mx, my); ctx.scale(ms, ms);
+    ctx.shadowColor = hexA(fc, 0.8); ctx.shadowBlur = 24*u; ctx.fillStyle = col;
+    if(g.n > 1){ const pw = g.mw; rrect(ctx, -pw/2, -mr, pw, 2*mr, mr); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${30*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText((g.k === 'b' ? 'B' : 'S') + '×' + g.n, 0, 2*u); }
+    else { ctx.beginPath(); ctx.arc(0, 0, mr, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${30*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.k === 'b' ? 'B' : 'S', 0, 2*u); }
     ctx.restore(); ctx.textBaseline = 'alphabetic';
   });
 }

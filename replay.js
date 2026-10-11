@@ -281,8 +281,17 @@ function warp(ctx, W, H, u, t, img, ms, seed){
 }
 
 /* place fill rounds without overlap: pairwise push apart vertically (buy down, sell up), then draw leader + round */
-function drawFills(ctx, list, u, R){
-  const pts = list.map(p => ({ ...p, x: p.ax, y: p.ay })), minD = 2 * R * u + 6 * u;
+function drawFills(ctx, list, u, R, top, bottom){
+  const minD = 2 * R * u + 6 * u;
+  // fills of the same side close in time: ONE round (on the best fill) with a count, the others as small anchors
+  const sorted = list.slice().sort((a, b) => a.ax - b.ax)
+    .reduce((acc, m) => { const o = acc.find(q => q.kind === m.kind && Math.abs(q.ax - m.ax) < 2 * u);
+      if(!o){ acc.push({ ...m, w: 1 }); return acc; } o.w++; if(m.kind === 'b' ? m.ay > o.ay : m.ay < o.ay) o.ay = m.ay; return acc; }, []), groups = [];
+  sorted.forEach(m => { const g = groups[groups.length - 1];
+    if(g && g.kind === m.kind && m.ax - g.items[g.items.length - 1].ax < minD) g.items.push(m); else groups.push({ kind: m.kind, items: [m] }); });
+  const pts = groups.map(g => { const best = g.kind === 's' ? g.items.reduce((a, m) => m.ay < a.ay ? m : a) : g.items.reduce((a, m) => m.ay > a.ay ? m : a);
+    return { kind: g.kind, ax: best.ax, ay: best.ay, x: best.ax, y: best.ay, n: g.items.reduce((a, m) => a + (m.w || 1), 0), items: g.items }; });
+  const lo = top != null ? top + R * u : -Infinity, hi = bottom != null ? bottom - R * u : Infinity;
   for(let pass = 0; pass < 8; pass++){
     let moved = false;
     for(let a = 0; a < pts.length; a++) for(let b = a + 1; b < pts.length; b++){
@@ -293,6 +302,7 @@ function drawFills(ctx, list, u, R){
       const other = upFirst === p ? q : p;
       upFirst.y -= need; other.y += need; moved = true;
     }
+    pts.forEach(p => { p.y = Math.min(hi, Math.max(lo, p.y)); });
     if(!moved) break;
   }
   pts.forEach(p => {
@@ -303,7 +313,13 @@ function drawFills(ctx, list, u, R){
       ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke(); ctx.restore();
     }
   });
-  pts.forEach(p => tradeDot(ctx, p.x, p.y, u, p.kind, R));
+  pts.forEach(p => { if(p.n < 2) return; const col = p.kind === 'b' ? DOT_B : DOT_S;
+    ctx.save(); ctx.globalAlpha = 0.6; ctx.strokeStyle = col; ctx.lineWidth = 3 * u; ctx.beginPath(); p.items.forEach((m, j) => j ? ctx.lineTo(m.ax, m.ay) : ctx.moveTo(m.ax, m.ay)); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillStyle = col; p.items.forEach(m => { ctx.beginPath(); ctx.arc(m.ax, m.ay, 6 * u, 0, Math.PI * 2); ctx.fill(); }); ctx.restore(); });
+  pts.forEach(p => { tradeDot(ctx, p.x, p.y, u, p.kind, R);
+    if(p.n > 1){ const bx = p.x + R * u * 0.8, by = p.y - R * u * 0.8, br = 17 * u;      // count badge
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke();
+      ctx.fillStyle = '#05070a'; ctx.font = `900 ${18 * u}px ${MONO}`; fillCentered(ctx, p.n > 9 ? '9+' : String(p.n), bx, by); ctx.restore(); } });
 }
 /* a fill on the chart: small filled round, green B = buy, red S = sell */
 const DOT_B = '#18C964', DOT_S = '#FF3B4E';                          // buy / sell stay green / red whatever the theme
@@ -424,7 +440,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     const mc = m[2] > 0 ? m[2] : (P.cs[ii][2] + P.cs[ii][3]) / 2;
     shown.push({ kind: m[1], ax: X(ii), ay: Y(mc) });
   });
-  drawFills(ctx, shown, u, DOT_R);
+  drawFills(ctx, shown, u, DOT_R, top, bottom);
   ctx.restore();
   // live price line + multiplier vs buy
   const last = cur(Math.min(P.n - 1, full)), nowMc = last[4];

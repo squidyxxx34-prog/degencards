@@ -483,7 +483,10 @@ const fmtMcShort = v => v>=1e9 ? (v/1e9).toFixed(1)+'B' : v>=1e6 ? (v/1e6).toFix
 /* B / S pinned at the top of the chart, a dashed drop line down to the exact fill point on the candles */
 const CH_TOP = 24;   // % of the chart height reserved for the markers
 function markersHtml(marks, X, Y, big){
-  const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) })).sort((p,q)=>p.x-q.x);
+  const pos = marks.map(([mt,kind,v])=>({ kind, x: Math.min(100,Math.max(0,X(mt))), y: Math.min(100,Math.max(0,Y(v))) })).sort((p,q)=>p.x-q.x)
+    // fills stacked on the same x (several buys before the first candle, clamped to the edge) collapse into one point
+    .reduce((acc, m) => { const o = acc.find(q => q.kind === m.kind && Math.abs(q.x - m.x) < 0.6);
+      if(!o){ acc.push({ ...m, w: 1 }); return acc; } o.w++; if(m.kind === 'b' ? m.y > o.y : m.y < o.y) o.y = m.y; return acc; }, []);
   const W = big ? 330 : 140, H = big ? 170 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
   const pct = px => px / W * 100;
   // fills of the same side close together in time: one marker with a count (S x9), one round, one straight drop line
@@ -491,7 +494,7 @@ function markersHtml(marks, X, Y, big){
   const groups = [];
   pos.forEach(m=>{ const g = groups[groups.length-1];
     if(g && g.kind === m.kind && m.x - g.items[g.items.length-1].x < gap) g.items.push(m); else groups.push({ kind: m.kind, items: [m] }); });
-  groups.forEach(g=>{ g.n = g.items.length;
+  groups.forEach(g=>{ g.n = g.items.reduce((a,m)=>a + (m.w||1), 0);
     const best = g.kind === 's' ? g.items.reduce((a,m)=>m.y < a.y ? m : a) : g.items.reduce((a,m)=>m.y > a.y ? m : a);   // best fill of the group
     g.x = best.x; g.y = best.y; g.best = best; g.w = pct(g.n > 1 ? mkPx + 22 : mkPx) + pct(4); });
   // top labels on ONE row: overlapping labels form a block centred on their real times (smallest total shift, both
