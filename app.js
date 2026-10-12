@@ -614,7 +614,36 @@ function miniChart(t, big){
     ${markersHtml([[start,'b',p[0][1]],[end,'s',p[1][1]]], X, Y, big)}</div>`;
 }
 
-function computedTrades(){ return trades.map(t=>({...t, meta: generateTradeCard(t, trades)})); }
+/* every card's meta (rarity, achievements...) in one O(n log n) pass, cached until a trade's pnl / time / source changes:
+   computing it per trade against the whole list was O(n²) and was redone by every view on each render */
+function metaCtxAll(list){
+  const sorted = [...list].sort((a,b)=>a.timestamp-b.timestamp), out = new Map();
+  const dayKey = ts => new Date(ts).toDateString(), dayBest = new Map(), dayWorst = new Map();
+  list.forEach(x=>{ const k = dayKey(x.timestamp); dayBest.set(k, Math.max(dayBest.has(k) ? dayBest.get(k) : -Infinity, x.pnl)); dayWorst.set(k, Math.min(dayWorst.has(k) ? dayWorst.get(k) : Infinity, x.pnl)); });
+  let best = 0, win = 0, loss = 0, nAll = 0, nWins = 0, nWallet = 0;
+  for(let i = 0; i < sorted.length; ){
+    let j = i; while(j < sorted.length && sorted[j].timestamp === sorted[i].timestamp) j++;
+    const grp = sorted.slice(i, j), bestBefore = best, pw = win, pl = loss;          // stats of the trades strictly before this time
+    grp.forEach(x=>{ nAll++; if(x.pnl > 0) nWins++; if(x.source === 'wallet') nWallet++; });
+    grp.forEach(trade=>{ const k = dayKey(trade.timestamp);
+      out.set(trade, { isFirstWin: trade.pnl>0 && nWins===1, isPersonalBest: trade.pnl>bestBefore, streak: trade.pnl>0 ? pw+1 : 0, lossStreak: trade.pnl<=0 ? pl+1 : 0,
+        comeback: trade.pnl>0 && pl>=2, isBestOfDay: trade.pnl===dayBest.get(k), isWorstOfDay: trade.pnl===dayWorst.get(k), tradeNumber: nAll,
+        hour: new Date(trade.timestamp).getHours(), day: new Date(trade.timestamp).getDay(), isFirstWalletImport: trade.source==='wallet' && nWallet===1 }); });
+    grp.forEach(x=>{ best = Math.max(best, x.pnl); if(x.pnl > 0){ win++; loss = 0; } else { loss++; win = 0; } });
+    i = j;
+  }
+  return out;
+}
+const metaOf = (trade, ctx) => { const rarity = computeRarity(trade, ctx); return { rarity, grade:computeGrade(trade,rarity), achievements:computeAchievements(trade,ctx), vibe:vibeFor(trade), color:pnlColor(trade) }; };
+let metaCache = { sig:'', list:null, map:new Map() };
+function computedTrades(){
+  const sig = trades.length + '|' + trades.map(t=>t.id+':'+t.pnl+':'+t.timestamp+':'+t.source+':'+t.roi+':'+t.holdTime).join(',');
+  if(sig !== metaCache.sig || metaCache.list !== trades){
+    const ctx = metaCtxAll(trades), map = new Map(); trades.forEach(t=>map.set(t.id, metaOf(t, ctx.get(t))));
+    metaCache = { sig, list:trades, map };
+  }
+  return trades.map(t=>({...t, meta: metaCache.map.get(t.id)}));
+}
 
 function renderCardHTML(t, meta){
   const win = t.pnl>=0;
@@ -2057,9 +2086,12 @@ async function syncNow(manual){
   try{
     const { data, error } = await sb.functions.invoke('sync-trades', { body:{} });
     if(error) throw error;
-    const before = trades.length;
-    await reload();
-    const n = Number(data?.imported)||0;
+    const before = trades.length, n = Number(data?.imported)||0;
+    // full reload only when something changed (this sync or the server cron imported cards): a quiet check otherwise
+    let changed = n > 0 || manual;
+    if(!changed){ const { count } = await sb.from('trades').select('id', { count:'exact', head:true }).is('deleted_at', null); changed = count != null && count !== trades.length; }
+    if(changed) await reload(); else { connectedAccounts = await store.getAccounts(); renderAccount(); }
+    if(changed && !n && trades.length > before) setTimeout(buildChartsInBrowser, 200000);
     if(n){ showToast(`${n} new trade card${n>1?'s':''} imported`); setTimeout(buildChartsInBrowser, 200000); }
     else if(manual) showToast(data?.pending ? 'Still catching up on history — more cards soon' : (data?.synced ? 'Up to date' : 'Synced less than a minute ago'));
     if(data?.pending && before !== trades.length) setTimeout(()=>syncNow(false), 15000);
@@ -2067,7 +2099,7 @@ async function syncNow(manual){
   finally{ syncing = false; }
 }
 function maybeAutoSync(){
-  const stale = connectedAccounts.some(a=>!a.syncedAt || Date.now()-a.syncedAt > 10*60*1000);
+  const stale = connectedAccounts.some(a=>!a.syncedAt || Date.now()-a.syncedAt > 90*1000);   // new trades show up within ~2 min while the app is open
   if(stale) syncNow(false);
 }
 
@@ -2795,7 +2827,9 @@ async function showApp(){
   warmCharts();                                                        // charts: no delay
   window.__dcGuideUser = session?.user?.id || 'anon';      // guide.js may load after this: it picks the id up itself
   window.dcGuide?.maybeStart(window.__dcGuideUser);
-  setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 5*60*1000);
+  if(!showApp.timers){ showApp.timers = true;
+    setInterval(()=>{ if(!document.hidden) maybeAutoSync(); }, 60*1000);
+    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) maybeAutoSync(); }); }   // back on the tab: catch up right away
 }
 function showLanding(){
   document.getElementById('landing').hidden = false;
