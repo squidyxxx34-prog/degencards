@@ -24,7 +24,7 @@ function num(v, min, max, dflt){ v = Number(v); if(!Number.isFinite(v)) return d
 const REDIRECT_URL = location.origin + location.pathname;      // never echo query/hash back to the auth server
 let idCounter = 0;
 /* strip any auth code/token leftovers from the visible URL once handled */
-const OPEN_VIEW = (()=>{ try{ const v = new URLSearchParams(location.search).get('v'); return ['launch','ranks','radar'].includes(v) ? v : null; }catch(_){ return null; } })();   // deep links, e.g. a wallet's in-app browser
+const OPEN_VIEW = (()=>{ try{ const v = new URLSearchParams(location.search).get('v'); return ['launch','ranks','radar','tips'].includes(v) ? v : null; }catch(_){ return null; } })();   // deep links, e.g. a wallet's in-app browser
 function scrubUrl(){
   if(location.search || location.hash){
     history.replaceState(null, '', location.pathname);
@@ -1607,7 +1607,7 @@ document.getElementById('ranksView').addEventListener('click', async e=>{
 function goToView(v){
   view = v;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
-  ['home','collection','history','achievements','stats','ranks','launch','radar','account'].forEach(k=>{
+  ['home','collection','history','achievements','stats','ranks','launch','radar','tips','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
   if(v==='radar') radar.open(); else radar.close();
@@ -1621,6 +1621,8 @@ const RADAR_COLS = 'mint,symbol,name,source,graduated,image,score,checks,mc,liq,
 const RADAR_DAY = 864e5;
 const radarMig = r => r.migratedAt || (r.pump && r.graduated && r.createdAt && Date.now()-r.createdAt < RADAR_DAY ? r.createdAt : null);
 const RADAR_CATS = [
+  { k:'pro', l:'PRO Screener', d:'The trader checklist applied to every coin automatically. Coins that pass all of it get the ✓ CHECKLIST mark and come first; the others are shown on their own, with what they miss.',
+    pick: rows => rows.slice().sort((a,b)=>{ const A = proCheck(a), B = proCheck(b); return (B.ok - A.ok) || (B.pass - A.pass) || b.volH1 - a.volH1; }) },
   { k:'trending', l:'Trending', d:'Most traded coins over the last hour.', pick: rows => rows.slice().sort((a,b)=>b.volH1-a.volH1) },
   { k:'new', l:'New', d:'Launched in the last 24 hours, newest first. Young coins are capped at 70-75: too early to judge holders and dev.',
     pick: rows => rows.filter(r=>r.createdAt && Date.now()-r.createdAt < RADAR_DAY).sort((a,b)=>b.createdAt-a.createdAt) },
@@ -1634,6 +1636,81 @@ const RADAR_CATS = [
   { k:'safest', l:'Safest', d:'Highest safety score first.', pick: rows => rows.slice().sort((a,b)=>b.score-a.score || b.volH1-a.volH1) },
 ];
 const radarHeat = r => Math.max(r.changeH1 ?? -1e9, 3*(r.chM5 ?? -1e9));
+/* ---------- PRO screener: the trader checklist (see TIPS), applied automatically to every scanned coin ----------
+   Only what the data can really tell is checked here; the rest (pitch, meme, IRL event, influencers) stays on the trader. */
+const proLocked = () => !!(window.dcPro?.enabled && !window.dcPro?.active);
+const PRO_THEMES = [
+  ['Dogs', /\b(dog|doge|dogs|inu|shiba|shib|pup|puppy|puppo|woof|bark|corgi|pug|wif|bonk)\b/],
+  ['Cats', /\b(cat|cats|kitty|kitten|meow|neko|popcat|mew|catwif)\b/],
+  ['Frogs', /\b(frog|frogs|pepe|toad|ribbit|kek|froggy)\b/],
+  ['AI', /\b(ai|agi|agent|agents|gpt|llm|neural|robot|bot|grok|claude|gemini|deepseek)\b/],
+  ['Politics', /\b(trump|maga|biden|kamala|election|president|vote|senate|congress|potus|melania|barron)\b/],
+  ['Celebs', /\b(elon|musk|kanye|ye|drake|taylor|swift|mrbeast|kardashian|celebrity)\b/],
+  ['Animals', /\b(monkey|ape|apes|penguin|pengu|bear|bull|hippo|moodeng|fish|duck|goat|horse|cow|pig|rat|hamster|capybara|panda|otter|seal|owl|bird|chicken|tiger|lion|wolf|fox|bunny|rabbit)\b/],
+  ['Food', /\b(pizza|burger|bread|banana|cake|cookie|taco|sushi|coffee|beer|wine|donut|fries|cheese)\b/],
+  ['Space', /\b(moon|mars|rocket|alien|ufo|space|galaxy|planet|nasa|star)\b/],
+  ['Anime & games', /\b(anime|waifu|chan|kun|game|gaming|pixel|pokemon|mario|sonic|minecraft)\b/],
+];
+function proTheme(r){ const t = (' ' + r.symbol + ' ' + r.name + ' ' + r.desc + ' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  for(const [n, re] of PRO_THEMES) if(re.test(t)) return n; return null; }
+const PUMP_START_SOL = 27.96;                                          // pump.fun: market cap of a fresh coin (1B supply, 30 / 1.073B SOL each)
+const proMeta = { launchesDay: null, solUsd: null, at: 0, loading: null };
+function proLoadMeta(){
+  if(proMeta.loading || Date.now() - proMeta.at < 60000) return proMeta.loading;
+  return proMeta.loading = fetch(SUPABASE_URL + '/functions/v1/radar?meta=1').then(r=>r.ok ? r.json() : null).then(j=>{
+    if(j){ proMeta.launchesDay = Number(j.launchesDay) > 0 ? Number(j.launchesDay) : null; proMeta.solUsd = Number(j.solUsd) > 0 ? Number(j.solUsd) : null; }
+    proMeta.at = Date.now(); }).catch(()=>{ proMeta.at = Date.now() - 30000; }).finally(()=>{ proMeta.loading = null; });
+}
+const proRegime = n => n == null ? null : n >= 30000 ? { k:'hot', l:'HIGH', d:'strong attention: narratives can run' } : n >= 5000 ? { k:'ok', l:'NORMAL', d:'average attention' } : { k:'dead', l:'DEAD', d:'attention is gone: narratives don’t take off' };
+let proCtx = { rows:null, map:new Map(), themes:[] };
+function proContext(rows){                                            // themes, leaders and copies over everything the radar sees
+  if(proCtx.rows === rows) return proCtx;
+  const by = new Map(), sym = new Map();
+  rows.forEach(r=>{ const th = proTheme(r); r._theme = th; if(th){ if(!by.has(th)) by.set(th, []); by.get(th).push(r); }
+    const k = r.symbol.toLowerCase().replace(/^\$/,''); if(!sym.has(k)) sym.set(k, []); sym.get(k).push(r); });
+  const map = new Map();
+  by.forEach(list=>list.sort((a,b)=>b.mc-a.mc).forEach((r,i)=>map.set(r.mint, { rank:i+1, of:list.length, leader:list[0] })));
+  const copyOf = new Map(); sym.forEach(list=>{ if(list.length < 2) return; const top = list.slice().sort((a,b)=>b.mc-a.mc)[0]; list.forEach(r=>{ if(r !== top) copyOf.set(r.mint, top); }); });
+  const themes = [...by.entries()].map(([n, list])=>({ n, vol: list.reduce((s,r)=>s+r.volH1, 0), count:list.length, top:list.slice(0,2) })).sort((a,b)=>b.vol-a.vol);
+  return proCtx = { rows, map, copyOf, themes };
+}
+function proCheck(r){
+  if(r._pro && r._pro.at === proMeta.at && r._pro.ctx === proCtx.rows) return r._pro;
+  const ctx = proContext(radar.rows), out = [];
+  const add = (k, s, t, d) => out.push({ k, s, t, d });               // s: 2 pass, 0 fail, 1 unknown
+  add('safe', r.score >= 80 ? 2 : 0, 'Safety first', r.score >= 80 ? `Safety ${r.score}/100: mint, freeze, bundles, holders, LP checked` : `Safety ${r.score}/100: under 80, too many rug signals`);
+  const start = r.pump && proMeta.solUsd ? PUMP_START_SOL * proMeta.solUsd : (r.createdAt && Date.now()-r.createdAt < RADAR_DAY && r.chH24 != null && r.chH24 > -99) ? r.mc / (1 + r.chH24/100) : null;
+  const x = start ? r.mc / start : null;
+  add('pumped', x == null ? 1 : x < 50 ? 2 : 0, 'Not already pumped', x == null ? 'Launch price unknown' : `x${x < 10 ? x.toFixed(1) : Math.round(x)} since launch${x >= 50 ? ': already did x50+' : ''}`);
+  const ageH = r.createdAt ? Math.max(1, (Date.now()-r.createdAt)/3600e3) : 24, avg = r.volH24 / Math.min(24, ageH);
+  const spike = avg > 0 ? r.volH1 / avg : 0, flow = r.buys >= r.sells * 0.9;
+  add('catalyst', spike >= 1.5 && flow ? 2 : 0, 'Volume spike (catalyst)', `Volume 1h = ${spike.toFixed(1)}× its hourly average · ${r.buys} buys / ${r.sells} sells`);
+  const th = ctx.map.get(r.mint);
+  add('meta', !r._theme ? 0 : th && th.rank <= 2 ? 2 : 0, 'Leader of its meta', !r._theme ? 'No clear theme (dogs, cats, AI…)' : th.rank === 1 ? `#1 of ${th.of} ${r._theme} coins on the radar` : th.rank === 2 ? `#2 of ${th.of} ${r._theme} coins (the leader’s runner-up)` : `#${th.rank} of ${th.of} ${r._theme} coins: a follower`);
+  const cp = ctx.copyOf.get(r.mint);
+  add('copy', cp ? 0 : 2, 'Not a copy', cp ? `Same ticker as a bigger coin (${radarMc(cp.mc)})` : 'Only coin with this ticker on the radar');
+  const dump = r.checks.some(c=>c.k==='dump'), alive = !dump && (r.changeH1 ?? 0) > -25 && (r.chH6 ?? 0) > -50;
+  add('alive', alive ? 2 : 0, 'Narrative still alive', alive ? `1h ${r.changeH1 != null ? fmt.pct(r.changeH1) : '—'} · 6h ${r.chH6 != null ? fmt.pct(r.chH6) : '—'}` : 'Price fading or being dumped: the story is dying');
+  const curve = r.pump && !r.graduated, lr = r.mc > 0 ? r.liq / r.mc : 0;
+  add('liq', curve || (r.liq >= 10000 && lr >= 0.06) ? 2 : 0, 'Real liquidity', curve ? 'Bonding curve: no LP to pull' : `${radarMc(r.liq)} in pools (${(lr*100).toFixed(0)}% of market cap)`);
+  const reg = proRegime(proMeta.launchesDay);
+  add('regime', !reg ? 1 : reg.k === 'dead' ? 0 : 2, 'Market attention', !reg ? 'Pump.fun pace unknown right now' : `${Math.round(proMeta.launchesDay/1000)}K launches/day on pump.fun: ${reg.d}`);
+  const pass = out.filter(c=>c.s===2).length, blocking = out.filter(c=>c.s===0 || (c.s===1 && c.k !== 'regime')).length;
+  return r._pro = { list: out, pass, total: out.length, ok: blocking === 0, theme: r._theme, rank: th ? th.rank : 0, at: proMeta.at, ctx: proCtx.rows };
+}
+function proBannerHTML(){
+  const reg = proRegime(proMeta.launchesDay), ctx = proContext(radar.rows);
+  const pass = radar.rows.filter(r=>proCheck(r).ok).length;
+  return `<div class="pro-banner">
+    <div class="pb-row"><span class="pro-tag">PRO</span><b>Screener</b><span class="pb-sub">${pass} of ${radar.rows.length} coins pass the whole checklist</span></div>
+    <div class="pb-stats">
+      <div class="pb-stat ${reg ? reg.k : ''}"><small>Attention</small><b>${reg ? reg.l : '—'}</b><span>${proMeta.launchesDay ? (proMeta.launchesDay/1000).toFixed(1)+'K launches/day' : 'pace unavailable'}</span></div>
+      <div class="pb-stat"><small>SOL</small><b>${proMeta.solUsd ? '$'+proMeta.solUsd.toFixed(0) : '—'}</b><span>from pump.fun</span></div>
+    </div>
+    ${ctx.themes.length ? `<div class="pb-meta"><small>META NOW · where the volume is</small>${ctx.themes.slice(0,5).map(t=>`<span class="pb-th"><b>${esc(t.n)}</b> ${t.top.map((r,i)=>`<em>${i?'#2':'#1'} ${esc(tk(r.symbol))}</em>`).join(' ')}<i>${radarMc(t.vol)}/h</i></span>`).join('')}</div>` : ''}
+    <a class="pb-tips" href="#" data-open-tips>How the checklist works →</a>
+  </div>`;
+}
 const RADAR_MINS = [[70,'70+'],[80,'80+'],[90,'90+'],[0,'ALL']];
 const radarPref = (k, d) => { try{ const v = localStorage.getItem('dc_radar_'+k); return v == null ? d : v; }catch(_){ return d; } };
 const radarSave = (k, v) => { try{ localStorage.setItem('dc_radar_'+k, String(v)); }catch(_){} };
@@ -1651,6 +1728,7 @@ const radar = {
       const {data, error} = await sb.from('radar_tokens').select(RADAR_COLS)
         .gt('scanned_at', since).order('scanned_at', {ascending:false}).limit(400);
       if(error) throw error;
+      await proLoadMeta();
       this.rows = (data||[]).map(radarRow).filter(Boolean); this.failed = false; this.loadedAt = Date.now();
       // rows that appeared since the last refresh get a short highlight
       const ids = new Set(this.rows.map(r=>r.mint));
@@ -1662,7 +1740,8 @@ const radar = {
   pool(){                                                              // rows passing the safety filter and the search
     const q = this.q.trim().toLowerCase().replace(/^\$/,'');
     const old = r => !r.pump && r.createdAt && Date.now()-r.createdAt > 90*RADAR_DAY;   // established tokens are not what the radar is for
-    return this.rows.filter(r=>r.score >= this.min && !old(r) && (!q || r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.mint.toLowerCase() === q || (q.length >= 6 && r.mint.toLowerCase().startsWith(q))));
+    const min = this.cat === 'pro' ? 0 : this.min;
+    return this.rows.filter(r=>r.score >= min && !old(r) && (!q || r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.mint.toLowerCase() === q || (q.length >= 6 && r.mint.toLowerCase().startsWith(q))));
   },
   renderBar(){
     const pool = this.pool();
@@ -1689,6 +1768,13 @@ const radar = {
       list.innerHTML = this.failed ? '' : `<div class="empty"><b>${this.q ? 'NO MATCH' : 'NOTHING HERE RIGHT NOW'}</b>${filtered ? `Try another safety level or clear the search. ` : ''}The radar rescans active coins every 5 minutes.${this.min ? ` <button type="button" class="hbtn" data-min-reset>SHOW ALL SCORES</button>` : ''}</div>`;
       if(!this.failed) radarChart.stop();
       return;
+    }
+    document.getElementById('radarView').classList.toggle('is-pro', this.cat === 'pro');
+    const pb = document.getElementById('radarPro');
+    if(pb){ pb.hidden = this.cat !== 'pro'; if(this.cat === 'pro') pb.innerHTML = proLocked() ? '' : proBannerHTML(); }
+    if(this.cat === 'pro' && proLocked()){
+      list.innerHTML = `<div class="empty pro-lock"><span class="pro-tag">PRO</span><b>PRO SCREENER</b>The trader checklist applied to every coin, live: meta leader, already pumped, volume spike, copycats, attention regime, safety. Coins that pass everything get the ✓ CHECKLIST mark.<button type="button" class="share-btn" data-pro-open>GO PRO</button></div>`;
+      list.querySelector('[data-pro-open]')?.addEventListener('click', ()=>window.dcPro.open()); radarChart.stop(); return;
     }
     list.innerHTML = rows.map(r=>radarCardHTML(r, r.mint===this.openMint, this.cat, this.fresh.has(r.mint))).join('');
     const open = rows.find(r=>r.mint===this.openMint);
@@ -1748,6 +1834,7 @@ function radarCells(r, cat){
 }
 function radarCardHTML(r, isOpen, cat, isNew){
   const tier = r.score>=90 ? 'hi' : r.score>=80 ? 'ok' : r.score>=70 ? 'mid' : 'low';
+  const pc = proLocked() ? null : proCheck(r);
   const age = r.createdAt ? radarAgo(r.createdAt) : '—';
   const v = radarVenues(r), main = v[0];
   const mark = s => s===2 ? icon('check',14,'var(--green)') : s===1 ? icon('minus',14,'var(--gold)') : icon('x',14,'var(--red)');
@@ -1759,12 +1846,17 @@ function radarCardHTML(r, isOpen, cat, isNew){
   const stat = (k, val) => `<div class="rd-stat"><span>${k}</span><b>${val}</b></div>`;
   const curve = r.pump && !r.graduated && r.curve!=null
     ? `<div class="rd-curve"><div class="rd-curve-top"><span>Bonding curve</span><b>${r.curve.toFixed(1)}%</b></div><div class="rd-bar"><i style="width:${r.curve.toFixed(1)}%"></i></div></div>` : '';
-  return `<div class="radar-item${isOpen?' open':''}${isNew?' is-new':''}" data-mint="${r.mint}">
+  const proMark = pc && pc.ok ? `<span class="radar-tag pro-ok" title="Passes the whole PRO checklist (not a buy signal)">✓ CHECKLIST</span>` : '';
+  const proRank = pc && pc.theme && pc.rank && pc.rank <= 2 && cat === 'pro' ? `<span class="radar-tag meta">${pc.rank === 1 ? 'LEADER' : '#2'} · ${esc(pc.theme.toUpperCase())}</span>` : '';
+  const proList = pc ? `<h4 class="rd-h">PRO CHECKLIST · ${pc.pass}/${pc.total}${pc.ok ? ' · <span class="pos">✓ PASSED</span>' : ''}</h4>
+      <ul class="radar-checks pro-checks">${pc.list.map(c=>`<li>${mark(c.s)}<span class="rc-t">${esc(c.t)}</span><span class="rc-d">${esc(c.d)}</span></li>`).join('')}</ul>
+      <p class="rd-src">Checked automatically. Still on you: the meme itself (pitch, visual, staying power), the IRL event and who talks about it. <a href="#" data-open-tips>Read the TIPS</a></p>` : '';
+  return `<div class="radar-item${isOpen?' open':''}${isNew?' is-new':''}${pc && pc.ok ? ' pro-pass' : ''}" data-mint="${r.mint}">
     <div class="radar-head">
       <button type="button" class="radar-row" aria-expanded="${isOpen}" aria-label="${esc(tk(r.symbol))}, safety score ${r.score}. Show details and chart">
         ${coinImg({image:r.image, ticker:r.symbol}, 40)}
         <span class="radar-main">
-          <span class="radar-tk">${esc(tk(r.symbol))}<span class="radar-name">${esc(r.name)}</span>${tag}${live}</span>
+          <span class="radar-tk">${esc(tk(r.symbol))}<span class="radar-name">${esc(r.name)}</span>${proMark}${proRank}${tag}${live}</span>
           <span class="radar-cells">${radarCells(r, cat)}</span>
         </span>
         <span class="radar-score ${tier}" title="Safety score: fewer rug signals is higher"><b>${r.score}</b><small>SAFETY</small></span>
@@ -1788,6 +1880,7 @@ function radarCardHTML(r, isOpen, cat, isNew){
         ${r.desc ? `<p class="rd-desc">${esc(r.desc)}</p>` : ''}
         <p class="rd-src">Links and description come from the coin's creator. Check them before trusting them.</p>
       </div>` : ''}
+      ${proList}
       <h4 class="rd-h">SAFETY CHECKS · ${r.score}/100</h4>
       <ul class="radar-checks">${r.checks.map(c=>`<li>${mark(c.s)}<span class="rc-t">${esc(c.t)}</span><span class="rc-d">${esc(c.d)}</span></li>`).join('')}</ul>
       <div class="radar-links">
@@ -1926,6 +2019,10 @@ const radarChart = {
   }
 };
 
+document.addEventListener('click', e=>{
+  if(e.target.closest('[data-open-tips]')){ e.preventDefault(); goToView('tips'); window.scrollTo(0,0); }
+  else if(e.target.closest('[data-open-pro]')){ e.preventDefault(); radar.cat = 'pro'; radarSave('cat','pro'); goToView('radar'); window.scrollTo(0,0); }
+});
 document.getElementById('radarList').addEventListener('click', async e=>{
   if(e.target.closest('[data-min-reset]')){ radar.min = 0; radarSave('min', 0); radar.render(); return; }
   const cp = e.target.closest('.radar-copy, .radar-qcopy');

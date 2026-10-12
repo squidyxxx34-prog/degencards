@@ -123,6 +123,7 @@
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
+      <button data-v="tips">TIPS</button>
       <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </nav>
@@ -385,11 +386,71 @@
       <div class="rd-min"><span>Safety</span><div class="filters" id="radarMin" role="group" aria-label="Minimum safety score"></div></div>
     </div>
     <p class="rd-catdesc" id="radarCatDesc"></p>
+    <div id="radarPro" hidden></div>
     <div class="radar-list" id="radarList"></div>
     <div class="radar-foot" id="radarFoot"></div>
     <details class="radar-about"><summary>How the safety score works</summary>
       <p class="radar-note">Every coin is checked on-chain: mint and freeze authorities, token extensions, holder concentration, same-size wallet bundles, dev wallet, liquidity behind the market cap, price moves, activity and RugCheck flags. A high score means fewer rug signals right now, not a buy signal. It can still miss insiders spread over varied wallets, or a dev who sells later. Not financial advice.</p>
     </details>
+  </div>
+
+  <div id="tipsView" style="display:none;">
+    <div class="sectionhead"><h2>TIPS <span class="rd-count">reading a memecoin</span></h2></div>
+    <p class="tp-intro">Narrative first, safety second, and both before you buy. Items marked <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span> are checked live on every coin by the <a href="#" data-open-pro>PRO Screener</a>. Items marked <span class="tp-you" title="Only you can judge this one">YOU</span> are on you: no data can judge a meme for you.</p>
+    <section class="tp-sec">
+      <h3>THE COIN ITSELF</h3>
+      <p class="tp-lead">Is the meme strong enough to spread on its own?</p>
+      <ol class="tp-list">
+        <li><span class="tp-n">1</span><div><h4>The pitch <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Can you explain the meme in 2 sentences max: simple, emotional, easy to retweet? If it needs a thread to explain, it won’t travel.</p></div></li>
+        <li><span class="tp-n">2</span><div><h4>The visual <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Could a teenager redraw it in Paint? Can it be photoshopped onto anything? Memes that are easy to remix spread for free.</p></div></li>
+        <li><span class="tp-n">3</span><div><h4>Staying power <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Real cultural resonance, or a joke forgotten next week?</p></div></li>
+        <li><span class="tp-n">4</span><div><h4>Already pumped? <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Has the coin already done x50 since launch, or is it still close to its starting point? The screener compares its market cap to its launch value.</p></div></li>
+      </ol>
+    </section>
+    <section class="tp-sec">
+      <h3>THE CONTEXT</h3>
+      <p class="tp-lead">What is carrying the coin right now?</p>
+      <ol class="tp-list">
+        <li><span class="tp-n">5</span><div><h4>The theme <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Which theme does it belong to: dogs, cats, frogs, AI, politics…? The screener tags the theme from its name, ticker and description.</p></div></li>
+        <li><span class="tp-n">6</span><div><h4>The real-world event <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Is it tied to something happening IRL (an election, a war, a viral moment)? When the event fades, so does the coin.</p></div></li>
+        <li><span class="tp-n">7</span><div><h4>The catalyst <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Listings, viral influencer posts, exchange mentions or a trending narrative can trigger the inflow. Social buzz and volume spikes often show up before the chart confirms. The screener flags volume running well above its hourly average with buyers in control.</p></div></li>
+        <li><span class="tp-n">8</span><div><h4>Who talks about it <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Which influencers mention the coin, and are they paid to? Check the coin’s X and Telegram yourself.</p></div></li>
+        <li><span class="tp-n">9</span><div><h4>Where the liquidity is <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Which chain is the money on (Solana, Ethereum, Base…)? The radar is Solana only, and the screener checks there is real liquidity behind the market cap.</p></div></li>
+      </ol>
+    </section>
+    <section class="tp-sec">
+      <h3>POSITION IN THE NARRATIVE</h3>
+      <p class="tp-lead">Leader, runner-up or late copy?</p>
+      <ol class="tp-list">
+        <li><span class="tp-n">10</span><div><h4>Leader or copy <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Spot the leaders of the current meta and where attention is concentrated. The screener ranks every coin inside its theme by market cap and flags tickers copied from a bigger coin.</p></div></li>
+        <li><span class="tp-n">11</span><div><h4>Saturation <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>A common rule of thumb: the #2 of a leading narrative often has more room than the leader, and a memecoin narrative rarely holds more than ~30% upside over 7 days. The screener accepts the #1 and the #2 of each theme only.</p></div></li>
+        <li><span class="tp-n">12</span><div><h4>Global attention <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Above ~30K launches a day on pump.fun, attention is strong. Under ~5K, it is dead and narratives don’t take off. The screener reads the live pace of new launches.</p></div></li>
+      </ol>
+    </section>
+    <section class="tp-sec">
+      <h3>THE EXIT</h3>
+      <p class="tp-lead">Know when the story is over.</p>
+      <ol class="tp-list">
+        <li><span class="tp-n">13</span><div><h4>The narrative dies <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>If the story behind the meme fades (the drama ends, the hype moves elsewhere), you cut instead of watching liquidity dry up. The screener drops coins being dumped or bleeding hard.</p></div></li>
+      </ol>
+    </section>
+    <section class="tp-sec">
+      <h3>THEN, AND ONLY THEN: SAFETY</h3>
+      <p class="tp-lead">A perfect narrative doesn’t protect you from a rug. Every coin on the radar gets a safety score from on-chain checks:</p>
+      <ul class="tp-safe">
+        <li><b>Mint authority</b> revoked: nobody can print more supply.</li>
+        <li><b>Freeze authority</b> revoked: nobody can freeze your tokens.</li>
+        <li><b>Liquidity</b>: a bonding curve, or a real pool behind the market cap (no LP that can be pulled).</li>
+        <li><b>Bundles</b>: no cluster of wallets holding the exact same amount.</li>
+        <li><b>Holders</b>: top 10 and biggest wallet not holding too much of the supply.</li>
+        <li><b>Dev wallet</b>: the creator isn’t sitting on a big bag.</li>
+        <li><b>Token extensions</b>: no transfer fee, hook or permanent delegate.</li>
+        <li><b>RugCheck</b> flags, activity and price moves.</li>
+      </ul>
+      <p class="tp-lead">The PRO Screener requires a safety score of 80+ before a coin can get the ✓ CHECKLIST mark.</p>
+    </section>
+    <div class="tp-cta"><button type="button" class="share-btn" data-open-pro>OPEN THE PRO SCREENER</button></div>
+    <p class="tp-warn">Not financial advice. A coin that passes every check can still go to zero. Only trade what you can afford to lose.</p>
   </div>
 
   <div id="accountView" style="display:none;">
@@ -557,6 +618,7 @@
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
       <button data-v="radar">RADAR</button>
+      <button data-v="tips">TIPS</button>
       <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </div>

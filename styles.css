@@ -1411,3 +1411,50 @@ button.acc-av:hover::after,button.acc-av:focus-visible::after{opacity:1;}
   .ln-mine-a{width:100%;} .ln-mine-a .hm-btn{flex:1; justify-content:center;}
   .ln-mine{margin-bottom:110px;}
 }
+
+/* ---------- PRO screener (radar tab) ---------- */
+.radar-tag.pro-ok{color:#07070A; background:var(--gold); font-weight:900;}
+.radar-tag.meta{color:var(--green); background:rgba(61,255,160,.1);}
+.radar-item.pro-pass{border-color:rgba(255,211,92,.55); box-shadow:0 0 0 1px rgba(255,211,92,.25), 0 10px 30px -18px rgba(255,211,92,.45);}
+.pro-banner{border:1px solid rgba(255,211,92,.3); background:linear-gradient(135deg, rgba(255,211,92,.07), rgba(192,158,255,.05)); border-radius:16px; padding:14px 16px; margin:0 0 14px; display:flex; flex-direction:column; gap:12px;}
+.pro-banner .pb-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.pro-banner .pb-row b{font-size:15px; letter-spacing:.04em;}
+.pro-banner .pb-sub{color:var(--tx2); font-size:13px;}
+.pro-banner .pb-stats{display:flex; gap:10px; flex-wrap:wrap;}
+.pro-banner .pb-stat{flex:1 1 140px; background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px;}
+.pro-banner .pb-stat small, .pro-banner .pb-meta small{font-size:10px; letter-spacing:.1em; color:var(--tx2); text-transform:uppercase;}
+.pro-banner .pb-stat b{font:800 20px 'JetBrains Mono', monospace;}
+.pro-banner .pb-stat span{font-size:12px; color:var(--tx2);}
+.pro-banner .pb-stat.hot b{color:var(--green);} .pro-banner .pb-stat.ok b{color:var(--gold);} .pro-banner .pb-stat.dead b{color:var(--red);}
+.pro-banner .pb-meta{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+.pro-banner .pb-meta small{flex-basis:100%;}
+.pro-banner .pb-th{display:inline-flex; align-items:center; gap:6px; font-size:12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:4px 10px;}
+.pro-banner .pb-th em{font-style:normal; font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--purple);}
+.pro-banner .pb-th i{font-style:normal; color:var(--tx2); font-size:11px;}
+.pro-banner .pb-tips{font-size:13px; color:var(--purple); text-decoration:none; align-self:flex-start;}
+.pro-lock{display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center;}
+.pro-lock .share-btn{margin-top:6px;}
+.pro-checks{margin-bottom:6px;}
+
+/* ---------- TIPS ---------- */
+#tipsView{max-width:820px; margin:0 auto;}
+.tp-intro{color:var(--tx2); line-height:1.6; margin:0 0 18px;}
+.tp-intro a{color:var(--purple);}
+.tp-sec{background:var(--surf); border:1px solid rgba(255,255,255,.08); border-radius:18px; padding:18px 18px 8px; margin:0 0 14px;}
+.tp-sec h3{margin:0 0 4px; font-size:14px; letter-spacing:.12em; color:var(--purple);}
+.tp-lead{margin:0 0 12px; color:var(--tx2); font-size:14px; line-height:1.5;}
+.tp-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px; padding-bottom:10px;}
+.tp-list li{display:flex; gap:12px; align-items:flex-start;}
+.tp-n{flex:0 0 30px; height:30px; border-radius:9px; background:rgba(192,158,255,.12); color:var(--purple); display:flex; align-items:center; justify-content:center; font:800 13px 'JetBrains Mono', monospace;}
+.tp-list h4{margin:3px 0 4px; font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.tp-list p{margin:0; font-size:14px; line-height:1.55; color:#D4D4DC;}
+.tp-auto, .tp-you{font:800 9px 'Outfit', sans-serif; letter-spacing:.1em; padding:2px 6px; border-radius:5px; vertical-align:2px;}
+.tp-auto{color:#07070A; background:var(--gold);}
+.tp-you{color:var(--purple); background:rgba(192,158,255,.14);}
+.tp-safe{margin:0 0 12px; padding-left:18px; display:flex; flex-direction:column; gap:6px; font-size:14px; line-height:1.5; color:#D4D4DC;}
+.tp-cta{display:flex; justify-content:center; margin:18px 0 10px;}
+.tp-warn{text-align:center; color:var(--tx2); font-size:12px; margin:0 0 30px;}
+/* 10 nav entries: tighter on laptops, menu button below 1100px */
+@media(max-width:1440px){ nav button{padding:8px 9px; font-size:12px; letter-spacing:.01em;} }
+@media(max-width:1100px){ .hamburger{display:flex;} nav{display:none;} }
+#radarView.is-pro .rd-min{display:none;}

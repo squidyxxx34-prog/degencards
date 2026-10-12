@@ -431,8 +431,32 @@ async function refresh() {
   return res;
 }
 
+/* ---------- public market context for the PRO screener (no key, cached 2 min per instance) ----------
+   launches/day: pace of the 50 newest pump.fun coins (an estimate of the current rate, not a daily total);
+   SOL price: pump.fun's own usd_market_cap / market_cap (SOL), median over the same coins. */
+let metaCache: { at: number; v: any } | null = null;
+async function meta() {
+  if (metaCache && Date.now() - metaCache.at < 120_000) return metaCache.v;
+  const list = await getJson("https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=true", 8000);
+  const arr = Array.isArray(list) ? list : [];
+  const ts = arr.map((c: any) => fin(c?.created_timestamp)).filter((x): x is number => !!x).sort((a, b) => a - b);
+  const span = ts.length >= 10 ? ts[ts.length - 1] - ts[0] : 0;
+  const launchesDay = span > 0 ? Math.round((ts.length - 1) / span * 864e5) : null;
+  const px = arr.map((c: any) => (fin(c?.usd_market_cap) || 0) / (fin(c?.market_cap) || 0)).filter((x: number) => Number.isFinite(x) && x > 5 && x < 5000).sort((a: number, b: number) => a - b);
+  const solUsd = px.length ? px[px.length >> 1] : null;
+  const v = { launchesDay, solUsd, sample: ts.length, at: new Date().toISOString() };
+  if (launchesDay || solUsd) metaCache = { at: Date.now(), v };
+  return v;
+}
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+
 Deno.serve(async (req) => {
   const h = { "Content-Type": "application/json" };
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (new URL(req.url).searchParams.get("meta") === "1") {
+    try { return new Response(JSON.stringify(await meta()), { headers: { ...h, ...CORS, "Cache-Control": "public, max-age=60" } }); }
+    catch (_) { return new Response('{"launchesDay":null,"solUsd":null}', { headers: { ...h, ...CORS } }); }
+  }
   if (req.method !== "POST") return new Response('{"error":"method"}', { status: 405, headers: h });
   const k = req.headers.get("x-cron-key");
   const { data: ok } = k ? await db.rpc("verify_sync_cron_key", { k }) : { data: false };

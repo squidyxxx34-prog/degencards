@@ -248,3 +248,10 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Table `launches` (lecture : propriétaire seulement) + bucket public `launch-meta`, voir `supabase/launches.sql`. « Your launches » liste les lancements envoyés ; si tx1 est passée mais pas le pool : bouton FINISH POOL (action `resume`).
 - Téléphone : sans wallet injecté, liens « ouvrir dans Phantom / Solflare » (`/?v=launch`, lien profond géré par `OPEN_VIEW` dans app.js).
 - Testé : les deux transactions LP sur un fork mainnet (surfpool) avec le code exact de l'edge function (mint révoqué, LP verrouillée, frais reçus, achat du dev) ; transaction PumpPortal simulée OK ; parcours UI avec wallet simulé. Pas encore de lancement réel sur mainnet.
+
+## TIPS page + PRO Screener (radar tab)
+- TIPS view (`#tipsView`, nav TIPS, deep link `?v=tips`): the 13-point memecoin checklist + safety checklist. Items tagged AUTO are checked by the screener, YOU = manual.
+- PRO Screener = first RADAR tab (`cat:'pro'`), logic in app.js `proCheck()`: safety ≥ 80, not x50 since launch (pump.fun start = 27.96 SOL × SOL price), volume 1h ≥ 1.5× hourly avg with buys ≥ 0.9× sells, #1/#2 of its theme (keyword themes, ranked by MC over the radar), not a copied ticker, not dumping, real liquidity, pump.fun launch pace ≥ 5K/day.
+- Pass everything → gold `✓ CHECKLIST` mark on every radar tab and first in the PRO tab; others are listed with what they miss.
+- Market context: `GET /functions/v1/radar?meta=1` (public, cached 2 min) → `{ launchesDay, solUsd }` from the 50 newest pump.fun coins.
+- Gated like PRO stats: locked only when `dcPro.enabled && !dcPro.active`.
