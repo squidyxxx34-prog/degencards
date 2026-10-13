@@ -85,10 +85,6 @@
     {
       "source": "/privacy",
       "destination": "/privacy.html"
-    },
-    {
-      "source": "/solana-pnl-card",
-      "destination": "/solana-pnl-card.html"
     }
   ],
   "redirects": [
@@ -113,8 +109,13 @@
       "permanent": true
     },
     {
+      "source": "/solana-pnl-card",
+      "destination": "/",
+      "permanent": true
+    },
+    {
       "source": "/solana-pnl-card.html",
-      "destination": "/solana-pnl-card",
+      "destination": "/",
       "permanent": true
     }
   ]

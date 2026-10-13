@@ -2929,6 +2929,7 @@ async function showApp(){
     document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) maybeAutoSync(); }); }   // back on the tab: catch up right away
 }
 function showLanding(){
+  document.documentElement.classList.remove('dc-authed');
   document.getElementById('landing').hidden = false;
   document.getElementById('app').hidden = true;
 }
