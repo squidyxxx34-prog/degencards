@@ -62,6 +62,15 @@
           "value": "public, max-age=31536000, immutable"
         }
       ]
+    },
+    {
+      "source": "/lp/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -76,6 +85,10 @@
     {
       "source": "/privacy",
       "destination": "/privacy.html"
+    },
+    {
+      "source": "/solana-pnl-card",
+      "destination": "/solana-pnl-card.html"
     }
   ],
   "redirects": [
@@ -97,6 +110,11 @@
     {
       "source": "/index.html",
       "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/solana-pnl-card.html",
+      "destination": "/solana-pnl-card",
       "permanent": true
     }
   ]

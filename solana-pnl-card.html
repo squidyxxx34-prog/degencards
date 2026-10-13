@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solana PnL Card Generator &amp; Trade Replay · DEGENCARDS</title>
+<meta name="description" content="Free Solana PnL card generator. Paste your wallet address: every Pump.fun, Axiom, Photon or Phantom trade becomes a PnL card with the real chart, an animated card and a trade replay video. Watch-only, no signature.">
+<link rel="canonical" href="https://degencards.vercel.app/solana-pnl-card">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#07070A">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DEGENCARDS">
+<meta property="og:url" content="https://degencards.vercel.app/solana-pnl-card">
+<meta property="og:title" content="Solana PnL Card Generator &amp; Trade Replay · DEGENCARDS">
+<meta property="og:description" content="Paste your Solana wallet: every trade becomes a PnL card with the real chart and a trade replay video. Free, watch-only.">
+<meta property="og:image" content="https://degencards.vercel.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Solana PnL Card Generator · DEGENCARDS">
+<meta name="twitter:description" content="Every Solana trade becomes a PnL card with the real chart and a trade replay video. Free.">
+<meta name="twitter:image" content="https://degencards.vercel.app/og.png">
+<link rel="preload" href="/lp/story.webp" as="image">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"WebPage","@id":"https://degencards.vercel.app/solana-pnl-card#page","url":"https://degencards.vercel.app/solana-pnl-card","name":"Solana PnL Card Generator & Trade Replay","isPartOf":{"@id":"https://degencards.vercel.app/#site"},"about":{"@id":"https://degencards.vercel.app/#app"},"primaryImageOfPage":"https://degencards.vercel.app/lp/story.webp","inLanguage":"en",
+ "breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"DEGENCARDS","item":"https://degencards.vercel.app/"},{"@type":"ListItem","position":2,"name":"Solana PnL card","item":"https://degencards.vercel.app/solana-pnl-card"}]}},
+{"@type":"WebApplication","@id":"https://degencards.vercel.app/#app","name":"DEGENCARDS","alternateName":["Degen Cards","DegenCards"],"url":"https://degencards.vercel.app/","applicationCategory":"FinanceApplication","operatingSystem":"Web, iOS, Android","description":"Solana PnL card generator: every trade imported from a wallet address becomes a PnL card with the real chart, an animated card and a trade replay video.","image":"https://degencards.vercel.app/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}},
+{"@type":"HowTo","name":"How to make a Solana PnL card","totalTime":"PT1M","step":[
+ {"@type":"HowToStep","position":1,"name":"Paste your wallet address","text":"Sign up on DEGENCARDS and paste the public address of the Solana wallet you trade with (Pump.fun, Axiom, Photon, BullX, GMGN, Phantom, Fomo...). Watch-only: no signature, no access to funds."},
+ {"@type":"HowToStep","position":2,"name":"Your trades are imported","text":"Every closed trade is imported automatically with the coin, its logo, entry, exit, hold time, profit and the real price chart with your buys and sells."},
+ {"@type":"HowToStep","position":3,"name":"Share the card","text":"Open a card and tap Share: download a PnL card (story or post), an animated card or a trade replay video, ready for X, TikTok, Instagram or Telegram."}]},
+{"@type":"FAQPage","mainEntity":[
+ {"@type":"Question","name":"How do I make a PnL card for a Solana trade?","acceptedAnswer":{"@type":"Answer","text":"Paste your Solana wallet address on DEGENCARDS. Your closed trades are imported automatically and each one becomes a PnL card with the real chart, entry, exit, hold time and profit. Tap Share to download it as an image or a video."}},
+ {"@type":"Question","name":"Does it work with Pump.fun, Axiom, Photon and Phantom?","acceptedAnswer":{"@type":"Answer","text":"Yes. Any Solana wallet works: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare or Backpack. Use the address of the wallet that actually makes the trades."}},
+ {"@type":"Question","name":"Is it safe to paste my wallet address?","acceptedAnswer":{"@type":"Answer","text":"Yes. DEGENCARDS only reads public on-chain data from your public address. It never asks for a signature, a seed phrase or a private key, and cannot move your funds."}},
+ {"@type":"Question","name":"Is the PnL card generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and the PRO Screener."}},
+ {"@type":"Question","name":"What is a trade replay?","acceptedAnswer":{"@type":"Answer","text":"A short vertical video that replays your trade candle by candle on the real chart, with your buys and sells and your live profit, then shows the final result. It is made to be posted on TikTok, Reels or X."}},
+ {"@type":"Question","name":"Can I show a losing trade?","acceptedAnswer":{"@type":"Answer","text":"Yes. Every closed trade becomes a card, wins and losses alike, with its own rarity from common to mythic."}}]}
+]}
+</script>
+<style>
+:root{--bg:#07070A; --surf:#111116; --surf2:#1B1B22; --border:rgba(255,255,255,.09); --tx:#F4F4F6; --tx2:#ADADB8; --green:#3DFFA0; --red:#FF5C6C; --purple:#C09EFF; --gold:#FFD35C;}
+*{box-sizing:border-box;}
+html{background:var(--bg); -webkit-text-size-adjust:100%;}
+html,body{overflow-x:clip;}
+body{margin:0; background:var(--bg); color:var(--tx); font-family:'Outfit',system-ui,sans-serif; line-height:1.55; overflow-x:hidden;}
+a{color:inherit;}
+.wrap{max-width:1120px; margin:0 auto; padding:0 20px;}
+header.top{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; max-width:1120px; margin:0 auto;}
+.logo{font-weight:800; letter-spacing:.02em; text-decoration:none; font-size:18px; display:flex; align-items:center; gap:7px;}
+.logo span{color:var(--purple);}
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:15px 26px; border-radius:14px; background:var(--green); color:#05070a; font-weight:800; text-decoration:none; letter-spacing:.03em; font-size:15px;}
+.btn.ghost{background:transparent; color:var(--tx); border:1px solid var(--border);}
+.btn.sm{padding:10px 16px; font-size:13px; border-radius:11px;}
+.hero{display:grid; grid-template-columns:1.1fr .9fr; gap:40px; align-items:center; padding:40px 0 70px; position:relative;}
+.hero:before{content:""; position:absolute; inset:-80px -120px auto auto; width:640px; height:640px; background:radial-gradient(circle, rgba(192,158,255,.16), transparent 62%); pointer-events:none; z-index:-1;}
+.kicker{display:inline-block; font:700 12px 'JetBrains Mono',monospace; letter-spacing:.12em; color:var(--purple); background:rgba(192,158,255,.1); border:1px solid rgba(192,158,255,.25); padding:6px 11px; border-radius:8px;}
+h1{font-size:clamp(38px, 6vw, 66px); line-height:1; letter-spacing:-.035em; margin:18px 0 18px; font-weight:900;}
+h1 em{font-style:normal; color:var(--green);}
+.lead{font-size:18px; color:var(--tx2); max-width:560px; margin:0 0 26px;}
+.cta{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+.trust{display:flex; gap:16px; flex-wrap:wrap; margin-top:20px; color:var(--tx2); font-size:13px;}
+.trust b{color:var(--tx);}
+.stack{position:relative; height:560px;}
+.stack img{position:absolute; height:auto; border-radius:22px; box-shadow:0 40px 90px -30px rgba(0,0,0,.95), 0 0 0 1px var(--border);}
+.stack .a{width:300px; left:50%; top:0; transform:translateX(-50%); z-index:2;}
+.stack .b{width:250px; left:0; top:120px; transform:rotate(-8deg); opacity:.95;}
+.stack .c{width:250px; right:0; top:110px; transform:rotate(8deg); opacity:.95;}
+section{padding:60px 0; border-top:1px solid var(--border);}
+h2{font-size:clamp(28px, 4vw, 40px); letter-spacing:-.025em; line-height:1.08; margin:0 0 12px; font-weight:900;}
+.sub{color:var(--tx2); font-size:17px; max-width:640px; margin:0 0 34px;}
+.steps{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:s; list-style:none; padding:0; margin:0;}
+.steps li{background:var(--surf); border:1px solid var(--border); border-radius:18px; padding:22px;}
+.steps li:before{counter-increment:s; content:counter(s); display:inline-flex; width:34px; height:34px; border-radius:10px; align-items:center; justify-content:center; background:rgba(61,255,160,.12); color:var(--green); font:800 15px 'JetBrains Mono',monospace; margin-bottom:12px;}
+.steps h3{margin:0 0 6px; font-size:18px;}
+.steps p{margin:0; color:var(--tx2); font-size:15px;}
+.formats{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; align-items:start;}
+figure{margin:0; background:var(--surf); border:1px solid var(--border); border-radius:18px; padding:12px; display:flex; flex-direction:column; gap:12px;}
+figure img, figure video{width:100%; height:auto; border-radius:12px; display:block; background:#000;}
+figcaption b{display:block; font-size:16px;}
+figcaption span{color:var(--tx2); font-size:14px;}
+.feat{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+.feat div{background:var(--surf); border:1px solid var(--border); border-radius:18px; padding:20px;}
+.feat h3{margin:0 0 6px; font-size:17px;}
+.feat p{margin:0; color:var(--tx2); font-size:15px;}
+.feat .t{font:700 11px 'JetBrains Mono',monospace; letter-spacing:.1em; color:var(--purple); margin-bottom:8px; display:block;}
+.split{display:grid; grid-template-columns:.8fr 1.2fr; gap:40px; align-items:center;}
+.video{max-width:340px; margin:0 auto; border-radius:26px; overflow:hidden; border:8px solid #1d1d26; box-shadow:0 50px 120px -40px rgba(0,0,0,.95);}
+.video video{width:100%; display:block;}
+.wallets{display:flex; flex-wrap:wrap; gap:8px; margin:20px 0 0; padding:0; list-style:none;}
+.wallets li{padding:8px 13px; border-radius:999px; background:var(--surf2); border:1px solid var(--border); font-size:14px; font-weight:600;}
+.checks{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px;}
+.checks li{display:flex; gap:10px; color:var(--tx2); font-size:16px;}
+.checks li:before{content:"✓"; color:var(--green); font-weight:900;}
+.checks b{color:var(--tx);}
+details{background:var(--surf); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:10px;}
+summary{cursor:pointer; font-weight:700; font-size:16px; list-style:none;}
+summary::-webkit-details-marker{display:none;}
+summary:after{content:"+"; float:right; color:var(--purple); font-weight:900;}
+details[open] summary:after{content:"−";}
+details p{color:var(--tx2); margin:10px 0 0; font-size:15px;}
+.final{text-align:center; padding:80px 0;}
+.final .lead{margin:0 auto 26px;}
+footer{border-top:1px solid var(--border); padding:28px 20px 40px; color:var(--tx2); font-size:13px; text-align:center;}
+footer nav{display:flex; gap:18px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;}
+footer a{color:var(--tx2); text-decoration:none;}
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr; padding-top:16px;}
+  .stack{height:440px; max-width:420px; margin:0 auto; width:100%;}
+  .stack .a{width:230px;} .stack .b, .stack .c{width:180px;} .stack .b{top:90px;} .stack .c{top:80px;}
+  .steps, .feat{grid-template-columns:1fr;}
+  .formats{grid-template-columns:repeat(2,1fr);}
+  .split{grid-template-columns:1fr;}
+}
+@media(max-width:420px){ .formats{grid-template-columns:1fr 1fr; gap:10px;} figure{padding:8px;} header.top .btn{display:none;} }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/" aria-label="DEGENCARDS home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C09EFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg>DEGEN<span>CARDS</span></a>
+  <a class="btn sm" href="/">OPEN THE APP</a>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <span class="kicker">FREE · SOLANA · WATCH-ONLY</span>
+      <h1>Solana PnL cards, made from <em>your real trades</em>.</h1>
+      <p class="lead">Paste your wallet address once. Every Pump.fun, Axiom, Photon or Phantom trade becomes a PnL card with the real chart, your buys and sells, an animated card and a trade replay video. Ready to post.</p>
+      <div class="cta"><a class="btn" href="/">MAKE MY PNL CARDS</a><a class="btn ghost" href="#how">How it works</a></div>
+      <div class="trust"><span><b>No signature</b>, no seed phrase</span><span><b>Auto-import</b> every 10 min</span><span><b>Free</b> forever plan</span></div>
+    </div>
+    <div class="stack" aria-hidden="true">
+      <img class="b" src="/lp/loss.webp" width="540" height="675" alt="">
+      <img class="c" src="/lp/post.webp" width="540" height="675" alt="">
+      <img class="a" src="/lp/story.webp" width="540" height="960" alt="Solana PnL card: $ZAPP +$1,729.58 (+321.7%), mythic rarity, with the real candle chart and buy / sell markers">
+    </div>
+  </div>
+
+  <section id="how">
+    <h2>How to make a Solana PnL card</h2>
+    <p class="sub">No screenshots, no spreadsheet, no typing numbers. The cards build themselves from the chain.</p>
+    <ol class="steps">
+      <li><h3>Paste your wallet address</h3><p>The public address of the Solana wallet you trade with. Read-only: nobody can move your funds with an address.</p></li>
+      <li><h3>Your trades come in by themselves</h3><p>Coin, logo, entry, exit, hold time, profit and the real price chart with your fills. New trades show up within minutes.</p></li>
+      <li><h3>Share it</h3><p>PnL card for a story or a post, an animated card, or a full trade replay video. One tap, straight to X, TikTok, Reels or Telegram.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Every format, always with your chart</h2>
+    <p class="sub">The chart on every card is rebuilt from real on-chain swaps, with your buys (B) and sells (S) exactly where they happened.</p>
+    <div class="formats">
+      <figure><img src="/lp/story.webp" width="540" height="960" loading="lazy" alt="Story PnL card 9:16 with candle chart"><figcaption><b>Story card · 9:16</b><span>For TikTok, Reels and Stories.</span></figcaption></figure>
+      <figure><img src="/lp/post.webp" width="540" height="675" loading="lazy" alt="Post PnL card 4:5 with entry, exit and hold time"><figcaption><b>Post card · 4:5</b><span>For X and Instagram feeds.</span></figcaption></figure>
+      <figure><img src="/lp/replay.webp" width="540" height="960" loading="lazy" alt="Trade replay video frame: live PnL and candles"><figcaption><b>Trade replay</b><span>Your trade rebuilt candle by candle, as a video.</span></figcaption></figure>
+      <figure><img src="/lp/loss.webp" width="540" height="675" loading="lazy" alt="Losing trade PnL card in red"><figcaption><b>Losses too</b><span>Rugs make great content. Every trade gets a card.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="split">
+      <div class="video"><video src="/lp/showcase-540.mp4" poster="/lp/showcase-poster.webp" width="540" height="960" muted loop playsinline controls preload="none" aria-label="DEGENCARDS showcase: auto-import, animated card and trade replay"></video></div>
+      <div>
+        <h2>Works with the wallet you already trade with</h2>
+        <p class="sub">Trading bots and terminals all trade from a Solana wallet. Paste that wallet's address and its trades are imported, whatever app placed them.</p>
+        <ul class="wallets"><li>Pump.fun</li><li>Axiom</li><li>Photon</li><li>BullX</li><li>GMGN</li><li>Fomo</li><li>Phantom</li><li>Solflare</li><li>Backpack</li></ul>
+        <ul class="checks" style="margin-top:26px">
+          <li><span><b>Real PnL</b>: buys and sells read on-chain, fees included.</span></li>
+          <li><span><b>Coin logo and ticker</b> filled in for you.</span></li>
+          <li><span><b>Open positions wait</b>: a card appears once the trade is closed.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>More than a PnL card generator</h2>
+    <p class="sub">Your trading history, turned into a collection.</p>
+    <div class="feat">
+      <div><span class="t">COLLECTION</span><h3>Rarity, from common to mythic</h3><p>Every trade gets a rarity, a grade and achievements. 250%+ ROI is mythic.</p></div>
+      <div><span class="t">RANKS</span><h3>Weekly leaderboard</h3><p>Claim a username and climb the weekly podium on real, on-chain profit.</p></div>
+      <div><span class="t">STATS</span><h3>Your trading journal</h3><p>Win rate, P&amp;L calendar, best hours, best coins, without typing a single trade.</p></div>
+      <div><span class="t">RADAR</span><h3>Safety score on live coins</h3><p>Mint and freeze authority, bundles, holders, dev wallet and liquidity checked on-chain.</p></div>
+      <div><span class="t">PRO SCREENER</span><h3>The memecoin checklist, automated</h3><p>Meta leader, already pumped, volume spike, copycats and market attention on every coin.</p></div>
+      <div><span class="t">LAUNCH</span><h3>Launch a coin</h3><p>Name, ticker, image and one signature from your wallet. Your keys never leave it.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>FAQ</h2>
+    <details><summary>How do I make a PnL card for a Solana trade?</summary><p>Paste your Solana wallet address on DEGENCARDS. Your closed trades are imported automatically and each one becomes a PnL card with the real chart, entry, exit, hold time and profit. Tap Share to download it as an image or a video.</p></details>
+    <details><summary>Does it work with Pump.fun, Axiom, Photon and Phantom?</summary><p>Yes. Any Solana wallet works: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare or Backpack. Use the address of the wallet that actually makes the trades.</p></details>
+    <details><summary>Is it safe to paste my wallet address?</summary><p>Yes. DEGENCARDS only reads public on-chain data from your public address. It never asks for a signature, a seed phrase or a private key, and cannot move your funds.</p></details>
+    <details><summary>Is the PnL card generator free?</summary><p>Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and the PRO Screener.</p></details>
+    <details><summary>What is a trade replay?</summary><p>A short vertical video that replays your trade candle by candle on the real chart, with your buys and sells and your live profit, then shows the final result. It is made to be posted on TikTok, Reels or X.</p></details>
+    <details><summary>Can I show a losing trade?</summary><p>Yes. Every closed trade becomes a card, wins and losses alike, with its own rarity from common to mythic.</p></details>
+  </section>
+
+  <section class="final">
+    <h2>Your trades. Turned into cards.</h2>
+    <p class="lead">Free, watch-only, ready in a minute.</p>
+    <a class="btn" href="/">MAKE MY PNL CARDS</a>
+  </section>
+</main>
+
+<footer>
+  <nav><a href="/">App</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/legal">Legal</a></nav>
+  <p>DEGENCARDS is not a financial advisor. Cards show past trades only. Crypto trading is risky.</p>
+</footer>
+</body>
+</html>
