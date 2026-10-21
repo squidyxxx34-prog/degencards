@@ -911,24 +911,12 @@ function renderLevel(){
     localStorage.setItem(kx, String(total));
   }catch(e){}
 }
-/* ---------- achievements screen: summary + categories + medal tiles (responsive: 2 cols phone -> 4-5 cols iPad) ---------- */
-const ACH_GROUPS = [
-  { id:'milestones', name:'Milestones', keys:['first_trade','ten_trades','fifty_trades','century_club','on_chain'] },
-  { id:'profit',     name:'Profit',     keys:['first_blood','micro_win','moonshot','to_the_moon','whale','new_record'] },
-  { id:'streaks',    name:'Streaks',    keys:['run_it_back','on_fire','unstoppable','comeback_kid','iron_stomach'] },
-  { id:'style',      name:'Style',      keys:['speedrun','paper_hands','diamond_hands','night_owl','weekend_warrior'] },
-  { id:'daily',      name:'Daily',      keys:['king_of_day','worst_of_day'] },
-  { id:'pain',       name:'Pain',       keys:['rugged','rekt'] },
-  { id:'goals',      name:'Goals',      keys:['goal_first_milestone','goal_crusher','goal_smasher','goal_legend'] },
-];
 const ACH_TIER = { first_trade:'bronze', ten_trades:'bronze', fifty_trades:'silver', century_club:'gold', on_chain:'silver',
   first_blood:'bronze', micro_win:'bronze', moonshot:'silver', to_the_moon:'gold', whale:'legend', new_record:'silver',
   run_it_back:'bronze', on_fire:'silver', unstoppable:'legend', comeback_kid:'silver', iron_stomach:'bronze',
   speedrun:'silver', paper_hands:'bronze', diamond_hands:'gold', night_owl:'bronze', weekend_warrior:'bronze',
   king_of_day:'silver', worst_of_day:'bronze', rugged:'bronze', rekt:'silver',
   goal_first_milestone:'bronze', goal_crusher:'silver', goal_smasher:'gold', goal_legend:'legend' };
-const TIER_LABEL = { bronze:'BRONZE', silver:'SILVER', gold:'GOLD', legend:'LEGEND' };
-let achFilter = 'all';
 function achProgress(key, all){
   // [current, target, label] for locked achievements when it can be measured
   const byTime = [...all].sort((a,b)=>a.timestamp-b.timestamp);
@@ -955,80 +943,96 @@ function achProgress(key, all){
     default: return null;
   }
 }
+/* ---------- achievements: a trophy cabinet, not a dashboard ----------
+   One glance: how many (a strip with one segment per badge, coloured by tier), what's next (the closest locked badge),
+   then the cabinet by tier, Legend first. Text only, no icons. The entrance plays once when the page opens (< 1 s). */
+const TIER_ORDER = ['legend','gold','silver','bronze'];
+const TIER_NAME = { bronze:'Bronze', silver:'Silver', gold:'Gold', legend:'Legend' };
+const AW_SMALL = new Set(['of','the','a','an','to','and','in','on','at','for']);
+const awTitle = s => String(s||'').toLowerCase().split(' ').map((w,i)=> i && AW_SMALL.has(w) ? w : w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+const awDay = ts => fmt.date(ts).split(' · ')[0];
 function renderAchievements(){
   const all = computedTrades();
   const unlocked = unlockedAchievementKeys();
   const earned = {};                                           // key -> trades that earned it (newest first)
   all.forEach(t=>t.meta.achievements.forEach(a=>{ (earned[a.key] = earned[a.key] || []).push(t); }));
   Object.values(earned).forEach(l=>l.sort((a,b)=>b.timestamp-a.timestamp));
-  const total = ACH_CATALOG.length, got = unlocked.size, pct = total ? Math.round(got/total*100) : 0;
-  document.getElementById('achCount').textContent = got;
-  document.getElementById('achTotal').textContent = total;
-  { // closest locked badge, to give a next target
-    const next = ACH_CATALOG.filter(a=>!unlocked.has(a.key)).map(a=>{ const pr = achProgress(a.key, all); return pr ? { a, pr, f: pr[0]/pr[1] } : null; })
-      .filter(x=>x && x.f < 1).sort((x,y)=>y.f-x.f)[0];
-    document.getElementById('achLead').innerHTML = got===total ? 'Every badge unlocked. Legend.'
-      : next ? `Closest next: <b>${esc(next.a.name)}</b> · ${esc(next.pr[2])}` : `${total-got} badges left to unlock.`; }
+  const total = ACH_CATALOG.length, got = unlocked.size;
+  const tierOf = k => ACH_TIER[k] || 'bronze', rank = k => TIER_ORDER.indexOf(tierOf(k));
+  const prog = {}; ACH_CATALOG.forEach(a=>{ if(!unlocked.has(a.key)){ const p = achProgress(a.key, all); if(p) prog[a.key] = p; } });
+  const frac = k => prog[k] ? Math.max(0, Math.min(1, prog[k][0]/prog[k][1])) : 0;
+  const lastAt = k => earned[k] && earned[k][0] ? earned[k][0].timestamp : 0;
+  const latest = [...unlocked].sort((a,b)=>lastAt(b)-lastAt(a))[0];
+  const tierCount = { legend:0, gold:0, silver:0, bronze:0 }, tierAll = { legend:0, gold:0, silver:0, bronze:0 };
+  ACH_CATALOG.forEach(a=>{ tierAll[tierOf(a.key)]++; if(unlocked.has(a.key)) tierCount[tierOf(a.key)]++; });
 
-  // summary
-  const tierCount = { bronze:0, silver:0, gold:0, legend:0 };
-  unlocked.forEach(k=>{ const tr = ACH_TIER[k]; if(tr) tierCount[tr]++; });
-  const rarest = [...unlocked].map(k=>ACH_MAP[k]).filter(Boolean).sort((a,b)=>(earned[a.key]?.length||1)-(earned[b.key]?.length||1))[0];
-  const latest = Object.entries(earned).map(([k,l])=>[k,l[0].timestamp]).sort((a,b)=>b[1]-a[1])[0];
-  const C = 2*Math.PI*52;
-  document.getElementById('achSummary').innerHTML = `
-    <div class="ach-ring">
-      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" style="stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C*(1-got/Math.max(1,total))).toFixed(1)}"/></svg>
-      <div class="ach-ring-txt"><b>${pct}%</b><span>${got} / ${total}</span></div>
-    </div>
-    <div class="ach-sum-body">
-      <div class="ach-tiers">${Object.keys(tierCount).map(tr=>`<div class="ach-tier t-${tr}"><i></i><b>${tierCount[tr]}</b><span>${TIER_LABEL[tr]}</span></div>`).join('')}</div>
-      <div class="ach-facts">
-        ${latest ? `<div><span>Latest</span><b>${esc(ACH_MAP[latest[0]]?.name||'')}</b><em>${fmt.date(latest[1])}</em></div>` : ''}
-        ${rarest ? `<div><span>Rarest</span><b>${esc(rarest.name)}</b><em>earned ${earned[rarest.key]?.length||1}×</em></div>` : ''}
-        <div><span>XP from badges</span><b>+${(got*120).toLocaleString('en-US')}</b><em>120 XP each</em></div>
-      </div>
-    </div>`;
+  // hero: count + one segment per badge (unlocked first, rarest tier first) + one quiet line
+  const segs = [...ACH_CATALOG].sort((a,b)=> (unlocked.has(b.key) - unlocked.has(a.key)) || (rank(a.key) - rank(b.key)) || (frac(b.key) - frac(a.key)));
+  document.getElementById('awHero').innerHTML = `
+    <div class="hm-kicker">ACHIEVEMENTS</div>
+    <h1 class="pg-title aw-title"><span id="awGot">${got}</span><span class="aw-of"> of ${total}</span> unlocked</h1>
+    <div class="aw-strip" role="img" aria-label="${got} of ${total} achievements unlocked">${segs.map((a,i)=>`<i class="t-${tierOf(a.key)}${unlocked.has(a.key)?' on':''}" style="--i:${i}" title="${esc(awTitle(a.name))}"></i>`).join('')}</div>
+    <p class="aw-line">${TIER_ORDER.map(tr=>`<span class="t-${tr}"><em>${TIER_NAME[tr]}</em> <b>${tierCount[tr]}</b><small>/${tierAll[tr]}</small></span>`).join('')}<span class="aw-xp"><b>+${(got*120).toLocaleString('en-US')}</b> XP</span></p>`;
 
-  // filters
-  document.getElementById('achFilters').innerHTML = [['all','All'],['unlocked','Unlocked'],['locked','Locked']]
-    .map(([k,l])=>`<button data-achf="${k}" class="${achFilter===k?'on':''}">${l}</button>`).join('');
-  document.querySelectorAll('[data-achf]').forEach(b=>b.addEventListener('click', ()=>{ achFilter = b.dataset.achf; renderAchievements(); }));
+  // next up: the closest locked badge that can be measured
+  const nextK = Object.keys(prog).filter(k=>frac(k) < 1).sort((a,b)=>frac(b)-frac(a) || rank(a)-rank(b))[0];
+  const nx = document.getElementById('awNext');
+  if(got === total){ nx.hidden = false; nx.className = 'aw-next t-legend done'; delete nx.dataset.ach; nx.innerHTML = `<div class="aw-next-k">COMPLETE</div><div class="aw-next-name">Every badge unlocked</div><div class="aw-next-desc">The whole cabinet. Nothing left but your next trade.</div>`; }
+  else if(nextK){
+    const a = ACH_MAP[nextK], tr = tierOf(nextK), p = prog[nextK], pc = Math.round(frac(nextK)*100);
+    nx.hidden = false; nx.className = `aw-next t-${tr}`; nx.dataset.ach = nextK;
+    nx.innerHTML = `<div class="aw-next-k">NEXT UP<span>${TIER_NAME[tr]}</span></div>
+      <div class="aw-next-name">${esc(awTitle(a.name))}</div>
+      <div class="aw-next-desc">${esc(a.desc)}</div>
+      <div class="aw-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pc}" aria-label="${esc(awTitle(a.name))} progress"><i style="--w:${pc}%"></i></div>
+      <div class="aw-next-foot"><span>${esc(p[2])}</span><b>${pc}%</b></div>`;
+  } else { nx.hidden = true; nx.innerHTML = ''; }
 
-  // groups
-  document.getElementById('achAll').innerHTML = ACH_GROUPS.map(g=>{
-    const items = g.keys.map(k=>ACH_MAP[k]).filter(Boolean).filter(a=> achFilter==='all' || (achFilter==='unlocked') === unlocked.has(a.key));
-    if(!items.length) return '';
-    const gGot = g.keys.filter(k=>unlocked.has(k)).length;
-    return `<section class="ach-group">
-      <div class="ach-group-head"><h3>${g.name}</h3><span>${gGot}/${g.keys.length}</span></div>
-      <div class="ach-grid">${items.map(a=>{
-        const has = unlocked.has(a.key), tier = ACH_TIER[a.key] || 'bronze', list = earned[a.key] || [];
-        const pr = has ? null : achProgress(a.key, all);
-        const prPct = pr ? Math.min(100, pr[0]/pr[1]*100) : 0;
-        return `<button class="ach-tile ${has?'has':'locked'} t-${tier}" data-ach="${a.key}">
-          <div class="ach-medal">${icon(has ? a.icon : 'lock', 26)}</div>
-          <div class="ach-tier-tag">${TIER_LABEL[tier]}</div>
-          <div class="ach-name">${a.name}</div>
-          <div class="ach-desc">${a.desc}</div>
-          ${has ? `<div class="ach-meta">${list.length ? `<b>×${list.length}</b> · last ${fmt.date(list[0].timestamp).split(' · ')[0]}` : '<b>Unlocked</b>'}</div>`
-                : pr ? `<div class="ach-prog"><i style="width:${prPct.toFixed(0)}%"></i></div><div class="ach-meta">${esc(pr[2])}</div>` : `<div class="ach-meta">Locked</div>`}
-        </button>`;
-      }).join('')}</div></section>`;
-  }).join('') || `<div class="authnote">Nothing here yet.</div>`;
+  // the cabinet: one shelf per tier, Legend first; unlocked (latest first) then locked (closest first)
+  let n = 0;
+  document.getElementById('awTiers').innerHTML = TIER_ORDER.map(tr=>{
+    const items = ACH_CATALOG.filter(a=>tierOf(a.key)===tr).sort((a,b)=> (unlocked.has(b.key) - unlocked.has(a.key)) || (lastAt(b.key) - lastAt(a.key)) || (frac(b.key) - frac(a.key)));
+    return `<section class="aw-shelf t-${tr}">
+      <div class="aw-shelf-h"><h2>${TIER_NAME[tr]}</h2><span>${tierCount[tr]} of ${tierAll[tr]}</span></div>
+      <div class="aw-grid">${items.map(a=>{
+        const has = unlocked.has(a.key), list = earned[a.key] || [], p = prog[a.key], pc = Math.round(frac(a.key)*100);
+        const foot = has ? `<span>${a.key === latest ? '<b class="aw-new">Latest</b> · ' : ''}${list.length ? awDay(list[0].timestamp) : 'Unlocked'}</span>${list.length > 1 ? `<b>×${list.length}</b>` : ''}`
+          : p ? `<span class="aw-mini"><i style="--w:${pc}%"></i></span><span>${esc(p[2].replace(/^(Best streak|Best ROI|Best trade|Longest win|Worst streak|Worst) /,''))}</span>` : '<span>Locked</span>';
+        return `<button type="button" class="aw-tile ${has?'has':'locked'}${a.key===latest?' latest':''}" data-ach="${a.key}" style="--i:${Math.min(n++,14)}" aria-label="${esc(awTitle(a.name))}, ${TIER_NAME[tr]}, ${has?'unlocked':'locked'}">
+          <span class="aw-name">${esc(awTitle(a.name))}</span>
+          <span class="aw-desc">${esc(a.desc)}</span>
+          <span class="aw-foot">${foot}</span>
+        </button>`; }).join('')}</div>
+    </section>`; }).join('');
 
-  document.querySelectorAll('[data-ach]').forEach(b=>b.addEventListener('click', ()=>openAchievement(b.dataset.ach, earned[b.dataset.ach]||[], unlocked.has(b.dataset.ach))));
+  awLast = { earned, unlocked };
+  document.querySelectorAll('#awTiers [data-ach]').forEach(b=>b.addEventListener('click', ()=>openAchievement(b.dataset.ach, earned[b.dataset.ach]||[], unlocked.has(b.dataset.ach))));
+}
+let awLast = { earned:{}, unlocked:new Set() };
+{ const nx = document.getElementById('awNext'), go = ()=>{ const k = nx.dataset.ach; if(k && !nx.classList.contains('done')) openAchievement(k, awLast.earned[k]||[], awLast.unlocked.has(k)); };
+  nx.addEventListener('click', go); nx.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); go(); } }); }
+/* entrance: strip fills, number counts up, next-up bar fills, shelves rise. Once per visit, under a second. */
+function achEnter(){
+  const v = document.getElementById('achievementsView'); if(!v) return;
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  v.classList.remove('aw-enter'); void v.offsetWidth; v.classList.add('aw-enter');
+  clearTimeout(achEnter.t); achEnter.t = setTimeout(()=>v.classList.remove('aw-enter'), 1400);
+  const el = document.getElementById('awGot'), to = Number(el && el.textContent) || 0; if(!el || !to) return;
+  const t0 = performance.now(), D = 520;
+  const step = now => { const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3), cur = document.getElementById('awGot');
+    if(cur) cur.textContent = Math.round(to * e); if(k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 function openAchievement(key, list, has){
   const a = ACH_MAP[key]; if(!a) return;
-  const tier = ACH_TIER[key] || 'bronze', pr = has ? null : achProgress(key, computedTrades());
+  const tier = ACH_TIER[key] || 'bronze', pr = has ? null : achProgress(key, computedTrades()), pc = pr ? Math.round(Math.max(0, Math.min(1, pr[0]/pr[1]))*100) : 0;
   document.getElementById('detailBody').innerHTML = `
-    <div class="ach-detail t-${tier} ${has?'has':'locked'}">
-      <div class="ach-medal big">${icon(has ? a.icon : 'lock', 40)}</div>
-      <div class="ach-tier-tag">${TIER_LABEL[tier]}</div>
-      <h3>${a.name}</h3><p>${a.desc}</p>
-      ${has ? `<div class="ach-detail-count">Earned <b>${list.length || 1}×</b></div>` : pr ? `<div class="ach-prog big"><i style="width:${Math.min(100,pr[0]/pr[1]*100).toFixed(0)}%"></i></div><div class="ach-meta">${esc(pr[2])}</div>` : '<div class="ach-meta">Not unlocked yet</div>'}
-      ${list.length ? `<div class="ach-cards">${list.slice(0,12).map(t=>`<button class="ach-card-row" data-open="${t.id}"><b>${esc(tk(t.ticker))}</b><span>${fmt.date(t.timestamp)}</span><em class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</em></button>`).join('')}</div>` : ''}
+    <div class="aw-detail t-${tier} ${has?'has':'locked'}">
+      <div class="aw-detail-k">${TIER_NAME[tier].toUpperCase()} · ${has ? 'UNLOCKED' : 'LOCKED'}</div>
+      <h3>${esc(awTitle(a.name))}</h3><p>${esc(a.desc)}</p>
+      ${has ? `<div class="aw-detail-count">${list.length ? `Earned <b>${list.length}×</b> · first on ${awDay(list[list.length-1].timestamp)}` : 'Unlocked'}</div>`
+            : pr ? `<div class="aw-bar"><i style="--w:${pc}%"></i></div><div class="aw-next-foot"><span>${esc(pr[2])}</span><b>${pc}%</b></div>` : '<div class="aw-detail-count">Not unlocked yet</div>'}
+      ${list.length ? `<div class="aw-cards-k">THE TRADES BEHIND IT</div><div class="aw-cards">${list.slice(0,12).map(t=>`<button type="button" class="aw-card-row" data-open="${t.id}"><b>${esc(tk(t.ticker))}</b><span>${fmt.date(t.timestamp)}</span><em class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</em></button>`).join('')}</div>` : ''}
     </div>`;
   document.querySelectorAll('#detailBody [data-open]').forEach(b=>b.addEventListener('click', ()=>openDetail(b.dataset.open)));
   detailOverlay.classList.add('show');
@@ -1596,6 +1600,7 @@ function goToView(v){
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
   if(v==='ranks') ranks.open();
+  if(v==='achievements') achEnter();
 }
 
 let histFilter = 'all', histQuery = '';

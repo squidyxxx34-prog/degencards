@@ -23,7 +23,7 @@ const STEPS = [
     body:'Your trades earn XP: quality, grades, badges, trading days and win streaks count. Tap the bar to see where your XP comes from.' },
   { view:'history', target:'#historyView table', fallback:'#historyView', title:'History',
     body:'All your trades in one table. SELECT lets you delete several, CLEAR HISTORY wipes everything. Nothing is lost for 30 days: Account, Recover trades.' },
-  { view:'achievements', target:'#achSummary', title:'Achievements',
+  { view:'achievements', target:'#awHero', title:'Achievements',
     body:'Badges from bronze to legend. Locked ones show how close you are. Tap a badge to see the cards that earned it.' },
   { view:'stats', target:'#statsView .goal-card', title:'Stats and monthly goal',
     body:'Win rate, total profit, best trade… and a monthly profit goal you can set.' },
