@@ -268,3 +268,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Retirés du site entièrement : onglets + menu mobile, vues, panneau Radar de la Home, PRO Screener, deep links `?v=radar|tips|launch`, CSS, `launch.js`, Lightweight Charts (`vendor/`), mentions landing / FAQ / llms.txt / CGU. Les sections RADAR / LAUNCH plus haut dans ce fichier sont historiques.
 - Sources supprimées du repo : `supabase/functions/radar`, `supabase/functions/launch`, `supabase/radar.sql`, `supabase/launches.sql`.
 - Côté Supabase : crons `radar` (8) et `radar-refresh` (9) désactivés (`cron.alter_job(..., active := false)`). Restent en place (rien ne les appelle) : edge functions `radar` / `launch` déployées, tables `radar_tokens` / `launches`. À supprimer à la main si voulu (Dashboard > Edge Functions, puis `drop table public.radar_tokens; drop table public.launches;` au SQL Editor).
+
+## Navigation du haut (2026-10-21)
+- Onglets texte en casse normale (Home, Collection, History, Achievements, Stats, Ranks), sans icône : onglet courant en blanc gras + trait blanc dessous, les autres en gris ; `aria-current="page"`, titre d'onglet du navigateur = page courante.
+- Plus d'onglet ACCOUNT ni de menu hamburger : le compte = la pastille profil à droite (« Lvl 12 · Account », juste « Account » sur téléphone), cadre blanc quand on est sur Account. Bouton « ? » remplacé par « Guide ».
+- Sous 940 px : les onglets passent sur leur propre ligne pleine largeur sous le logo, défilement horizontal avec fondu sur le bord qui cache des onglets ; l'onglet courant est ramené dans le champ seulement s'il est caché.
+- Changer de page remonte en haut de la nouvelle page.

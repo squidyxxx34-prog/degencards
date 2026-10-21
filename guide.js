@@ -4,7 +4,7 @@
    (Esc = skip, ← / → = back / next), screen-reader announcements, the rest of
    the page made inert, respects reduced motion, bottom sheet on phones.
    Skip is available on every step. Replay: Account > Getting started, or the
-   "?" button in the header.
+   Guide button in the header.
    ============================================================================ */
 (function(){
 const STEPS = [
@@ -28,7 +28,7 @@ const STEPS = [
   { view:'stats', target:'#statsView .goal-card', title:'Stats and monthly goal',
     body:'Win rate, total profit, best trade… and a monthly profit goal you can set.' },
   { view:'home', target:null, title:"You're all set",
-    body:'You can replay this guide anytime with the ? button at the top, or from Account.', last:true },
+    body:'You can replay this guide anytime with the Guide button at the top, or from Account.', last:true },
 ];
 const KEY = () => 'dc_guide_done_' + (window.__dcUserId || 'anon');
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;

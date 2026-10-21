@@ -1574,9 +1574,24 @@ document.getElementById('ranksView').addEventListener('click', async e=>{
   }
 });
 
+const VIEW_TITLES = { home:'Home', collection:'Collection', history:'History', achievements:'Achievements', stats:'Stats', ranks:'Ranks', account:'Account' };
+/* narrow screens: the tab row scrolls sideways; keep the current tab visible and fade the edge that has more */
+function navEdges(){ const n = document.getElementById('nav'); if(!n) return; const max = n.scrollWidth - n.clientWidth;
+  n.classList.toggle('more-l', n.scrollLeft > 2); n.classList.toggle('more-r', max > 2 && n.scrollLeft < max - 2); }
+function navKeepInView(){ const n = document.getElementById('nav'), b = n && n.querySelector('button.active'); if(!b) return;
+  if(n.scrollWidth > n.clientWidth + 2){                              // scroll only if the tab is (partly) hidden, so Home stays in view when it can
+    const l = b.offsetLeft - n.offsetLeft, r = l + b.offsetWidth, pad = 44, x = n.scrollLeft;
+    const target = l - pad < x ? Math.max(0, l - pad) : r + pad > x + n.clientWidth ? Math.min(n.scrollWidth - n.clientWidth, r + pad - n.clientWidth) : x;
+    if(Math.abs(target - x) > 1) n.scrollTo({ left: target, behavior: 'smooth' }); }
+  setTimeout(navEdges, 350); }
+document.getElementById('nav').addEventListener('scroll', navEdges, { passive:true });
+window.addEventListener('resize', navEdges);
 function goToView(v){
   view = v;
-  document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active', x.dataset.v===v));
+  document.querySelectorAll('#nav button').forEach(x=>{ const on = x.dataset.v===v; x.classList.toggle('active', on); on ? x.setAttribute('aria-current','page') : x.removeAttribute('aria-current'); });
+  const chip = document.getElementById('profileChip'); chip.classList.toggle('active', v==='account'); v==='account' ? chip.setAttribute('aria-current','page') : chip.removeAttribute('aria-current');
+  document.title = (VIEW_TITLES[v] ? VIEW_TITLES[v] + ' · ' : '') + 'DEGENCARDS';
+  navKeepInView();
   ['home','collection','history','achievements','stats','ranks','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
@@ -2097,18 +2112,8 @@ async function ensureChart(t){
 document.getElementById('nav').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   goToView(b.dataset.v);
+  window.scrollTo(0, 0);                                               // a new page always starts at its top (same tab again = back to top)
 });
-document.getElementById('hamburger').addEventListener('click', ()=>{
-  document.querySelectorAll('#navMenu button').forEach(x=>x.classList.toggle('active', x.dataset.v===view));
-  document.getElementById('navOverlay').classList.add('show');
-});
-document.getElementById('navMenu').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  goToView(b.dataset.v);
-  document.getElementById('navOverlay').classList.remove('show');
-});
-document.getElementById('navOverlay').querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>document.getElementById('navOverlay').classList.remove('show')));
-document.getElementById('navOverlay').addEventListener('click', e=>{ if(e.target.id==='navOverlay') e.currentTarget.classList.remove('show'); });
 document.getElementById('homeSeeAll').addEventListener('click', ()=>goToView('collection'));
 document.getElementById('filterRow').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
@@ -2119,8 +2124,8 @@ document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.ta
 document.getElementById('colRarity').addEventListener('click', e=>{ const b = e.target.closest('[data-rarity]'); if(!b || b.disabled) return; rarityFilter = rarityFilter===b.dataset.rarity ? null : b.dataset.rarity; renderGrid(true); });
 let colQT = null;
 document.getElementById('colSearch').addEventListener('input', e=>{ clearTimeout(colQT); colQT = setTimeout(()=>{ colQuery = e.target.value.slice(0,32); renderGrid(true); }, 150); });
-document.getElementById('profileChip').addEventListener('click', ()=>goToView('account'));
-document.getElementById('profileChip').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); goToView('account'); } });
+document.getElementById('profileChip').addEventListener('click', ()=>{ goToView('account'); window.scrollTo(0, 0); });
+document.getElementById('profileChip').addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); goToView('account'); window.scrollTo(0, 0); } });
 document.getElementById('btnLogout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 /* RGPD erasure: deletes the auth user server-side (delete_my_account), trades / wallets / goal cascade */
 document.getElementById('btnDeleteAccount').addEventListener('click', async ()=>{

@@ -177,19 +177,17 @@
 <header>
   <div class="headerrow">
     <div class="logo"><span style="color:var(--purple);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg></span> DEGEN<span>CARDS</span></div>
-    <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
-    <nav id="nav">
-      <button class="active" data-v="home">HOME</button>
-      <button data-v="collection">COLLECTION</button>
-      <button data-v="history">HISTORY</button>
-      <button data-v="achievements">ACHIEVEMENTS</button>
-      <button data-v="stats">STATS</button>
-      <button data-v="ranks">RANKS</button>
-      <button data-v="account">ACCOUNT</button>
+    <nav id="nav" aria-label="Pages">
+      <button type="button" class="active" data-v="home" aria-current="page">Home</button>
+      <button type="button" data-v="collection">Collection</button>
+      <button type="button" data-v="history">History</button>
+      <button type="button" data-v="achievements">Achievements</button>
+      <button type="button" data-v="stats">Stats</button>
+      <button type="button" data-v="ranks">Ranks</button>
     </nav>
     <div class="headerright">
-      <button type="button" class="guide-help" id="guideHelp" data-guide-start aria-label="Open the getting-started guide" title="Getting started guide">?</button>
-      <div class="profile-chip" id="profileChip" role="button" tabindex="0" aria-label="Your profile and level"><span class="av-ring" id="avRing" style="--xp:0%"><span class="av" id="avInitial">·</span></span><span class="pc-txt"><span class="pc-name" id="chipName" hidden></span><span class="pc-lvl">Lvl <b id="chipLvl">1</b></span></span></div>
+      <button type="button" class="guide-help" id="guideHelp" data-guide-start aria-label="Open the getting-started guide">Guide</button>
+      <div class="profile-chip" id="profileChip" role="button" tabindex="0" aria-label="Account"><span class="av-ring" id="avRing" style="--xp:0%"><span class="av" id="avInitial">·</span></span><span class="pc-txt"><span class="pc-name" id="chipName" hidden></span><span class="pc-lvl"><span class="pc-lv">Lvl <b id="chipLvl">1</b> · </span>Account</span></span></div>
     </div>
   </div>
 </header>
@@ -360,7 +358,7 @@
 
   <div id="ranksView" style="display:none;">
     <section class="pg-head">
-      <div><div class="hm-kicker">WEEKLY LEADERBOARD</div><h1 class="pg-title" id="rkTitle">This week</h1><p class="hm-summary" id="rkLead"></p></div>
+      <div><div class="hm-kicker">RANKS · WEEKLY LEADERBOARD</div><h1 class="pg-title" id="rkTitle">This week</h1><p class="hm-summary" id="rkLead"></p></div>
     </section>
     <div class="rk-me" id="rkMe"></div>
     <div class="rk-podium" id="rkPodium"></div>
@@ -521,23 +519,6 @@
 </div>
 
 <div class="toast" id="toast"></div>
-
-<!-- MOBILE NAV MENU -->
-<div class="overlay" id="navOverlay">
-  <div class="modal" style="max-width:320px;">
-    <button class="closebtn" data-close>×</button>
-    <h3>MENU</h3>
-    <div class="navmenu" id="navMenu">
-      <button data-v="home">HOME</button>
-      <button data-v="collection">COLLECTION</button>
-      <button data-v="history">HISTORY</button>
-      <button data-v="achievements">ACHIEVEMENTS</button>
-      <button data-v="stats">STATS</button>
-      <button data-v="ranks">RANKS</button>
-      <button data-v="account">ACCOUNT</button>
-    </div>
-  </div>
-</div>
 
 <!-- PRO upsell (Whop checkout) -->
 <div class="overlay" id="proOverlay">
