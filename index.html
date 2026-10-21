@@ -45,7 +45,7 @@
 {"@type": "Question", "name": "How do I make a PnL card for a Solana trade?", "acceptedAnswer": {"@type": "Answer", "text": "Paste your Solana wallet address on DEGENCARDS. Your closed trades are imported automatically and each one becomes a PnL card with the real chart, entry, exit, hold time and profit. Tap Share to download it as an image or a video."}},
 {"@type": "Question", "name": "Does it work with Pump.fun, Axiom, Photon and Phantom?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Any Solana wallet works: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare or Backpack. Use the address of the wallet that actually makes the trades."}},
 {"@type": "Question", "name": "Is it safe to paste my wallet address?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. DEGENCARDS only reads public on-chain data from your public address. It never asks for a signature, a seed phrase or a private key, and cannot move your funds."}},
-{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and the PRO Screener."}},
+{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and more card styles."}},
 {"@type": "Question", "name": "What is a trade replay?", "acceptedAnswer": {"@type": "Answer", "text": "A short vertical video that replays your trade candle by candle on the real chart, with your buys and sells and your live profit, then shows the final result. Made to be posted on TikTok, Reels or X."}},
 {"@type": "Question", "name": "Can I show a losing trade?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Every closed trade becomes a card, wins and losses alike, with its own rarity from common to mythic."}}]}]}
 </script>
@@ -148,9 +148,6 @@
         <div><span class="lp-t">COLLECTION</span><h3>Rarity, from common to mythic</h3><p>Every trade gets a rarity, a grade and achievements, driven by ROI, speed and personal records. 250%+ ROI is mythic.</p></div>
         <div><span class="lp-t">RANKS</span><h3>Weekly leaderboard</h3><p>Claim a username and climb the weekly podium on real, on-chain profit.</p></div>
         <div><span class="lp-t">STATS</span><h3>Your trading journal</h3><p>Win rate, P&amp;L calendar, monthly goal, best coins, without typing a single trade.</p></div>
-        <div><span class="lp-t">RADAR</span><h3>Safety score on live coins</h3><p>Mint and freeze authority, bundles, holders, dev wallet and liquidity checked on-chain.</p></div>
-        <div><span class="lp-t">PRO SCREENER</span><h3>The memecoin checklist, automated</h3><p>Meta leader, already pumped, volume spike, copycats and market attention on every coin.</p></div>
-        <div><span class="lp-t">LAUNCH</span><h3>Launch a coin</h3><p>Name, ticker, image and one signature from your wallet. Your keys never leave it.</p></div>
       </div>
     </section>
 
@@ -160,7 +157,7 @@
       <details><summary>How do I make a PnL card for a Solana trade?</summary><p>Paste your Solana wallet address on DEGENCARDS. Your closed trades are imported automatically and each one becomes a PnL card with the real chart, entry, exit, hold time and profit. Tap Share to download it as an image or a video.</p></details>
       <details><summary>Does it work with Pump.fun, Axiom, Photon and Phantom?</summary><p>Yes. Any Solana wallet works: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare or Backpack. Use the address of the wallet that actually makes the trades.</p></details>
       <details><summary>Is it safe to paste my wallet address?</summary><p>Yes. DEGENCARDS only reads public on-chain data from your public address. It never asks for a signature, a seed phrase or a private key, and cannot move your funds.</p></details>
-      <details><summary>Is it free?</summary><p>Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and the PRO Screener.</p></details>
+      <details><summary>Is it free?</summary><p>Yes. Auto-import, PnL cards, animated cards and trade replays are free. PRO adds replay customization, advanced stats and more card styles.</p></details>
       <details><summary>What is a trade replay?</summary><p>A short vertical video that replays your trade candle by candle on the real chart, with your buys and sells and your live profit, then shows the final result. Made to be posted on TikTok, Reels or X.</p></details>
       <details><summary>Can I show a losing trade?</summary><p>Yes. Every closed trade becomes a card, wins and losses alike, with its own rarity from common to mythic.</p></details>
       <details><summary>DEGENCARDS en français ?</summary><p>Oui : DEGENCARDS transforme chaque trade de degen en carte à collectionner, carte PnL et vidéo de trade replay. Import automatique depuis un wallet Solana (Pump.fun, Axiom, Photon, Phantom, Fomo), en lecture seule.</p></details>
@@ -188,9 +185,6 @@
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
-      <button data-v="radar">RADAR</button>
-      <button data-v="tips">TIPS</button>
-      <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </nav>
     <div class="headerright">
@@ -271,8 +265,6 @@
 
     <div class="sectionhead hm-sh"><h2>RECENT CARDS <span class="home-loading" id="homeLoading" hidden><span class="hl-dot"></span>Loading your cards</span></h2><button class="chip active" id="homeSeeAll">SEE ALL →</button></div>
     <div class="grid hm-recent" id="homeGrid"></div>
-
-    <section class="hm-panel hm-radar" id="hmRadar" hidden></section>
   </div>
 
   <div id="collectionView" style="display:none;">
@@ -375,148 +367,6 @@
     <div class="rk-list hm-panel" id="rkList"></div>
     <div class="sectionhead"><h2>LEVEL LADDER</h2><span class="rk-xp" id="rkXp"></span></div>
     <div class="rk-ladder" id="rkLadder"></div>
-  </div>
-
-  <div id="launchView" style="display:none;">
-    <section class="pg-head">
-      <div><div class="hm-kicker">COIN LAUNCHER</div><h1 class="pg-title">Launch a coin</h1><p class="hm-summary">Your wallet signs and pays, DEGENCARDS never holds your funds or keys. Live on Solana in under a minute.</p></div>
-    </section>
-
-    <div class="ln-modes" role="radiogroup" aria-label="Launch type">
-      <button type="button" class="ln-mode on" data-ln-mode="pump" role="radio" aria-checked="true">
-        <span class="ln-mode-top"><b>Bonding curve</b><em class="ln-price free">FREE</em></span>
-        <span class="ln-mode-d">Launched on pump.fun. Price climbs as people buy, and the coin moves to a DEX pool by itself when the curve fills.</span>
-        <span class="ln-mode-l"><i>Starts at ~28 SOL market cap</i><i>No SOL needed besides your buy</i><i>Shows on pump.fun right away</i></span>
-      </button>
-      <button type="button" class="ln-mode" data-ln-mode="lp" role="radio" aria-checked="false">
-        <span class="ln-mode-top"><b>Liquidity pool</b><em class="ln-price" id="lnFee">0.15 SOL</em></span>
-        <span class="ln-mode-d">Trades on a Meteora pool from the first second, routed by Jupiter. You set the starting liquidity.</span>
-        <span class="ln-mode-l"><i>Liquidity locked forever</i><i>Mint revoked, no freeze</i><i>You earn the 1% pool fees</i></span>
-      </button>
-    </div>
-
-    <div class="ln-grid">
-      <form class="ln-form hm-panel" id="lnForm" novalidate>
-        <div class="ln-row ln-id">
-          <label class="ln-img" id="lnImgDrop" tabindex="0" aria-label="Coin image">
-            <input type="file" id="lnImg" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-            <img id="lnImgPrev" alt="" hidden><span class="ln-img-ph" id="lnImgPh">+<small>Image</small></span>
-          </label>
-          <div class="ln-id-fields">
-            <label class="ln-f"><span>Name</span><input id="lnName" maxlength="32" placeholder="Degen Cat" autocomplete="off"></label>
-            <label class="ln-f"><span>Ticker</span><input id="lnSymbol" maxlength="10" placeholder="DCAT" autocomplete="off" autocapitalize="characters"></label>
-          </div>
-        </div>
-        <label class="ln-f"><span>Description <em>optional</em></span><textarea id="lnDesc" maxlength="500" rows="3" placeholder="What's the coin about?"></textarea></label>
-        <div class="ln-links">
-          <label class="ln-f"><span>X <em>optional</em></span><input id="lnX" placeholder="x.com/yourcoin" autocomplete="off"></label>
-          <label class="ln-f"><span>Telegram <em>optional</em></span><input id="lnTg" placeholder="t.me/yourcoin" autocomplete="off"></label>
-          <label class="ln-f"><span>Website <em>optional</em></span><input id="lnWeb" placeholder="yourcoin.xyz" autocomplete="off"></label>
-        </div>
-        <div class="ln-f" id="lnLiqRow" hidden>
-          <span>Starting liquidity</span>
-          <div class="ln-amt"><input id="lnLiq" type="number" min="0.5" max="1000" step="0.1" value="2" inputmode="decimal"><b>SOL</b></div>
-          <div class="ln-chips" data-ln-chips="lnLiq"><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="5">5</button><button type="button" data-v="10">10</button></div>
-          <small class="ln-hint">Paired with your whole supply in the pool and locked forever. More SOL = higher starting price, steadier chart.</small>
-        </div>
-        <div class="ln-f">
-          <span>Your first buy <em>optional</em></span>
-          <div class="ln-amt"><input id="lnBuy" type="number" min="0" max="20" step="0.01" value="0" inputmode="decimal"><b>SOL</b></div>
-          <div class="ln-chips" data-ln-chips="lnBuy"><button type="button" data-v="0">0</button><button type="button" data-v="0.1">0.1</button><button type="button" data-v="0.5">0.5</button><button type="button" data-v="1">1</button></div>
-          <small class="ln-hint" id="lnBuyHint">Bought in the same transaction as the launch: nobody can buy before you. Public on-chain.</small>
-        </div>
-        <label class="ln-accept"><input type="checkbox" id="lnAccept"><span>I'm creating this coin myself, with my own wallet. It's a meme coin with no promise of value or profit, not an investment offer. I'm responsible for it and for following the laws where I live. DEGENCARDS only builds the transactions and never holds funds. <a href="/terms.html" target="_blank" rel="noopener">Terms</a></span></label>
-      </form>
-
-      <aside class="ln-side">
-        <div class="ln-preview" id="lnPreview"></div>
-        <div class="hm-panel ln-sum" id="lnSum"></div>
-        <div class="ln-wallet" id="lnWallet"></div>
-        <button type="button" class="share-btn ln-go" id="lnGo" disabled>LAUNCH</button>
-        <div class="ln-steps" id="lnSteps" hidden></div>
-      </aside>
-    </div>
-
-    <div class="sectionhead"><h2>YOUR LAUNCHES</h2></div>
-    <div class="ln-mine" id="lnMine"></div>
-  </div>
-
-  <div id="radarView" style="display:none;">
-    <div class="sectionhead rd-top">
-      <h2>RADAR <span class="rd-count"><span id="radarCount">0</span> coins</span></h2>
-      <span class="rd-live" id="radarLive"><i></i><span>Live</span></span>
-    </div>
-    <div class="rd-cats" id="radarCats" role="tablist" aria-label="Coin categories"></div>
-    <div class="rd-tools">
-      <label class="rd-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 100-14 7 7 0 000 14z M20 20l-4-4"/></svg><input id="radarSearch" type="search" placeholder="Search ticker, name or CA" autocomplete="off" spellcheck="false" aria-label="Search coins"></label>
-      <div class="rd-min"><span>Safety</span><div class="filters" id="radarMin" role="group" aria-label="Minimum safety score"></div></div>
-    </div>
-    <p class="rd-catdesc" id="radarCatDesc"></p>
-    <div id="radarPro" hidden></div>
-    <div class="radar-list" id="radarList"></div>
-    <div class="radar-foot" id="radarFoot"></div>
-    <details class="radar-about"><summary>How the safety score works</summary>
-      <p class="radar-note">Every coin is checked on-chain: mint and freeze authorities, token extensions, holder concentration, same-size wallet bundles, dev wallet, liquidity behind the market cap, price moves, activity and RugCheck flags. A high score means fewer rug signals right now, not a buy signal. It can still miss insiders spread over varied wallets, or a dev who sells later. Not financial advice.</p>
-    </details>
-  </div>
-
-  <div id="tipsView" style="display:none;">
-    <div class="sectionhead"><h2>TIPS <span class="rd-count">reading a memecoin</span></h2></div>
-    <p class="tp-intro">Narrative first, safety second, and both before you buy. Items marked <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span> are checked live on every coin by the <a href="#" data-open-pro>PRO Screener</a>. Items marked <span class="tp-you" title="Only you can judge this one">YOU</span> are on you: no data can judge a meme for you.</p>
-    <section class="tp-sec">
-      <h3>THE COIN ITSELF</h3>
-      <p class="tp-lead">Is the meme strong enough to spread on its own?</p>
-      <ol class="tp-list">
-        <li><span class="tp-n">1</span><div><h4>The pitch <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Can you explain the meme in 2 sentences max: simple, emotional, easy to retweet? If it needs a thread to explain, it won’t travel.</p></div></li>
-        <li><span class="tp-n">2</span><div><h4>The visual <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Could a teenager redraw it in Paint? Can it be photoshopped onto anything? Memes that are easy to remix spread for free.</p></div></li>
-        <li><span class="tp-n">3</span><div><h4>Staying power <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Real cultural resonance, or a joke forgotten next week?</p></div></li>
-        <li><span class="tp-n">4</span><div><h4>Already pumped? <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Has the coin already done x50 since launch, or is it still close to its starting point? The screener compares its market cap to its launch value.</p></div></li>
-      </ol>
-    </section>
-    <section class="tp-sec">
-      <h3>THE CONTEXT</h3>
-      <p class="tp-lead">What is carrying the coin right now?</p>
-      <ol class="tp-list">
-        <li><span class="tp-n">5</span><div><h4>The theme <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Which theme does it belong to: dogs, cats, frogs, AI, politics…? The screener tags the theme from its name, ticker and description.</p></div></li>
-        <li><span class="tp-n">6</span><div><h4>The real-world event <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Is it tied to something happening IRL (an election, a war, a viral moment)? When the event fades, so does the coin.</p></div></li>
-        <li><span class="tp-n">7</span><div><h4>The catalyst <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Listings, viral influencer posts, exchange mentions or a trending narrative can trigger the inflow. Social buzz and volume spikes often show up before the chart confirms. The screener flags volume running well above its hourly average with buyers in control.</p></div></li>
-        <li><span class="tp-n">8</span><div><h4>Who talks about it <span class="tp-you" title="Only you can judge this one">YOU</span></h4><p>Which influencers mention the coin, and are they paid to? Check the coin’s X and Telegram yourself.</p></div></li>
-        <li><span class="tp-n">9</span><div><h4>Where the liquidity is <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Which chain is the money on (Solana, Ethereum, Base…)? The radar is Solana only, and the screener checks there is real liquidity behind the market cap.</p></div></li>
-      </ol>
-    </section>
-    <section class="tp-sec">
-      <h3>POSITION IN THE NARRATIVE</h3>
-      <p class="tp-lead">Leader, runner-up or late copy?</p>
-      <ol class="tp-list">
-        <li><span class="tp-n">10</span><div><h4>Leader or copy <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Spot the leaders of the current meta and where attention is concentrated. The screener ranks every coin inside its theme by market cap and flags tickers copied from a bigger coin.</p></div></li>
-        <li><span class="tp-n">11</span><div><h4>Saturation <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>A common rule of thumb: the #2 of a leading narrative often has more room than the leader, and a memecoin narrative rarely holds more than ~30% upside over 7 days. The screener accepts the #1 and the #2 of each theme only.</p></div></li>
-        <li><span class="tp-n">12</span><div><h4>Global attention <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>Above ~30K launches a day on pump.fun, attention is strong. Under ~5K, it is dead and narratives don’t take off. The screener reads the live pace of new launches.</p></div></li>
-      </ol>
-    </section>
-    <section class="tp-sec">
-      <h3>THE EXIT</h3>
-      <p class="tp-lead">Know when the story is over.</p>
-      <ol class="tp-list">
-        <li><span class="tp-n">13</span><div><h4>The narrative dies <span class="tp-auto" title="Checked automatically by the PRO Screener">AUTO</span></h4><p>If the story behind the meme fades (the drama ends, the hype moves elsewhere), you cut instead of watching liquidity dry up. The screener drops coins being dumped or bleeding hard.</p></div></li>
-      </ol>
-    </section>
-    <section class="tp-sec">
-      <h3>THEN, AND ONLY THEN: SAFETY</h3>
-      <p class="tp-lead">A perfect narrative doesn’t protect you from a rug. Every coin on the radar gets a safety score from on-chain checks:</p>
-      <ul class="tp-safe">
-        <li><b>Mint authority</b> revoked: nobody can print more supply.</li>
-        <li><b>Freeze authority</b> revoked: nobody can freeze your tokens.</li>
-        <li><b>Liquidity</b>: a bonding curve, or a real pool behind the market cap (no LP that can be pulled).</li>
-        <li><b>Bundles</b>: no cluster of wallets holding the exact same amount.</li>
-        <li><b>Holders</b>: top 10 and biggest wallet not holding too much of the supply.</li>
-        <li><b>Dev wallet</b>: the creator isn’t sitting on a big bag.</li>
-        <li><b>Token extensions</b>: no transfer fee, hook or permanent delegate.</li>
-        <li><b>RugCheck</b> flags, activity and price moves.</li>
-      </ul>
-      <p class="tp-lead">The PRO Screener requires a safety score of 80+ before a coin can get the ✓ CHECKLIST mark.</p>
-    </section>
-    <div class="tp-cta"><button type="button" class="share-btn" data-open-pro>OPEN THE PRO SCREENER</button></div>
-    <p class="tp-warn">Not financial advice. A coin that passes every check can still go to zero. Only trade what you can afford to lose.</p>
   </div>
 
   <div id="accountView" style="display:none;">
@@ -684,9 +534,6 @@
       <button data-v="achievements">ACHIEVEMENTS</button>
       <button data-v="stats">STATS</button>
       <button data-v="ranks">RANKS</button>
-      <button data-v="radar">RADAR</button>
-      <button data-v="tips">TIPS</button>
-      <button data-v="launch">LAUNCH</button>
       <button data-v="account">ACCOUNT</button>
     </div>
   </div>
@@ -727,7 +574,6 @@
 <script src="/app.js" defer></script>
 <script src="/share.js" defer></script>
 <script src="/replay.js" defer></script>
-<script src="/launch.js" defer></script>
 <script src="/guide.js" defer></script>
 </body>
 </html>

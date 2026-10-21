@@ -9,13 +9,10 @@
 - Collection: every trade gets a rarity (common to mythic), a grade and achievements.
 - Weekly leaderboard ranked on real on-chain profit, with usernames.
 - Stats and trading journal: win rate, P&L calendar, monthly goal.
-- Radar: live Solana memecoins with an on-chain safety score (mint and freeze authority, bundles, holders, dev wallet, liquidity, RugCheck).
-- PRO Screener: a memecoin checklist applied automatically (meta leader, already pumped, volume spike, copycats, pump.fun launch pace).
-- Coin launcher: launch a coin with one wallet signature, non-custodial.
 
 ## Pricing
 - Free: auto-import, cards, PnL cards, animated cards, trade replays.
-- PRO: replay customization, advanced stats, PRO Screener.
+- PRO: replay customization, advanced stats.
 
 ## Links
 - App and landing page: https://degencards.vercel.app/

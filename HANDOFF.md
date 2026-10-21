@@ -263,3 +263,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Free : Socrates, Lions, Tempest, Summit + Auto parmi ceux-là ; les 12 autres tableaux et les tons Noir / Dark = PRO (visibles avec la pastille, ouvrent le paywall).
 - Sélecteur de style visuel : 4 tuiles avec un mini rendu du trade (ART / CARD / SIMPLE / REPLAY), dernier choix mémorisé (`localStorage dc_share_style`).
 - Ajouter un tableau : image domaine public, crop ~1500 px de petit côté en WebP + vignette 132×165, puis une ligne dans `ART` (share.js) avec fx/fy (point focal) et dim (assombrissement).
+
+## RADAR, TIPS, LAUNCH supprimés (2026-10-21)
+- Retirés du site entièrement : onglets + menu mobile, vues, panneau Radar de la Home, PRO Screener, deep links `?v=radar|tips|launch`, CSS, `launch.js`, Lightweight Charts (`vendor/`), mentions landing / FAQ / llms.txt / CGU. Les sections RADAR / LAUNCH plus haut dans ce fichier sont historiques.
+- Sources supprimées du repo : `supabase/functions/radar`, `supabase/functions/launch`, `supabase/radar.sql`, `supabase/launches.sql`.
+- Côté Supabase : crons `radar` (8) et `radar-refresh` (9) désactivés (`cron.alter_job(..., active := false)`). Restent en place (rien ne les appelle) : edge functions `radar` / `launch` déployées, tables `radar_tokens` / `launches`. À supprimer à la main si voulu (Dashboard > Edge Functions, puis `drop table public.radar_tokens; drop table public.launches;` au SQL Editor).
