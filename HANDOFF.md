@@ -255,3 +255,11 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Pass everything → gold `✓ CHECKLIST` mark on every radar tab and first in the PRO tab; others are listed with what they miss.
 - Market context: `GET /functions/v1/radar?meta=1` (public, cached 2 min) → `{ launchesDay, solUsd }` from the 50 newest pump.fun coins.
 - Gated like PRO stats: locked only when `dcPro.enabled && !dcPro.active`.
+
+## Partage : style ART (2026-10-21)
+- 4e style dans la feuille de partage, par défaut : ART. La carte est posée sur un vrai tableau de maître (16 peintures du domaine public, The Met Open Access CC0, recadrées, `/art/*.webp` + vignettes `/art/t/*.webp`, même origine = CSP OK). Bougies blanches (baisse = creuse / pâle), étiquettes Entry / Exit, gros PnL blanc, stats en 2 colonnes (Entry / Exit MC, Size ou Hold, Return), DEGENCARDS · @user + url, crédit du tableau en bas à droite.
+- Formats POST 4:5 (plein cadre), STORY 9:16 (carte 4:5 flottante sur le tableau flouté + CTA), WIDE 16:9. Image + vidéo (push-in lent sur le tableau, compteur, bougies qui se dessinent, étiquettes qui tombent, reflet).
+- Panneau Painting juste sous l'aperçu : Auto (choisi selon le trade : triomphe si gain, drame si perte, stable par trade), vignettes, Shuffle ; Big number PnL / ROI, Tone Natural / Noir / Dark, Number White / Green-red, Show Chart / Stats / Coin logo / Painting credit (`localStorage dc_art_opts`). Fond perso (PRO) remplace le tableau.
+- Free : Socrates, Lions, Tempest, Summit + Auto parmi ceux-là ; les 12 autres tableaux et les tons Noir / Dark = PRO (visibles avec la pastille, ouvrent le paywall).
+- Sélecteur de style visuel : 4 tuiles avec un mini rendu du trade (ART / CARD / SIMPLE / REPLAY), dernier choix mémorisé (`localStorage dc_share_style`).
+- Ajouter un tableau : image domaine public, crop ~1500 px de petit côté en WebP + vignette 132×165, puis une ligne dans `ART` (share.js) avec fx/fy (point focal) et dim (assombrissement).
