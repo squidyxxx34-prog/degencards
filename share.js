@@ -504,24 +504,45 @@ function focalDraw(ctx, src, iw, ih, W, H, fx, fy, zoom){
   try{ ctx.drawImage(src, x, y, dw, dh); }catch(e){}
   ctx.restore();
 }
-/* a statue is never cropped: the whole photo, contained, over a blurred and darker copy of itself; the seams are feathered */
-const ART_FIT = document.createElement('canvas');
+/* a statue is never cropped: the whole photo, contained; the empty sides (or top / bottom) are the photo's own backdrop,
+   continued from its edge pixels (smoothed), so it reads as one wider photo. A short fade hides the seam. */
+const ART_FIT = document.createElement('canvas'), ART_EDGE = document.createElement('canvas');
+function edgeFill(ctx, src, sx, sy, sw, sh, dx, dy, dw, dh, vertical){
+  // average the edge strip into a small smooth ramp, then stretch it over the empty area
+  const n = Math.max(8, Math.round((vertical ? dh : dw) / 10));
+  if(vertical){ if(ART_EDGE.width !== 1 || ART_EDGE.height !== n){ ART_EDGE.width = 1; ART_EDGE.height = n; } }
+  else if(ART_EDGE.width !== n || ART_EDGE.height !== 1){ ART_EDGE.width = n; ART_EDGE.height = 1; }
+  const e = ART_EDGE.getContext('2d'); e.imageSmoothingEnabled = true; e.imageSmoothingQuality = 'high'; e.clearRect(0, 0, ART_EDGE.width, ART_EDGE.height);
+  try{ e.drawImage(src, sx, sy, sw, sh, 0, 0, ART_EDGE.width, ART_EDGE.height); ctx.drawImage(ART_EDGE, dx, dy, dw, dh); }catch(err){}
+}
 function fitWhole(ctx, src, iw, ih, W, H, a, zoom){
   ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  const r0 = Math.max(W / iw, H / ih) * 1.08, bw = iw * r0, bh = ih * r0;
-  try{ ctx.drawImage(softBlur(src, iw, ih, Math.max(iw, ih) / 40), (W - bw) / 2, (H - bh) / 2, bw, bh); }catch(e){}
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
   const z = 1 + (zoom - 1) * 0.5, r = Math.min(W / iw, H / ih) * z, dw = Math.round(iw * r), dh = Math.round(ih * r);
-  const x = Math.round((W - dw) / 2), y = Math.round((H - dh) / 2 + (H - dh > 4 ? 0 : (1 - z) * dh * 0.25));
+  const x = Math.round((W - dw) / 2), y = Math.round((H - dh) / 2);
+  const strip = 2, fx = x > 0 ? Math.min(110, dw * 0.08) : 0, fy = y > 0 ? Math.min(110, dh * 0.08) : 0;
+  // the fill runs under the feathered edge too, so the photo fades into its own backdrop (never into black)
+  if(x > 0){                                                           // left and right: continue the side columns
+    edgeFill(ctx, src, 0, 0, strip, ih, 0, y, x + fx + 2, dh, true);
+    edgeFill(ctx, src, iw - strip, 0, strip, ih, x + dw - fx - 2, y, W - x - dw + fx + 2, dh, true);
+  }
+  if(y > 0){                                                           // top and bottom: continue the top / bottom rows
+    edgeFill(ctx, src, 0, 0, iw, strip, Math.max(0, x), 0, Math.min(W, dw), y + fy + 2, false);
+    edgeFill(ctx, src, 0, ih - strip, iw, strip, Math.max(0, x), y + dh - fy - 2, Math.min(W, dw), H - y - dh + fy + 2, false);
+  }
+  if(x > 0 && y > 0){                                                  // corners: the corner colour
+    const c = [[0, 0, 0, 0], [iw - strip, 0, x + dw, 0], [0, ih - strip, 0, y + dh], [iw - strip, ih - strip, x + dw, y + dh]];
+    for(const [sx, sy, dx, dy] of c){ try{ ctx.drawImage(src, sx, sy, strip, strip, dx, dy, dx ? W - dx : x, dy ? H - dy : y); }catch(e){} }
+  }
   if(ART_FIT.width !== dw || ART_FIT.height !== dh){ ART_FIT.width = dw; ART_FIT.height = dh; }
   const g = ART_FIT.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, dw, dh);
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
   try{ g.drawImage(src, 0, 0, dw, dh); }catch(e){}
-  g.globalCompositeOperation = 'destination-in';                       // feather only the edges that meet the blurred fill
-  const fxw = dw < W - 2 ? Math.min(dw * 0.14, 160) : 0, fyh = dh < H - 2 ? Math.min(dh * 0.12, 160) : 0;
-  if(fxw){ const lg = g.createLinearGradient(0, 0, dw, 0); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fxw / dw, '#000'); lg.addColorStop(1 - fxw / dw, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
-  if(fyh){ const lg = g.createLinearGradient(0, 0, 0, dh); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fyh / dh, '#000'); lg.addColorStop(1 - fyh / dh, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
-  g.globalCompositeOperation = 'source-over';
+  if(fx || fy){
+    g.globalCompositeOperation = 'destination-in';
+    if(fx){ const lg = g.createLinearGradient(0, 0, dw, 0); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fx / dw, '#000'); lg.addColorStop(1 - fx / dw, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
+    if(fy){ const lg = g.createLinearGradient(0, 0, 0, dh); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fy / dh, '#000'); lg.addColorStop(1 - fy / dh, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
+    g.globalCompositeOperation = 'source-over';
+  }
   ctx.drawImage(ART_FIT, x, y);
   ctx.restore();
 }
