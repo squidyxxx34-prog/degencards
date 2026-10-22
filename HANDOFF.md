@@ -275,10 +275,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Sous 940 px : les onglets passent sur leur propre ligne pleine largeur sous le logo, défilement horizontal avec fondu sur le bord qui cache des onglets ; l'onglet courant est ramené dans le champ seulement s'il est caché.
 - Changer de page remonte en haut de la nouvelle page.
 
-## Page Achievements refaite (2026-10-21)
-- Fini le tableau de bord (anneau %, 4 compteurs, 3 encarts, filtres All / Unlocked / Locked, médailles rondes avec icône). Texte seulement.
-- Haut : « 21 of 29 unlocked » + une bande d'un segment par badge (couleur du tier quand débloqué, Legend d'abord, puis gris = restants), une ligne Legend / Gold / Silver / Bronze (x/y) + XP des badges.
-- NEXT UP : le badge verrouillé le plus proche (mesurable via `achProgress`), gros nom, barre de progression, tap = détail.
-- Vitrine par tier (Legend, Gold, Silver, Bronze) : débloqués d'abord (plus récent en premier, « Latest » sur le dernier), puis verrouillés (le plus proche d'abord, mini barre). Noms en casse titre (`awTitle`). Legend : reflet lent ; Gold : reflet au survol.
-- Entrée à chaque ouverture de la page (`achEnter`, < 1 s, désactivée si reduced motion) : bande qui se remplit, compteur, barre NEXT UP, tuiles qui montent.
-- Détail d'un badge : tier + état, description, « Earned N× · first on … » ou progression, liste des trades qui l'ont donné.
+## Page Achievements (2026-10-22, v2 « moins IA »)
+- Liste sobre, monochrome, une seule police (chiffres tabulaires), aucune icône, aucun halo / dégradé / reflet, pas de cartes dans des cartes.
+- Haut : « 21 of 29 unlocked », une barre fine blanche, une phrase « 1 Legend, 1 Gold, 9 Silver and 10 Bronze. 2,520 XP from badges. »
+- Next up : bloc neutre (badge verrouillé le plus proche, barre fine, « Best streak 9/10 · 90% »), tap = détail.
+- Puis une section par tier (Legend → Bronze) : une ligne par badge (nom + description à gauche, date / « N times » ou progression à droite), débloqués d'abord (« Latest, » sur le dernier), verrouillés grisés ; la progression d'un verrouillé = le filet sous sa ligne qui se remplit. 2 colonnes dès 900 px.
+- Entrée < 1 s à chaque ouverture (barres qui se tracent, compteur, lignes qui se posent), coupée si reduced motion.

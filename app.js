@@ -943,14 +943,15 @@ function achProgress(key, all){
     default: return null;
   }
 }
-/* ---------- achievements: a trophy cabinet, not a dashboard ----------
-   One glance: how many (a strip with one segment per badge, coloured by tier), what's next (the closest locked badge),
-   then the cabinet by tier, Legend first. Text only, no icons. The entrance plays once when the page opens (< 1 s). */
+/* ---------- achievements: a plain ledger ----------
+   How many, what's next, then every badge as a row, grouped by tier (Legend first). Monochrome, one typeface,
+   no glow, no cards-in-cards. Locked rows carry their progress as the line under them. Short entrance when opened. */
 const TIER_ORDER = ['legend','gold','silver','bronze'];
 const TIER_NAME = { bronze:'Bronze', silver:'Silver', gold:'Gold', legend:'Legend' };
 const AW_SMALL = new Set(['of','the','a','an','to','and','in','on','at','for']);
 const awTitle = s => String(s||'').toLowerCase().split(' ').map((w,i)=> i && AW_SMALL.has(w) ? w : w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
 const awDay = ts => fmt.date(ts).split(' · ')[0];
+const awShort = s => String(s||'').replace(/^(Best streak|Best ROI|Best trade|Longest win|Worst streak|Worst) /,'').replace(/(\d)\/(\d)/g,'$1 / $2');
 function renderAchievements(){
   const all = computedTrades();
   const unlocked = unlockedAchievementKeys();
@@ -965,43 +966,41 @@ function renderAchievements(){
   const latest = [...unlocked].sort((a,b)=>lastAt(b)-lastAt(a))[0];
   const tierCount = { legend:0, gold:0, silver:0, bronze:0 }, tierAll = { legend:0, gold:0, silver:0, bronze:0 };
   ACH_CATALOG.forEach(a=>{ tierAll[tierOf(a.key)]++; if(unlocked.has(a.key)) tierCount[tierOf(a.key)]++; });
+  const pct = total ? got/total*100 : 0;
 
-  // hero: count + one segment per badge (unlocked first, rarest tier first) + one quiet line
-  const segs = [...ACH_CATALOG].sort((a,b)=> (unlocked.has(b.key) - unlocked.has(a.key)) || (rank(a.key) - rank(b.key)) || (frac(b.key) - frac(a.key)));
   document.getElementById('awHero').innerHTML = `
     <div class="hm-kicker">ACHIEVEMENTS</div>
     <h1 class="pg-title aw-title"><span id="awGot">${got}</span><span class="aw-of"> of ${total}</span> unlocked</h1>
-    <div class="aw-strip" role="img" aria-label="${got} of ${total} achievements unlocked">${segs.map((a,i)=>`<i class="t-${tierOf(a.key)}${unlocked.has(a.key)?' on':''}" style="--i:${i}" title="${esc(awTitle(a.name))}"></i>`).join('')}</div>
-    <p class="aw-line">${TIER_ORDER.map(tr=>`<span class="t-${tr}"><em>${TIER_NAME[tr]}</em> <b>${tierCount[tr]}</b><small>/${tierAll[tr]}</small></span>`).join('')}<span class="aw-xp"><b>+${(got*120).toLocaleString('en-US')}</b> XP</span></p>`;
+    <div class="aw-track" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${got}" aria-label="Achievements unlocked"><i style="--w:${pct.toFixed(1)}%"></i></div>
+    <p class="aw-sum">${TIER_ORDER.map(tr=>`${tierCount[tr]} ${TIER_NAME[tr]}`).join(', ').replace(/, ([^,]*)$/, ' and $1')}. ${got ? `${(got*120).toLocaleString('en-US')} XP from badges.` : 'Your first trade unlocks the first one.'}</p>`;
 
   // next up: the closest locked badge that can be measured
   const nextK = Object.keys(prog).filter(k=>frac(k) < 1).sort((a,b)=>frac(b)-frac(a) || rank(a)-rank(b))[0];
   const nx = document.getElementById('awNext');
-  if(got === total){ nx.hidden = false; nx.className = 'aw-next t-legend done'; delete nx.dataset.ach; nx.innerHTML = `<div class="aw-next-k">COMPLETE</div><div class="aw-next-name">Every badge unlocked</div><div class="aw-next-desc">The whole cabinet. Nothing left but your next trade.</div>`; }
+  if(got === total){ nx.hidden = false; nx.className = 'aw-next done'; delete nx.dataset.ach; nx.innerHTML = `<div class="aw-next-k">All done</div><div class="aw-next-name">Every badge unlocked</div><div class="aw-next-desc">Nothing left on the list.</div>`; }
   else if(nextK){
-    const a = ACH_MAP[nextK], tr = tierOf(nextK), p = prog[nextK], pc = Math.round(frac(nextK)*100);
-    nx.hidden = false; nx.className = `aw-next t-${tr}`; nx.dataset.ach = nextK;
-    nx.innerHTML = `<div class="aw-next-k">NEXT UP<span>${TIER_NAME[tr]}</span></div>
+    const a = ACH_MAP[nextK], p = prog[nextK], pc = Math.round(frac(nextK)*100);
+    nx.hidden = false; nx.className = 'aw-next'; nx.dataset.ach = nextK;
+    nx.innerHTML = `<div class="aw-next-k">Next up · ${TIER_NAME[tierOf(nextK)]}</div>
       <div class="aw-next-name">${esc(awTitle(a.name))}</div>
       <div class="aw-next-desc">${esc(a.desc)}</div>
-      <div class="aw-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pc}" aria-label="${esc(awTitle(a.name))} progress"><i style="--w:${pc}%"></i></div>
-      <div class="aw-next-foot"><span>${esc(p[2])}</span><b>${pc}%</b></div>`;
+      <div class="aw-track sm" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pc}" aria-label="${esc(awTitle(a.name))} progress"><i style="--w:${pc}%"></i></div>
+      <div class="aw-next-foot"><span>${esc(p[2])}</span><span>${pc}%</span></div>`;
   } else { nx.hidden = true; nx.innerHTML = ''; }
 
-  // the cabinet: one shelf per tier, Legend first; unlocked (latest first) then locked (closest first)
+  // the list, one section per tier: unlocked (latest first), then locked (closest first)
   let n = 0;
   document.getElementById('awTiers').innerHTML = TIER_ORDER.map(tr=>{
     const items = ACH_CATALOG.filter(a=>tierOf(a.key)===tr).sort((a,b)=> (unlocked.has(b.key) - unlocked.has(a.key)) || (lastAt(b.key) - lastAt(a.key)) || (frac(b.key) - frac(a.key)));
-    return `<section class="aw-shelf t-${tr}">
-      <div class="aw-shelf-h"><h2>${TIER_NAME[tr]}</h2><span>${tierCount[tr]} of ${tierAll[tr]}</span></div>
-      <div class="aw-grid">${items.map(a=>{
+    return `<section class="aw-sec">
+      <h2 class="aw-sec-h">${TIER_NAME[tr]}<span>${tierCount[tr]} of ${tierAll[tr]}</span></h2>
+      <div class="aw-list">${items.map(a=>{
         const has = unlocked.has(a.key), list = earned[a.key] || [], p = prog[a.key], pc = Math.round(frac(a.key)*100);
-        const foot = has ? `<span>${a.key === latest ? '<b class="aw-new">Latest</b> · ' : ''}${list.length ? awDay(list[0].timestamp) : 'Unlocked'}</span>${list.length > 1 ? `<b>×${list.length}</b>` : ''}`
-          : p ? `<span class="aw-mini"><i style="--w:${pc}%"></i></span><span>${esc(p[2].replace(/^(Best streak|Best ROI|Best trade|Longest win|Worst streak|Worst) /,''))}</span>` : '<span>Locked</span>';
-        return `<button type="button" class="aw-tile ${has?'has':'locked'}${a.key===latest?' latest':''}" data-ach="${a.key}" style="--i:${Math.min(n++,14)}" aria-label="${esc(awTitle(a.name))}, ${TIER_NAME[tr]}, ${has?'unlocked':'locked'}">
-          <span class="aw-name">${esc(awTitle(a.name))}</span>
-          <span class="aw-desc">${esc(a.desc)}</span>
-          <span class="aw-foot">${foot}</span>
+        const side = has ? `<span>${a.key === latest ? 'Latest, ' : ''}${list.length ? awDay(list[0].timestamp) : 'Unlocked'}</span>${list.length > 1 ? `<small>${list.length} times</small>` : ''}`
+          : p ? `<span>${esc(awShort(p[2]))}</span>` : '<span>Locked</span>';
+        return `<button type="button" class="aw-row ${has?'has':'locked'}${!has && p ? ' prog' : ''}" data-ach="${a.key}" style="--i:${Math.min(n++,16)};--w:${pc}%" aria-label="${esc(awTitle(a.name))}, ${TIER_NAME[tr]}, ${has?'unlocked':'locked'}">
+          <span class="aw-main"><span class="aw-name">${esc(awTitle(a.name))}</span><span class="aw-desc">${esc(a.desc)}</span></span>
+          <span class="aw-side">${side}</span>
         </button>`; }).join('')}</div>
     </section>`; }).join('');
 
@@ -1011,14 +1010,14 @@ function renderAchievements(){
 let awLast = { earned:{}, unlocked:new Set() };
 { const nx = document.getElementById('awNext'), go = ()=>{ const k = nx.dataset.ach; if(k && !nx.classList.contains('done')) openAchievement(k, awLast.earned[k]||[], awLast.unlocked.has(k)); };
   nx.addEventListener('click', go); nx.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); go(); } }); }
-/* entrance: strip fills, number counts up, next-up bar fills, shelves rise. Once per visit, under a second. */
+/* entrance: the bars draw, the number counts up, the rows settle. Once per visit, under a second. */
 function achEnter(){
   const v = document.getElementById('achievementsView'); if(!v) return;
   if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   v.classList.remove('aw-enter'); void v.offsetWidth; v.classList.add('aw-enter');
-  clearTimeout(achEnter.t); achEnter.t = setTimeout(()=>v.classList.remove('aw-enter'), 1400);
+  clearTimeout(achEnter.t); achEnter.t = setTimeout(()=>v.classList.remove('aw-enter'), 1300);
   const el = document.getElementById('awGot'), to = Number(el && el.textContent) || 0; if(!el || !to) return;
-  const t0 = performance.now(), D = 520;
+  const t0 = performance.now(), D = 600;
   const step = now => { const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3), cur = document.getElementById('awGot');
     if(cur) cur.textContent = Math.round(to * e); if(k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
@@ -1027,12 +1026,12 @@ function openAchievement(key, list, has){
   const a = ACH_MAP[key]; if(!a) return;
   const tier = ACH_TIER[key] || 'bronze', pr = has ? null : achProgress(key, computedTrades()), pc = pr ? Math.round(Math.max(0, Math.min(1, pr[0]/pr[1]))*100) : 0;
   document.getElementById('detailBody').innerHTML = `
-    <div class="aw-detail t-${tier} ${has?'has':'locked'}">
-      <div class="aw-detail-k">${TIER_NAME[tier].toUpperCase()} · ${has ? 'UNLOCKED' : 'LOCKED'}</div>
+    <div class="aw-detail ${has?'has':'locked'}">
+      <div class="aw-next-k">${TIER_NAME[tier]} · ${has ? 'Unlocked' : 'Locked'}</div>
       <h3>${esc(awTitle(a.name))}</h3><p>${esc(a.desc)}</p>
-      ${has ? `<div class="aw-detail-count">${list.length ? `Earned <b>${list.length}×</b> · first on ${awDay(list[list.length-1].timestamp)}` : 'Unlocked'}</div>`
-            : pr ? `<div class="aw-bar"><i style="--w:${pc}%"></i></div><div class="aw-next-foot"><span>${esc(pr[2])}</span><b>${pc}%</b></div>` : '<div class="aw-detail-count">Not unlocked yet</div>'}
-      ${list.length ? `<div class="aw-cards-k">THE TRADES BEHIND IT</div><div class="aw-cards">${list.slice(0,12).map(t=>`<button type="button" class="aw-card-row" data-open="${t.id}"><b>${esc(tk(t.ticker))}</b><span>${fmt.date(t.timestamp)}</span><em class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</em></button>`).join('')}</div>` : ''}
+      ${has ? `<div class="aw-detail-count">${list.length ? `Earned ${list.length === 1 ? 'once' : list.length + ' times'}, first on ${awDay(list[list.length-1].timestamp)}.` : 'Unlocked.'}</div>`
+            : pr ? `<div class="aw-track sm"><i style="--w:${pc}%"></i></div><div class="aw-next-foot"><span>${esc(pr[2])}</span><span>${pc}%</span></div>` : '<div class="aw-detail-count">Not unlocked yet.</div>'}
+      ${list.length ? `<div class="aw-cards-k">Trades</div><div class="aw-cards">${list.slice(0,12).map(t=>`<button type="button" class="aw-card-row" data-open="${t.id}"><b>${esc(tk(t.ticker))}</b><span>${fmt.date(t.timestamp)}</span><em class="${t.pnl>=0?'pos':'neg'}">${fmt.usd(t.pnl)}</em></button>`).join('')}</div>` : ''}
     </div>`;
   document.querySelectorAll('#detailBody [data-open]').forEach(b=>b.addEventListener('click', ()=>openDetail(b.dataset.open)));
   detailOverlay.classList.add('show');
