@@ -319,3 +319,10 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Puis How it works (I, II, III), formats, boîte de connexion **adresse d'abord** (email / Google en dessous, « OR WITH AN ACCOUNT »), FAQ, appel final « Ready when you are. » avec le même champ.
 - Beaucoup plus d'air (sections 110 px), sections qui apparaissent en fondu une fois au défilement (`.lp-reveal`, désactivé si reduced motion ; contenu visible sans JS). Vert / rouge adoucis (#62D7A2 / #EF6B75).
 - Note test : le body est le conteneur de défilement (html, body height:100%) → pour les captures, faire défiler `document.body.scrollTop`, pas window.
+
+## Landing « cinéma » (2026-10-23) — remplace la landing calme du 22
+- Ordre : hero plein écran → 3 vérités → formats → appel final → FAQ (SEO) → pied. Plus de « How it works » ni de grille de 4 questions.
+- Hero : kicker, titre en 2 lignes révélées par masque (`.lp-line`), une phrase, champ d'adresse « Show my cards ». À droite, une **vraie carte ART animée en direct** (`window.dcArtHero` dans share.js : canvas, Persée, trade d'exemple $ZAPP généré de façon déterministe dans app.js ; bougies qui se tracent, PnL qui compte, étiquettes, puis figée). Sans JS : image `lp/post.webp` (noscript). Le fond perso éventuel du visiteur est ignoré (`ART_NO_BG`).
+- 3 vérités : « It can't touch your funds. » / « The numbers are real. » / « It's free. », chacune avec une ligne de détail ; filet qui se trace au défilement.
+- Connexion = **panneau** (`#signin.lp-panel`, ouvert par le champ d'adresse, « Sign in » ou `#signin`), adresse pré-remplie, case + captcha + « Show my cards » ; email / Google repliés sous « Use email or Google instead ». Échap / croix / fond pour fermer.
+- Animations : entrée du hero (CSS), apparitions au défilement (`.lp-rv`, IntersectionObserver), tout coupé si reduced motion. Captures de test : `waitUntil:'domcontentloaded'` (hCaptcha retarde networkidle) et défilement via `document.body.scrollTop`.

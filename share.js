@@ -460,6 +460,7 @@ function artPick(t, o){
   return pool[hashId((t && (t.id || t.tradeId)) + ':' + mood) % pool.length];
 }
 const ART_IMG = new Map();
+let ART_NO_BG = false;                                                // landing hero: never the visitor's own saved background
 let artOnLoad = null;                                                 // the sheet re-renders its thumbnails once a painting lands
 function artImg(a){
   if(!a) return null;
@@ -524,7 +525,7 @@ function fitWhole(ctx, src, iw, ih, W, H, a, zoom, tone){
 function artBackdrop(ctx, W, H, t, ao, p, blur){
   const zoom = blur ? 1.15 : 1.1 - 0.1 * easeOut(seg(p, 0, 1));
   ctx.fillStyle = '#0B0A09'; ctx.fillRect(0, 0, W, H);
-  if(bgReady()){ const b = BG.blur; if(blur) BG.blur = true; drawBg(ctx, W, H, zoom); BG.blur = b; return; }
+  if(!ART_NO_BG && bgReady()){ const b = BG.blur; if(blur) BG.blur = true; drawBg(ctx, W, H, zoom); BG.blur = b; return; }
   const a = artPick(t, ao), im = artImg(a);
   if(!(im && im.complete && im.naturalWidth)) return;
   const src = artGrade(a, im, ao.tone), iw = im.naturalWidth, ih = im.naturalHeight;
@@ -713,7 +714,7 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGENCARDS', fx0, fy); try{ ctx.letterSpacing = '0px'; }catch(e){}
   if(hn){ ctx.font = `600 ${24 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.fillText('  ·  ' + hn, fx0 + bW, fy); }
   ctx.textAlign = 'center'; ctx.font = `500 ${18 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('degencards.vercel.app', cx, fy + 32 * u);
-  if(ao.credit && !bgReady()){ const a = artPick(t, ao); ctx.font = `italic 500 ${15 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  if(ao.credit && (ART_NO_BG || !bgReady())){ const a = artPick(t, ao); ctx.font = `italic 500 ${15 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
     if(story){ ctx.textAlign = 'center'; ctx.fillText(a.by + ', ' + a.year, cx, creditY); } else { ctx.textAlign = 'right'; ctx.fillText(a.by + ', ' + a.year, W - 26 * u, creditY); } }
   noShadow(); ctx.globalAlpha = 1;
   const intro = fa(0, 0.04); if(!opt.inner && intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
@@ -1146,6 +1147,24 @@ async function pickBg(file){
 
 const safeName = () => (String(state.t.ticker).replace(/[^A-Za-z0-9_-]/g,'') || 'card');
 
+/* landing hero: one real ART card, animated once (candles draw, PnL counts up, tags land), then held */
+window.dcArtHero = function(cv, t, ao){
+  if(!cv) return;
+  const meta = { rarity:'legendary', grade:'S', achievements:[] }, opt = { style:'art', ao, hideUsd:false };
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let raf = 0, last = 1;
+  const size = () => { const r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(200, Math.round(r.width * d)), h = Math.round(w * 1350 / 1080); if(cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; } };
+  const draw = p => { last = p; const ctx = cv.getContext('2d'), k = cv.width / 1080; ctx.setTransform(k, 0, 0, k, 0, 0);
+    ART_NO_BG = true; try{ drawArt(ctx, 1080, 1350, t, meta, p, opt); }catch(e){} finally{ ART_NO_BG = false; } };
+  const play = () => { size(); cv.classList.add('ready');
+    if(reduce){ draw(1); return; }
+    const t0 = performance.now(), D = ART_MS - 1200;
+    const loop = now => { const p = Math.min(1, (now - t0) / D); draw(p); if(p < 1) raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop); };
+  Promise.all([fontsReady(), artReady(t, ao)]).then(() => setTimeout(play, reduce ? 0 : 350));
+  let rt = 0; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if(last >= 1){ size(); draw(1); } }, 150); });
+};
 window.__dcLoadImg = loadCoinImage;
 window.__dcImgCache = IMG_CACHE;
 window.__dcShareReplay = (t, meta, opt, withSound) => recordReplay(t, meta, opt, null, withSound ? newAudio() : null);

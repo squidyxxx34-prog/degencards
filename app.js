@@ -2442,30 +2442,58 @@ document.getElementById('btnPubkey').addEventListener('click', async ()=>{
   await loginWithPubkey(pk, authNote);
 });
 
-/* landing: the address field in the hero (and at the bottom) leads straight into the watch-only sign-in */
+/* ---------- landing ----------
+   The address field (hero and bottom) opens the sign-in panel with the address already in it: tick the box, captcha, done.
+   "Sign in" opens the same panel on the email / Google part. */
+const lpPanel = {
+  open(which){
+    document.body.classList.add('lp-auth');
+    if(which === 'email'){ const d = document.getElementById('lpAlt'); if(d) d.open = true; }
+    const target = which === 'email' ? document.getElementById('authEmail') : (document.getElementById('authPubkey').value ? document.getElementById('authConsent') : document.getElementById('authPubkey'));
+    setTimeout(() => { try{ target && target.focus({ preventScroll:true }); }catch(e){} }, 380);
+  },
+  close(){ document.body.classList.remove('lp-auth'); if(location.hash === '#signin') history.replaceState(null, '', location.pathname + location.search); }
+};
+document.querySelectorAll('[data-lp-open]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); lpPanel.open(el.dataset.lpOpen); }));
+document.querySelectorAll('[data-lp-close]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); lpPanel.close(); }));
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && document.body.classList.contains('lp-auth')) lpPanel.close(); });
+if(location.hash === '#signin') lpPanel.open();
 document.querySelectorAll('[data-lp-wallet]').forEach(f => f.addEventListener('submit', e => {
   e.preventDefault();
   const inp = f.querySelector('input'), note = f.nextElementSibling && f.nextElementSibling.matches('[data-lp-note]') ? f.nextElementSibling : null;
   const pk = (inp.value || '').trim();
   const say = (msg, bad) => { if(note){ note.textContent = msg; note.classList.toggle('is-error', !!bad); } };
-  if(!B58.test(pk)){ say(pk ? "That doesn't look like a Solana address. It's 32 to 44 letters and numbers." : 'Paste the public address of the wallet you trade with.', true); inp.focus(); return; }
-  say('Read-only. A public address can’t move funds.', false);
+  if(!B58.test(pk)){ say(pk ? "That isn't a Solana address. It's 32 to 44 letters and numbers." : 'Paste the address of the wallet you trade with.', true); inp.focus(); return; }
+  say("Read-only. An address can't move funds.", false);
   document.getElementById('authPubkey').value = pk;
-  const consent = document.getElementById('authConsent'), ready = consent && consent.checked && hcWidget !== null && window.hcaptcha && window.hcaptcha.getResponse(hcWidget);
-  if(ready){ document.getElementById('btnPubkey').click(); return; }
-  const box = document.querySelector('#signin .authbox');
-  (box || document.getElementById('signin')).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center' });
-  setNote(authNote, 'Address ready. Tick the box, solve the captcha, then Show my cards.', 'info');
-  if(box){ box.classList.remove('lp-focus'); void box.offsetWidth; box.classList.add('lp-focus'); }
+  const consent = document.getElementById('authConsent');
+  if(consent && consent.checked && hcWidget !== null && window.hcaptcha && window.hcaptcha.getResponse(hcWidget)){ document.getElementById('btnPubkey').click(); return; }
+  setNote(authNote, "No wallet app, no signature, can't move funds.", 'info');
+  lpPanel.open();
 }));
-/* landing: sections settle in once as they scroll into view (content stays visible without JS) */
+/* sections settle in once as they scroll into view (content stays visible without JS or with reduced motion) */
 (() => {
-  const els = document.querySelectorAll('#landing .lp-reveal'); if(!els.length || !('IntersectionObserver' in window)) return;
+  const els = document.querySelectorAll('#landing .lp-rv'); if(!els.length || !('IntersectionObserver' in window)) return;
   if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   document.documentElement.classList.add('lp-anim');
-  const io = new IntersectionObserver(es => es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin:'0px 0px -12% 0px' });
+  const io = new IntersectionObserver(es => es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin:'0px 0px -10% 0px', threshold:0.15 });
   els.forEach(el => io.observe(el));
 })();
+/* the hero card: a real ART card (canvas), animated once. Demo trade, clearly an example. */
+document.addEventListener('DOMContentLoaded', () => {
+  if(document.documentElement.classList.contains('dc-authed') || !window.dcArtHero) return;
+  const iv = 60000, t0 = Date.UTC(2026, 9, 21, 13, 0), cs = []; let p = 158000, r = 11;
+  const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+  for(let i = 0; i < 84; i++){
+    const drift = i < 20 ? 0.002 : i < 58 ? 0.024 : i < 66 ? 0.004 : -0.012;
+    const o = p, c = p * (1 + drift + (rnd() - 0.5) * 0.05), hi = Math.max(o, c) * (1 + rnd() * 0.025), lo = Math.min(o, c) * (1 - rnd() * 0.025);
+    cs.push([t0 + i * iv, o, hi, lo, c]); p = c;
+  }
+  const chart = { v:2, i:iv, c:cs, w:[t0, t0 + 84 * iv], m:[[t0 + 18 * iv + 20000, 'b', cs[18][4]], [t0 + 61 * iv + 30000, 's', cs[61][4]]] };
+  const roi = (cs[61][4] / cs[18][4] - 1) * 100, inv = 537.64;
+  window.dcArtHero(document.getElementById('lpHeroCard'), { ticker:'ZAPP', pnl: inv * roi / 100, roi, entryMc: cs[18][4], exitMc: cs[61][4], holdTime: 43 * 60 + 6,
+    timestamp: t0 + 61 * iv, tradeId: 1, id:'demo', source:'wallet', image:null, chart }, { pick:'perseus', tone:'natural', big:'pnl', ink:'white', chart:true, stats:true, coin:false, credit:true });
+});
 
 async function reload(){
   idCounter = 0;
