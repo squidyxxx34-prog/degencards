@@ -9,7 +9,6 @@ const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, story:{ w:1080, h:1
 const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
 const GREEN = '#3DFFA0', RED = '#FF5C6C', CANDLE_UP = '#18C964', CANDLE_DN = '#FF3B4E';
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
-const VIDEO_MS = 6200;
 /* the user's @username on shared images / videos (set by app.js once the profile is loaded; can be turned off in the share sheet) */
 let SHOW_NAME = (() => { try{ return localStorage.getItem('dc_share_name') !== '0'; }catch(e){ return true; } })();
 const handle = () => { const n = window.dcUser && window.dcUser.username; return SHOW_NAME && typeof n === 'string' && /^[a-z0-9_]{3,20}$/.test(n) ? '@' + n : ''; };
@@ -720,323 +719,14 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   const intro = fa(0, 0.04); if(!opt.inner && intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
 }
-/* ---------- CARD layout options (simplify the card, Axiom-like): saved on this device ---------- */
-const CO_KEY = 'dc_card_opts';
-const CO_DEF = { layout:'full', coin:true, roi:true, chart:true, stats:true, ach:true, badge:true };
-const CO_SHOW = [['coin','Coin logo'],['roi','ROI pill'],['chart','Chart'],['stats','Stats'],['ach','Achievements'],['badge','Rarity & grade']];
-const CO_LAYOUTS = { full:{ coin:true, roi:true, chart:true, stats:true, ach:true, badge:true }, clean:{ coin:true, roi:true, chart:true, stats:true, ach:false, badge:false }, minimal:{ coin:true, roi:true, chart:false, stats:true, ach:false, badge:false } };
-let CO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(CO_KEY) || '{}') || {}; }catch(e){} const o = { ...CO_DEF };
-  if(CO_LAYOUTS[v.layout]) o.layout = v.layout; for(const [k] of CO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k]; return o; })();
 /* static cards: no animation at all (image and video show the finished card) */
 let STATIC = (() => { try{ return localStorage.getItem('dc_share_static') === '1'; }catch(e){ return false; } })();
-
-/* ---------- one frame; p = animation progress 0..1 (1 = final still) ---------- */
-function drawFrame(ctx, W, H, t, meta, p, opt){
-  const co = { ...CO_SAVED, ...(opt.co || {}) }, flat = co.layout === 'minimal';
-  const win = t.pnl >= 0, main = win ? GREEN : RED, rar = RARITY_HEX[meta.rarity] || '#ADADB8';
-  const story = H / W > 1.5, u = W / 1080, inner = !!opt.inner;      // u = unit scale; 9:16 = full-size card, as before
-  ctx.save();
-  if(!inner) ctx.clearRect(0,0,W,H);
-
-  // cinematic intro: fade from black + slow push-in
-  const intro = easeOut(seg(p, 0, 0.05));
-  const zoom = 1.06 - 0.06 * easeOut(seg(p, 0, 0.5));
-  const ownBg = !inner && bgReady();
-  if(ownBg) drawBg(ctx, W, H);
-  ctx.translate(W/2, H/2); ctx.scale(zoom, zoom); ctx.translate(-W/2, -H/2);
-
-  if(!inner && !ownBg){ ctx.fillStyle = '#050507'; ctx.fillRect(-W, -H, W*3, H*3); }
-  // background glows (rarity + result)
-  if(!inner && !ownBg && !flat){
-  let g = ctx.createRadialGradient(W*0.2, H*0.12, 0, W*0.2, H*0.12, W*1.0);
-  g.addColorStop(0, hexA(rar, 0.30)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  g = ctx.createRadialGradient(W*0.85, H*0.62, 0, W*0.85, H*0.62, W*0.95);
-  g.addColorStop(0, hexA(main, 0.20)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  // terminal grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.035)'; ctx.lineWidth = 1;
-  for(let x=0; x<W; x+=60*u){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for(let y=0; y<H; y+=60*u){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  }
-
-  // card frame
-  const M = 56*u, cx = M, cy = story ? 150*u : M, cw = W - 2*M, chh = H - cy - (story ? 190*u : M);
-  ctx.save();
-  rrect(ctx, cx, cy, cw, chh, 44*u);
-  ctx.fillStyle = 'rgba(14,14,20,0.82)'; ctx.fill();
-  ctx.lineWidth = (flat ? 2 : 4)*u; ctx.strokeStyle = flat ? 'rgba(255,255,255,0.14)' : hexA(main, 0.55); ctx.shadowColor = hexA(main, flat ? 0 : 0.6); ctx.shadowBlur = flat ? 0 : 40*u; ctx.stroke();
-  ctx.restore();
-
-  const P = cx + 60*u, R = cx + cw - 60*u, midX = W/2;
-  let y = cy + 96*u;
-
-  // header: brand + rarity / grade
-  const a1 = easeOut(seg(p, 0.02, 0.1));
-  ctx.globalAlpha = a1;
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.font = `900 ${40*u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', P, y);
-  const dw = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', P + dw, y);
-  ctx.font = `600 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.fillText('#' + String(t.tradeId).padStart(4,'0') + (t.source==='wallet' ? '  ·  ON-CHAIN' : ''), P, y + 44*u);
-  // grade box
-  if(co.badge){
-  const gs = 92*u, gx = R - gs, gy = y - 66*u;
-  rrect(ctx, gx, gy, gs, gs, 22*u); ctx.fillStyle = hexA(rar, 0.14); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = rar; ctx.stroke();
-  ctx.textAlign = 'center'; ctx.fillStyle = rar; ctx.font = `900 ${56*u}px ${SANS}`; ctx.fillText(meta.grade, gx + gs/2, gy + gs/2 + 20*u);
-  // rarity pill
-  ctx.font = `800 ${24*u}px ${SANS}`; const rt = meta.rarity.toUpperCase(), rw = ctx.measureText(rt).width + 40*u;
-  rrect(ctx, gx - rw - 18*u, gy + gs/2 - 24*u, rw, 48*u, 24*u); ctx.fillStyle = hexA(rar, 0.16); ctx.fill();
-  ctx.fillStyle = rar; ctx.fillText(rt, gx - rw/2 - 18*u, gy + gs/2 + 9*u);
-  }
-  ctx.globalAlpha = 1;
-
-  // coin image (as-is, rounded square) + ticker; the space it takes is given back by the chart below
-  const img = t.image ? IMG_CACHE.get(t.image) : null;
-  const hasImg = co.coin && !!(img && img.complete && img.naturalWidth);
-  let extra = 0;
-  // hidden blocks give their room back: the rest of the card is re-centered
-  const achList = meta.achievements.slice(0, story ? 3 : 2).map(a => a.name);
-  const extra0 = hasImg ? (story ? 170 : 128)*u + 132*u - (story ? 230 : 175)*u : 0;
-  const freed = (co.chart ? 0 : (story ? 110 : 70)*u + (story ? 520 : 330)*u - extra0) + (co.stats ? 0 : (story ? 120 : 92)*u)
-    + (co.ach || !achList.length ? 0 : (story ? 110 : 88)*u) + (!opt.hideUsd && !co.roi ? 88*u : 0);
-  ctx.save(); ctx.translate(0, freed / 2);
-  if(hasImg){
-    const s = (story ? 170 : 128)*u, ix = midX - s/2, iy = y + 28*u;
-    const k = easeOutBack(seg(p, 0.02, 0.14));
-    ctx.save(); ctx.globalAlpha = clamp01(k);
-    ctx.translate(midX, iy + s/2); ctx.scale(k, k); ctx.translate(-midX, -(iy + s/2));
-    ctx.shadowColor = hexA(main, 0.5); ctx.shadowBlur = 40*u;
-    rrect(ctx, ix, iy, s, s, s*0.26); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.shadowBlur = 0;
-    ctx.save(); rrect(ctx, ix, iy, s, s, s*0.26); ctx.clip();
-    const r = Math.min(s / img.naturalWidth, s / img.naturalHeight), dw = img.naturalWidth*r, dh = img.naturalHeight*r;   // contain: never cropped
-    ctx.drawImage(img, ix + (s-dw)/2, iy + (s-dh)/2, dw, dh);
-    ctx.restore();
-    rrect(ctx, ix, iy, s, s, s*0.26); ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.stroke();
-    ctx.restore();
-    const tickerY = iy + s + 104*u;
-    extra = tickerY - (y + (story ? 230 : 175)*u);
-    y = tickerY;
-  } else y += story ? 230*u : 175*u;
-  const a2 = easeOut(seg(p, 0.03, 0.13));
-  ctx.globalAlpha = a2; ctx.textAlign = 'center';
-  const tick = tk(t.ticker);
-  fitFont(ctx, tick, 900, SANS, 110*u, cw - 120*u);
-  ctx.fillStyle = '#FFFFFF'; ctx.shadowColor = 'rgba(255,255,255,0.25)'; ctx.shadowBlur = 30*u;
-  ctx.fillText(tick, midX, y + (1-a2)*30*u); ctx.shadowBlur = 0;
-
-  // PnL (count-up) + ROI
-  y += story ? 200*u : 165*u;
-  const cnt = easeOut(seg(p, 0.06, 0.5));
-  const pnlNow = t.pnl * cnt, roiNow = t.roi * cnt;
-  const big = opt.hideUsd ? fmt.pct(roiNow) : fmt.usd(pnlNow);
-  ctx.globalAlpha = clamp01(seg(p, 0.05, 0.1));
-  fitFont(ctx, opt.hideUsd ? fmt.pct(t.roi) : fmt.usd(t.pnl), 800, MONO, (story ? 190 : 170)*u, cw - 120*u);
-  ctx.fillStyle = main; ctx.shadowColor = hexA(main, 0.75); ctx.shadowBlur = flat ? 0 : 60*u;
-  ctx.fillText(big, midX, y); ctx.shadowBlur = 0;
-  if(!opt.hideUsd && co.roi){
-    y += 88*u;
-    ctx.font = `800 ${50*u}px ${MONO}`; const rtx = fmt.pct(roiNow), rwid = ctx.measureText(fmt.pct(t.roi)).width + 56*u;
-    rrect(ctx, midX - rwid/2, y - 48*u, rwid, 68*u, 34*u); ctx.fillStyle = hexA(main, 0.14); ctx.fill();
-    ctx.fillStyle = main; ctx.fillText(rtx, midX, y + 3*u);
-  }
-  ctx.globalAlpha = 1;
-
-  // chart panel
-  if(co.chart){
-  y += story ? 110*u : 70*u;
-  const chH = (story ? 520*u : 330*u) - extra, chX = P, chW = R - P;
-  const a3 = easeOut(seg(p, 0.12, 0.24));
-  ctx.globalAlpha = a3;
-  rrect(ctx, chX, y, chW, chH, 26*u); ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
-  ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.stroke();
-  drawChart(ctx, t, chX + 26*u, y + 70*u, chW - 52*u, chH - 100*u, p, u, opt);
-  ctx.globalAlpha = 1;
-  y += chH;
-  }
-
-  // stats
-  if(co.stats){
-  y += story ? 120*u : 92*u;
-  const a4 = easeOut(seg(p, 0.5, 0.64));
-  ctx.globalAlpha = a4;
-  const stats = [['ENTRY', mcShort(t.entryMc)], ['EXIT', mcShort(t.exitMc)], ['HOLD', fmt.hold(t.holdTime)]];
-  const colW = (R - P) / 3;
-  stats.forEach(([l, v], i) => {
-    const x = P + colW*i + colW/2;
-    ctx.textAlign = 'center';
-    ctx.font = `700 ${24*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillText(l, x, y - 44*u + (1-a4)*20*u);
-    ctx.font = `800 ${46*u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(v, x, y + 8*u + (1-a4)*20*u);
-  });
-  }
-  // achievements
-  const ach = achList;
-  if(co.ach && ach.length){
-    y += story ? 110*u : 88*u;
-    ctx.font = `800 ${26*u}px ${SANS}`;
-    const pads = ach.map(n => ctx.measureText(n).width + 44*u), tot = pads.reduce((s,w)=>s+w,0) + 16*u*(ach.length-1);
-    let x = midX - tot/2;
-    ach.forEach((n, i) => {
-      const k = easeOutBack(seg(p, 0.6 + i*0.04, 0.72 + i*0.04));
-      ctx.save(); ctx.globalAlpha = clamp01(k);
-      ctx.translate(x + pads[i]/2, y); ctx.scale(k, k);
-      rrect(ctx, -pads[i]/2, -34*u, pads[i], 52*u, 26*u); ctx.fillStyle = 'rgba(255,211,92,0.12)'; ctx.fill();
-      ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(255,211,92,0.5)'; ctx.stroke();
-      ctx.fillStyle = '#FFD35C'; ctx.textAlign = 'center'; ctx.fillText(n, 0, 1*u);
-      ctx.restore();
-      x += pads[i] + 16*u;
-    });
-  }
-  ctx.globalAlpha = 1;
-  ctx.restore();                                                      // end of the re-centered block
-
-  // footer (inside card)
-  const a5 = easeOut(seg(p, 0.68, 0.8));
-  ctx.globalAlpha = a5; ctx.textAlign = 'left';
-  { const hn = handle(), fy = cy + chh - 48*u; let x = P;
-    if(hn){ ctx.font = `700 ${24*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(hn, x, fy); x += ctx.measureText(hn).width; }
-    ctx.font = `600 ${24*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText((hn ? '  ·  ' : '') + fmt.date(t.timestamp).toUpperCase(), x, fy); }
-  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = `700 ${24*u}px ${SANS}`;
-  ctx.fillText('degencards.vercel.app', R, cy + chh - 48*u);
-  ctx.globalAlpha = 1;
-
-  // story extras: big CTA under the card
-  if(story){
-    ctx.globalAlpha = a5; ctx.textAlign = 'center';
-    ctx.font = `800 ${38*u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', midX, H - 100*u);
-    ctx.font = `600 ${28*u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', midX, H - 56*u);
-    ctx.globalAlpha = 1;
-  }
-
-  // light sweep across the card at the end
-  const sw = seg(p, 0.84, 0.97);
-  if(sw > 0 && sw < 1){
-    ctx.save(); rrect(ctx, cx, cy, cw, chh, 44*u); ctx.clip();
-    const sx = cx - cw*0.5 + (cw*2) * easeOut(sw);
-    const lg = ctx.createLinearGradient(sx - 160*u, 0, sx + 160*u, 0);
-    lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.12)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = lg; ctx.transform(1,0,-0.35,1,0,0); ctx.fillRect(sx - 400*u, 0, 800*u, H);
-    ctx.restore();
-  }
-
-  // grain + vignette + fade
-  if(inner){ ctx.restore(); return; }
-  ctx.setTransform(1,0,0,1,0,0);
-  if(!opt.video && !ownBg){ ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0,0,W,H); }
-  const v = ctx.createRadialGradient(W/2, H/2, W*0.45, W/2, H/2, H*0.75);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)'); ctx.fillStyle = v; ctx.fillRect(0,0,W,H);
-  if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1-intro})`; ctx.fillRect(0,0,W,H); }
-  ctx.restore();
-}
-
-/* ---------- candles (progressive) + B / S pinned on top with dashed drop lines ---------- */
-function drawChart(ctx, t, x, y, w, h, p, u, opt){
-  const ch = t.chart && t.chart.v === 2 ? t.chart : null;
-  const topZone = 70*u;
-  const dotR = 22*u;                                                   // fill rounds: one fixed, readable size                                              // markers row lives above the chart area (y - 70u)
-  const drawP = easeOut(seg(p, 0.16, 0.66));
-  let X, Y, marks;
-  if(ch){
-    const cs = ch.c, iv = ch.i;
-    const x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
-    const ys = false ? [...ch.pts.map(q=>q[1]), ...(ch.m||[]).map(m=>m[2]).filter(v=>v>0)] : [...cs.map(c=>c[3]), ...cs.map(c=>c[2])];
-    let y0 = Math.min(...ys), y1 = Math.max(...ys);
-    if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
-    const pad = (y1-y0)*0.08; y0 -= pad; y1 += pad;
-    X = v => x + ((v - x0)/(x1 - x0)) * w; Y = v => y + (1 - (v - y0)/(y1 - y0)) * h;
-    const n =  Math.ceil(cs.length * drawP), bw = Math.max(2*u, ((iv/(x1-x0)) * w) * 0.9);
-    if(false){                                   // sparse data: a price line through the real points, drawn progressively
-      const k = Math.max(1, Math.ceil(ch.pts.length * drawP));
-      ctx.strokeStyle = ch.pts[ch.pts.length-1][1] >= ch.pts[0][1] ? CANDLE_UP : CANDLE_DN; ctx.lineWidth = 5*u; ctx.lineJoin = 'round';
-      ctx.beginPath(); ch.pts.slice(0, k).forEach((q,i)=>{ i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1])); }); ctx.stroke();
-    }
-    for(let i=0;i<n;i++){
-      const [ts,o,hi,lo,c] = cs[i], up = c >= o, col = up ? CANDLE_UP : CANDLE_DN, cxp = X(ts + iv/2);
-      ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5*u, bw*0.14);
-      ctx.beginPath(); ctx.moveTo(cxp, Y(hi)); ctx.lineTo(cxp, Y(lo)); ctx.stroke();
-      const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
-      ctx.fillStyle = col; ctx.fillRect(cxp - bw/2, top, bw, Math.max(2*u, bot - top));
-    }
-    const at = ts => { const c = cs.find(c=>ts < c[0]+iv) || cs[cs.length-1]; return (c[2]+c[3])/2; };
-    marks = (ch.m || []).map(m => [m[0], m[1], m[2] > 0 ? m[2] : at(m[0])]);
-    // MC scale
-    ctx.font = `600 ${22*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.textAlign = 'left';
-    ctx.fillText(mcShort(y1 - pad), x, y + 4*u); ctx.fillText(mcShort(Math.max(0, y0 + pad)), x, y + h);
-  } else {
-    const end = t.timestamp, start = end - (t.holdTime||0)*1000, spanT = Math.max(1000, end - start);
-    const x0 = start - spanT*0.15, x1 = end + spanT*0.15;
-    let y0 = Math.min(t.entryMc, t.exitMc), y1 = Math.max(t.entryMc, t.exitMc); if(y1 - y0 < 1e-9){ y0 = y0*0.9 - 1; y1 = y1*1.1 + 1; }
-    const pad = (y1-y0)*0.25; y0 -= pad; y1 += pad;
-    X = v => x + ((v - x0)/(x1 - x0)) * w; Y = v => y + (1 - (v - y0)/(y1 - y0)) * h;
-    ctx.strokeStyle = t.pnl >= 0 ? GREEN : RED; ctx.lineWidth = 5*u; ctx.setLineDash([14*u, 12*u]);
-    ctx.beginPath(); ctx.moveTo(X(start), Y(t.entryMc)); ctx.lineTo(X(start) + (X(end)-X(start))*drawP, Y(t.entryMc) + (Y(t.exitMc)-Y(t.entryMc))*drawP); ctx.stroke(); ctx.setLineDash([]);
-    marks = [[start,'b',t.entryMc],[end,'s',t.exitMc]];
-  }
-  // markers. Fills of the same side close in time = ONE group (one top marker "B x5", one round on the best fill,
-  // a thin line through the group's fills). Everything is clamped inside the chart box: nothing can leave the card.
-  const mr = 28*u, my = y - topZone + mr - 30*u, dr = dotR;
-  const raw = marks.map(([mt,k,v]) => ({ k, x: Math.min(x+w, Math.max(x, X(mt))), y: Math.min(y+h, Math.max(y, Y(v))) }))
-    .sort((a,b)=>a.x-b.x || (a.k==='b'?-1:1))
-    // fills stacked on the same x (e.g. several buys before the first candle, clamped to the edge) collapse into one
-    // point, the best of them, that still counts every fill
-    .reduce((acc, m) => { const o = acc.find(q => q.k === m.k && Math.abs(q.x - m.x) < 2*u);
-      if(!o){ acc.push({ ...m, w: 1 }); return acc; } o.w++; if(m.k === 'b' ? m.y > o.y : m.y < o.y){ o.y = m.y; } return acc; }, []);
-  const groups = [], near = Math.max(2*dr + 8*u, w * 0.07);
-  raw.forEach(m => { const g = groups[groups.length-1];
-    if(g && g.k === m.k && m.x - g.items[g.items.length-1].x < near) g.items.push(m); else groups.push({ k: m.k, items: [m] }); });
-  // still too many groups for the width: merge neighbours of the same side until they fit
-  const maxG = Math.max(2, Math.floor(w / (2*mr + 14*u)));
-  while(groups.length > maxG){ let bi = -1, bd = Infinity;
-    for(let i = 1; i < groups.length; i++) if(groups[i].k === groups[i-1].k){ const d = groups[i].items[0].x - groups[i-1].items[groups[i-1].items.length-1].x; if(d < bd){ bd = d; bi = i; } }
-    if(bi < 0) break; groups[bi-1].items.push(...groups[bi].items); groups.splice(bi, 1); }
-  groups.forEach(g => { g.n = g.items.reduce((a,m)=>a + (m.w||1), 0);
-    const best = g.k === 's' ? g.items.reduce((a,m)=>m.y < a.y ? m : a) : g.items.reduce((a,m)=>m.y > a.y ? m : a);
-    g.x = best.x; g.y = best.y; g.best = best; g.dx = g.x; g.dy = g.y;
-    g.mw = (g.n > 1 ? 2*mr + 40*u : 2*mr); });
-  // top row: markers as close as possible to their fill time, never overlapping, never outside [x, x+w]
-  const gapM = 10*u; let need = groups.reduce((s,g)=>s + g.mw, 0) + gapM * Math.max(0, groups.length - 1), sc = need > w ? w / need : 1;
-  let cur = x; groups.forEach(g => { const half = g.mw*sc/2; g.mx = Math.max(cur + half, Math.min(x + w - half, g.x)); cur = g.mx + half + gapM*sc; });
-  for(let i = groups.length - 1; i >= 0; i--){ const g = groups[i], half = g.mw*sc/2, lim = i === groups.length - 1 ? x + w - half : groups[i+1].mx - groups[i+1].mw*sc/2 - gapM*sc - half; g.mx = Math.min(g.mx, lim); g.mx = Math.max(x + half, g.mx); }
-  // rounds that would overlap: pushed apart vertically, then clamped inside the chart
-  const minD = 2*dr + 6*u;
-  for(let pass = 0; pass < 8; pass++){ let mv = false;
-    for(let a = 0; a < groups.length; a++) for(let b = a+1; b < groups.length; b++){
-      const P1 = groups[a], Q = groups[b], d = Math.hypot(Q.dx-P1.dx, Q.dy-P1.dy); if(d >= minD) continue;
-      const nd = (minD - d)/2 + 0.5, upM = P1.k==='s' && Q.k!=='s' ? P1 : Q.k==='s' && P1.k!=='s' ? Q : (P1.y <= Q.y ? P1 : Q), dnM = upM === P1 ? Q : P1;
-      upM.dy -= nd; dnM.dy += nd; mv = true; }
-    groups.forEach(g => { g.dy = Math.min(y + h - dr, Math.max(y + dr, g.dy)); g.dx = Math.min(x + w - dr, Math.max(x + dr, g.dx)); });
-    if(!mv) break; }
-  groups.forEach((g, i) => {
-    const k = easeOutBack(seg(p, 0.72 + i*0.05, 0.84 + i*0.05)); if(k <= 0) return;
-    const col = g.k === 'b' ? CANDLE_UP : CANDLE_DN, fc = g.k === 'b' ? '#18C964' : '#FF3B4E';
-    ctx.save(); ctx.globalAlpha = clamp01(k);
-    // the group's fills, joined in time order
-    if(g.n > 1){ ctx.strokeStyle = hexA(fc, 0.55); ctx.lineWidth = 3*u; ctx.beginPath(); g.items.forEach((m,j)=>{ j ? ctx.lineTo(m.x, m.y) : ctx.moveTo(m.x, m.y); }); ctx.stroke();
-      ctx.fillStyle = fc; g.items.forEach(m => { if(m !== g.best){ ctx.beginPath(); ctx.arc(m.x, m.y, 5*u, 0, Math.PI*2); ctx.fill(); } }); }
-    // drop line from the top marker to the round
-    ctx.strokeStyle = col; ctx.lineWidth = 3*u; ctx.setLineDash([10*u, 9*u]);
-    ctx.beginPath(); ctx.moveTo(g.mx, my + mr); ctx.lineTo(g.mx + (g.dx - g.mx)*clamp01(k), my + mr + (g.dy - my - mr)*clamp01(k)); ctx.stroke(); ctx.setLineDash([]);
-    if(k >= 1){
-      if(Math.hypot(g.dx - g.x, g.dy - g.y) > 3*u){ ctx.strokeStyle = fc; ctx.lineWidth = 3*u; ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.dx, g.dy); ctx.stroke();
-        ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(g.x, g.y, 6*u, 0, Math.PI*2); ctx.fill(); }
-      ctx.fillStyle = fc; ctx.beginPath(); ctx.arc(g.dx, g.dy, dr, 0, Math.PI*2); ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = '#0E0E14'; ctx.stroke();
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${dr * 1.1}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.k === 'b' ? 'B' : 'S', g.dx, g.dy + 1*u); ctx.textBaseline = 'alphabetic'; }
-    // top marker (pill with the count when the group has several fills)
-    const ms = Math.min(1, Math.max(sc, 0.6)) * k; ctx.translate(g.mx, my); ctx.scale(ms, ms);
-    ctx.shadowColor = hexA(fc, 0.8); ctx.shadowBlur = 24*u; ctx.fillStyle = col;
-    if(g.n > 1){ const pw = g.mw; rrect(ctx, -pw/2, -mr, pw, 2*mr, mr); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${30*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText((g.k === 'b' ? 'B' : 'S') + '×' + g.n, 0, 2*u); }
-    else { ctx.beginPath(); ctx.arc(0, 0, mr, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${30*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.k === 'b' ? 'B' : 'S', 0, 2*u); }
-    ctx.restore(); ctx.textBaseline = 'alphabetic';
-  });
-}
 
 /* ---------- export ---------- */
 async function fontsReady(){
   try{ await Promise.all([document.fonts.load(`900 40px Outfit`), document.fonts.load(`800 40px 'JetBrains Mono'`), document.fonts.load(`600 20px 'JetBrains Mono'`)]); }catch(e){}
 }
-const drawFor = style => style === 'simple' ? drawSimple : style === 'art' ? drawArt : drawFrame;
+const drawFor = style => style === 'simple' ? drawSimple : drawArt;
 function renderStill(t, meta, fmtKey, opt){
   const F = FORMATS[fmtKey], c = document.createElement('canvas'); c.width = F.w; c.height = F.h;
   drawFor(opt.style)(c.getContext('2d'), F.w, F.h, t, meta, 1, opt);
@@ -1173,7 +863,7 @@ function recordAnim(W, H, total, frameAt, onProgress, audio){
     requestAnimationFrame(tick);
   });
 }
-const animMs = opt => STATIC ? 3000 : opt.style === 'simple' ? SIMPLE_MS : opt.style === 'art' ? ART_MS : VIDEO_MS;
+const animMs = opt => STATIC ? 3000 : opt.style === 'simple' ? SIMPLE_MS : ART_MS;
 /* total length: with a background video, at least one full loop of it (max 15 s) */
 const videoTotal = opt => { const a = animMs(opt); return BG.kind === 'video' && bgReady() && BG.dur ? Math.max(a, Math.min(15000, Math.round(BG.dur * 1000))) : a; };
 async function recordVideo(t, meta, fmtKey, opt, onProgress){
@@ -1286,7 +976,7 @@ async function deliver(blob, name, caption){
 }
 
 /* ---------- share sheet ---------- */
-let state = { t:null, meta:null, fmt:'post', style:(()=>{ try{ const v = localStorage.getItem('dc_share_style'); return ['art','card','simple','replay'].includes(v) ? v : 'art'; }catch(e){ return 'art'; } })(), hideUsd:false, anim:0, busy:false, sound:false, pac:null, quality: (()=>{ try{ return localStorage.getItem('dc_video_q') || '4k'; }catch(e){ return '4k'; } })() };
+let state = { t:null, meta:null, fmt:'post', style:(()=>{ try{ const v = localStorage.getItem('dc_share_style'); return ['art','simple','replay'].includes(v) ? v : 'art'; }catch(e){ return 'art'; } })(), hideUsd:false, anim:0, busy:false, sound:false, pac:null, quality: (()=>{ try{ return localStorage.getItem('dc_video_q') || '4k'; }catch(e){ return '4k'; } })() };
 let lastExport = '';
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){
@@ -1316,7 +1006,7 @@ function playPreviewSound(){
 }
 function syncButtons(){
   const canReplay = !!(window.dcReplay && window.dcReplay.available(state.t));
-  if(!canReplay && state.style === 'replay') state.style = 'card';
+  if(!canReplay && state.style === 'replay') state.style = 'art';
   document.querySelectorAll('[data-share-style]').forEach(b => { b.classList.toggle('on', b.dataset.shareStyle === state.style); b.setAttribute('aria-checked', String(b.dataset.shareStyle === state.style)); if(b.dataset.shareStyle === 'replay'){ b.disabled = !canReplay; b.title = canReplay ? '' : 'Needs the real candles of this trade'; } });
   document.getElementById('shareFmts').hidden = state.style === 'replay';
   document.getElementById('shareReplayNote').hidden = canReplay;
@@ -1325,7 +1015,6 @@ function syncButtons(){
   document.querySelectorAll('[data-share-fmt]').forEach(b => { if(b.dataset.shareFmt === 'wide') b.hidden = !WIDE_OK(state.style); b.classList.toggle('on', b.dataset.shareFmt === curFmt()); });
   syncBg();
   const sbx = document.getElementById('shareSimple'); if(sbx){ sbx.hidden = state.style !== 'simple'; if(!sbx.hidden) renderSimple(); }
-  const cbx = document.getElementById('shareCardOpts'); if(cbx){ cbx.hidden = state.style !== 'card'; if(!cbx.hidden) renderCardOpts(); }
   const abx = document.getElementById('shareArt'); if(abx){ abx.hidden = state.style !== 'art'; if(!abx.hidden) renderArtOpts(); }
   const mo = document.getElementById('shareMotion'); if(mo){ mo.hidden = state.style === 'replay';
     mo.querySelectorAll('[data-share-motion]').forEach(b => { const on = (b.dataset.shareMotion === 'static') === STATIC; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }); }
@@ -1392,17 +1081,6 @@ function renderSimple(){
   const save = () => { try{ localStorage.setItem(SO_KEY, JSON.stringify(SO_SAVED)); }catch(e){} renderSimple(); };
   box.querySelectorAll('[data-sk]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); SO_SAVED = { ...SO_SAVED, [b.dataset.sk]: b.dataset.sv, ...(b.dataset.sk === 'layout' ? SO_LAYOUTS[b.dataset.sv] : {}) }; save(); }));
   box.querySelectorAll('[data-ss]').forEach(b => b.addEventListener('click', () => { SO_SAVED = { ...SO_SAVED, [b.dataset.ss]: !SO_SAVED[b.dataset.ss] }; save(); }));
-}
-/* CARD customization: simplify the card (free) */
-function renderCardOpts(){
-  const box = document.getElementById('shareCardOpts'); if(!box) return;
-  const o = CO_SAVED, L = [['full','Full'],['clean','Clean'],['minimal','Minimal']];
-  box.innerHTML = `<div class="rc-head"><span>Customize</span></div>
-    <div class="rc-group"><div class="rc-label" id="ccl-layout">Style</div><div class="rc-row" role="radiogroup" aria-labelledby="ccl-layout">${L.map(([v, l]) => `<button type="button" class="rc-chip ${o.layout === v ? 'on' : ''}" role="radio" aria-checked="${o.layout === v}" data-cl="${v}">${l}</button>`).join('')}</div></div>
-    <div class="rc-group"><div class="rc-label">Show</div><div class="rc-row">${CO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-cs="${k}">${o[k] ? '\u2713 ' : ''}${l}</button>`).join('')}</div></div>`;
-  const save = () => { try{ localStorage.setItem(CO_KEY, JSON.stringify(CO_SAVED)); }catch(e){} renderCardOpts(); };
-  box.querySelectorAll('[data-cl]').forEach(b => b.addEventListener('click', () => { CO_SAVED = { ...CO_SAVED, layout:b.dataset.cl, ...CO_LAYOUTS[b.dataset.cl] }; save(); }));
-  box.querySelectorAll('[data-cs]').forEach(b => b.addEventListener('click', () => { CO_SAVED = { ...CO_SAVED, [b.dataset.cs]: !CO_SAVED[b.dataset.cs] }; save(); }));
 }
 /* style picker: each style shows a live mini render of THIS trade, so the choice is visual */
 function styleThumbs(){
