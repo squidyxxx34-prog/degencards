@@ -282,3 +282,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Puis une section par tier (Legend → Bronze) : une ligne par badge (nom + description à gauche, date / « N times » ou progression à droite), débloqués d'abord (« Latest, » sur le dernier), verrouillés grisés ; la progression d'un verrouillé = le filet sous sa ligne qui se remplit. 2 colonnes dès 900 px.
 - Couleur : palette blanc / violet / gris. Violet (--purple) seulement pour les barres de progression, les filets de progression, « Next up · tier », le %, les compteurs débloqués, « Latest », l'XP et le survol des noms.
 - Entrée < 1 s à chaque ouverture (barres qui se tracent, compteur, lignes qui se posent), coupée si reduced motion.
+
+## Page Stats (2026-10-22)
+- Même langage que Achievements : une police (chiffres tabulaires), blanc / violet / gris, pas d'icônes, pas de tuiles en dégradé, pas de texte en police code espacée.
+- Objectif du mois : « October goal » (violet), gros montant + « of $5,000 », barre violette fine (remplace l'anneau), « $X to go in N days, about $Y a day » + %, une phrase du mois (« 130 trades this month, 44% wins, best day +$1435. »), champ « Monthly target » avec $ + bouton Save blanc. Le % ne montre 100 % que si l'objectif est vraiment atteint.
+- Calendrier : cases plus calmes (teinte verte / rouge 14-60 %), aujourd'hui cerclé violet, jours futurs en contour, montants cachés sur téléphone.
+- Overview : liste label / valeur (2 colonnes dès 900 px) ; stats PRO verrouillées = lignes grisées avec « PRO » violet, tap = paywall. `dcProStats()` inchangé (le champ `i` est ignoré).

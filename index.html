@@ -322,35 +322,23 @@
     </section>
 
     <div class="st-top">
-      <div class="goal-card st-goal">
-        <div class="goal-top">
-          <div>
-            <div class="goal-label">MONTHLY GOAL · <span id="goalMonth"></span></div>
-            <div class="goal-amounts"><span id="goalCurrent">$0</span></div>
-            <div class="hm-goal-of" id="goalTarget">—</div>
-          </div>
-          <div class="goal-ring-wrap">
-            <svg viewBox="0 0 80 80" width="72" height="72">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
-              <circle id="goalRing" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGrad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
-              <defs><linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B084FF"/><stop offset="1" stop-color="#F5C542"/></linearGradient></defs>
-            </svg>
-            <div class="goal-pct" id="goalPct">0%</div>
-          </div>
+      <section class="sg" id="stGoal">
+        <div class="sg-k"><span id="goalMonth"></span> goal</div>
+        <div class="sg-big"><span id="goalCurrent">$0</span><span class="sg-of" id="goalTarget">—</span></div>
+        <div class="sg-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Monthly goal progress" id="goalTrack"><i id="goalBar" style="--w:0%"></i></div>
+        <div class="sg-foot"><span id="goalPace"></span><b id="goalPct">0%</b></div>
+        <p class="sg-month" id="goalMonthStats"></p>
+        <div class="sg-edit">
+          <label for="goalInput">Monthly target</label>
+          <div class="sg-edit-row"><span class="sg-in"><i aria-hidden="true">$</i><input id="goalInput" type="number" min="0" max="1000000000" step="any" inputmode="decimal" placeholder="500"></span><button type="button" id="btnSaveGoal">Save</button></div>
         </div>
-        <div class="st-pace" id="goalPace"></div>
-        <div class="st-month" id="goalMonthStats"></div>
-        <div class="goal-editrow">
-          <input id="goalInput" type="number" min="0" max="1000000000" step="any" placeholder="Set a $ profit target, e.g. 500" aria-label="Monthly profit target in dollars">
-          <button id="btnSaveGoal">SAVE GOAL</button>
-        </div>
-      </div>
-      <div class="hm-panel st-cal" id="statsCal"></div>
+      </section>
+      <section class="st-cal" id="statsCal"></section>
     </div>
 
-    <div class="sectionhead"><h2>OVERVIEW</h2></div>
-    <div class="detail-stats stats-3 st-grid" id="statsGrid"></div>
-    <button type="button" class="pro-cta" id="statsPro" hidden><span class="pro-tag">PRO</span> Unlock full stats: profit factor, streaks, drawdown, best hour, top coin…</button>
+    <h2 class="aw-sec-h st-sec">Overview</h2>
+    <div class="st-list" id="statsGrid"></div>
+    <button type="button" class="pro-cta st-pro" id="statsPro" hidden>Unlock the full stats with <b>PRO</b>: profit factor, streaks, drawdown, best hour, top coin.</button>
   </div>
 
   <div id="ranksView" style="display:none;">

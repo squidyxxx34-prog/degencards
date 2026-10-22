@@ -1055,11 +1055,11 @@ function renderStatsView(){
       {i:"skull", l:"Biggest loss", v: fmt.usd(trades.length? Math.min(...trades.map(t=>t.pnl)):0)});
   }
   const tone = v => { const t = String(v); return /^\+/.test(t) ? 'pos' : /^-\$|^-\d/.test(t) ? 'neg' : ''; };
-  const tile = r => `<div class="st-tile"><span class="st-ic">${icon(r.i,18)}</span><div class="l">${r.l}</div><div class="v ${tone(r.v)}">${r.v}</div></div>`;
+  const tile = r => `<div class="st-row"><span>${r.l}</span><b class="${tone(r.v)}">${r.v}</b></div>`;
   const locked = free ? ['Best ROI','Biggest loss','Profit factor','Avg win / loss','Win streaks','Max drawdown','Avg hold','Best hour','Top coin']
-    .map(l => `<button type="button" class="st-tile stat-locked" data-pro-open><span class="pro-tag">PRO</span><div class="l">${l}</div><div class="v">\u2022\u2022\u2022</div></button>`).join('') : '';
+    .map(l => `<button type="button" class="st-row locked" data-pro-open><span>${l}</span><b><em>PRO</em></b></button>`).join('') : '';
   document.getElementById('statsLead').innerHTML = !trades.length ? 'Your stats fill in as your trades come in.'
-    : `<b class="${totalPnl>=0?'pos':'neg'}">${usdBig(totalPnl)}</b> all time over ${trades.length} trades · ${Math.round(wins.length/trades.length*100)}% wins`;
+    : `<b class="${totalPnl>=0?'pos':'neg'}">${usdBig(totalPnl)}</b> all time, over ${trades.length} trades with ${Math.round(wins.length/trades.length*100)}% wins.`;
   renderStatsCal();
   document.getElementById('statsGrid').innerHTML = rows.map(tile).join('') + locked;
   document.querySelectorAll('#statsGrid [data-pro-open]').forEach(b=>b.addEventListener('click', ()=>window.dcPro.open()));
@@ -1077,11 +1077,11 @@ function renderStatsCal(){
   const max = Math.max(1, ...per.filter(Boolean).map(x=>Math.abs(x.p)));
   const active = per.filter(Boolean), green = active.filter(x=>x.p>=0).length;
   const cells = Array.from({length:lead}, ()=>'<i class="cal-pad"></i>').join('') + Array.from({length:days}, (_,i)=>{
-    const d = i+1, x = per[d], fut = d > now.getDate(), a = x ? (0.18 + 0.72*Math.min(1, Math.abs(x.p)/max)).toFixed(2) : 0;
+    const d = i+1, x = per[d], fut = d > now.getDate(), a = x ? (0.14 + 0.46*Math.min(1, Math.abs(x.p)/max)).toFixed(2) : 0;
     const bg = x ? (x.p>=0 ? `rgba(61,255,160,${a})` : `rgba(255,92,108,${a})`) : '';
     return `<span class="cal-d${fut?' fut':''}${d===now.getDate()?' today':''}${x ? (x.p>=0?' up':' dn') : ''}" style="${bg?`background:${bg}`:''}" title="${x ? `${new Date(y,m,d).toLocaleDateString('en-US',{month:'short',day:'numeric'})}: ${fmt.usd(x.p)} · ${x.n} trade${x.n>1?'s':''}` : ''}"><b>${d}</b>${x ? `<em>${usdShort(x.p)}</em>` : ''}</span>`;
   }).join('');
-  box.innerHTML = `<div class="cal-head"><div><div class="hm-label">THIS MONTH, DAY BY DAY</div><b>${active.length ? `${green} green day${green!==1?'s':''} · ${active.length-green} red` : 'No trade this month yet'}</b></div></div>
+  box.innerHTML = `<div class="sg-k">This month</div><div class="cal-sum">${active.length ? `<b>${green}</b> green day${green!==1?'s':''}, <b>${active.length-green}</b> red` : 'No trade this month yet'}</div>
     <div class="cal-wk">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="cal-grid">${cells}</div>`;
 }
 function renderGoal(){
@@ -1091,20 +1091,21 @@ function renderGoal(){
   const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
   const offset = circumference*(1-pct);
   document.getElementById('goalCurrent').textContent = usdBig(totalPnl);
-  document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget.toLocaleString('en-US') : 'No goal set yet';
-  document.getElementById('goalMonth').textContent = new Date().toLocaleDateString('en-US',{month:'long'}).toUpperCase();
+  document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget.toLocaleString('en-US') : 'no goal set';
+  document.getElementById('goalMonth').textContent = new Date().toLocaleDateString('en-US',{month:'long'});
   { const now = new Date(), end = new Date(now.getFullYear(), now.getMonth()+1, 0), left = end.getDate() - now.getDate() + 1, need = goalTarget - totalPnl;
-    document.getElementById('goalPace').innerHTML = !(goalTarget>0) ? 'Set a target below: the ring tracks this month\'s P&amp;L.'
-      : need <= 0 ? `<b class="pos">Goal reached</b> with ${left} day${left>1?'s':''} to spare. Raise the bar?`
-      : `<b>${'$'+need.toLocaleString('en-US',{maximumFractionDigits:0})}</b> to go · ${left} day${left>1?'s':''} left · about <b>${'$'+(need/left).toLocaleString('en-US',{maximumFractionDigits:0})}/day</b>`; }
+    document.getElementById('goalPace').innerHTML = !(goalTarget>0) ? 'Set a target below to track this month.'
+      : need <= 0 ? `Reached, with ${left} day${left>1?'s':''} to spare.`
+      : `<b>${'$'+need.toLocaleString('en-US',{maximumFractionDigits:0})}</b> to go in ${left} day${left>1?'s':''}, about <b>${'$'+(need/left).toLocaleString('en-US',{maximumFractionDigits:0})}</b> a day`; }
   { const mt = trades.filter(t=>t.timestamp >= m0.getTime()), mw = mt.filter(t=>t.pnl>0).length, byDay = {};
     mt.forEach(t=>{ const k = new Date(t.timestamp).getDate(); byDay[k] = (byDay[k]||0) + t.pnl; });
     const bestDay = Object.values(byDay).length ? Math.max(...Object.values(byDay)) : null;
     const box = document.getElementById('goalMonthStats');
-    if(box) box.innerHTML = [['TRADES', mt.length], ['WIN RATE', mt.length ? Math.round(mw/mt.length*100)+'%' : '—'], ['BEST DAY', bestDay!=null ? usdShort(bestDay) : '—']]
-      .map(([l,v])=>`<div><span>${l}</span><b class="${l==='BEST DAY' && bestDay!=null ? (bestDay>=0?'pos':'neg') : ''}">${v}</b></div>`).join(''); }
-  document.getElementById('goalPct').textContent = Math.round(pct*100)+'%';
-  document.getElementById('goalRing').style.strokeDashoffset = offset;
+    if(box) box.innerHTML = !mt.length ? 'No trade closed this month yet.'
+      : `<b>${mt.length}</b> trade${mt.length>1?'s':''} this month, <b>${Math.round(mw/mt.length*100)}%</b> wins, best day <b class="${bestDay>=0?'pos':'neg'}">${usdShort(bestDay)}</b>.`; }
+  document.getElementById('goalPct').textContent = goalTarget>0 ? (pct >= 1 ? 100 : Math.min(99, Math.floor(pct*100)))+'%' : '';
+  document.getElementById('goalBar').style.setProperty('--w', (pct*100).toFixed(1)+'%');
+  document.getElementById('goalTrack').setAttribute('aria-valuenow', String(Math.round(pct*100)));
   document.getElementById('goalInput').value = goalTarget>0 ? goalTarget : '';
   document.getElementById('goalCurrentHome').textContent = usdBig(totalPnl);
   document.getElementById('goalTargetHome').textContent = goalTarget>0 ? `of $${goalTarget.toLocaleString('en-US')} · ${new Date().toLocaleDateString('en-US',{month:'long'})}` : 'No goal set yet';
