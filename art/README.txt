@@ -1,6 +1,6 @@
 Artworks used by the ART share style. All public domain, from museum Open Access programs (CC0 1.0):
 The Metropolitan Museum of Art (metmuseum.org) and The Cleveland Museum of Art (clevelandart.org).
-Cropped and resized for DEGENCARDS; sculpture photos were re-lit darker (radial falloff + contrast).
+Cropped and resized for DEGENCARDS; sculptures were cut out of their studio backdrop (transparent WebP) and placed on a flat backdrop at render time.
 
 perseus       sculpt Perseus with the Head of Medusa — Antonio Canova, 1806
 victory       sculpt Victory with Cornucopia — Roman, c. 50 CE

@@ -504,46 +504,22 @@ function focalDraw(ctx, src, iw, ih, W, H, fx, fy, zoom){
   try{ ctx.drawImage(src, x, y, dw, dh); }catch(e){}
   ctx.restore();
 }
-/* a statue is never cropped: the whole photo, contained; the empty sides (or top / bottom) are the photo's own backdrop,
-   continued from its edge pixels (smoothed), so it reads as one wider photo. A short fade hides the seam. */
-const ART_FIT = document.createElement('canvas'), ART_EDGE = document.createElement('canvas');
-function edgeFill(ctx, src, sx, sy, sw, sh, dx, dy, dw, dh, vertical){
-  // average the edge strip into a small smooth ramp, then stretch it over the empty area
-  const n = Math.max(8, Math.round((vertical ? dh : dw) / 10));
-  if(vertical){ if(ART_EDGE.width !== 1 || ART_EDGE.height !== n){ ART_EDGE.width = 1; ART_EDGE.height = n; } }
-  else if(ART_EDGE.width !== n || ART_EDGE.height !== 1){ ART_EDGE.width = n; ART_EDGE.height = 1; }
-  const e = ART_EDGE.getContext('2d'); e.imageSmoothingEnabled = true; e.imageSmoothingQuality = 'high'; e.clearRect(0, 0, ART_EDGE.width, ART_EDGE.height);
-  try{ e.drawImage(src, sx, sy, sw, sh, 0, 0, ART_EDGE.width, ART_EDGE.height); ctx.drawImage(ART_EDGE, dx, dy, dw, dh); }catch(err){}
+/* sculptures are cut out (transparent background) and placed whole on one flat backdrop: the colour behind the statue is
+   exactly the colour around it, in every format. The backdrop follows the tone (noir / marble / gold). */
+const SCULPT_BG = [14, 13, 12];
+function gradePx(rgb, tone){
+  let [r, g, b] = rgb, v = r * 0.3 + g * 0.59 + b * 0.11;
+  if(tone === 'noir'){ v = Math.max(0, Math.min(255, (v - 128) * 1.22 + 120)); return [v * 1.02, v, v * 0.96]; }
+  if(tone === 'marble'){ v = 26 + v * 0.84; v = Math.max(0, Math.min(255, (v - 128) * 0.96 + 134)); return [v * 0.96, v * 0.985, Math.min(255, v * 1.04)]; }
+  if(tone === 'gold'){ v = Math.max(0, Math.min(255, (v - 128) * 1.1 + 126)) | 0; return [GOLD_RAMP[v*3], GOLD_RAMP[v*3+1], GOLD_RAMP[v*3+2]]; }
+  return [r, g, b];
 }
-function fitWhole(ctx, src, iw, ih, W, H, a, zoom){
-  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  const z = 1 + (zoom - 1) * 0.5, r = Math.min(W / iw, H / ih) * z, dw = Math.round(iw * r), dh = Math.round(ih * r);
-  const x = Math.round((W - dw) / 2), y = Math.round((H - dh) / 2);
-  const strip = 2, fx = x > 0 ? Math.min(110, dw * 0.08) : 0, fy = y > 0 ? Math.min(110, dh * 0.08) : 0;
-  // the fill runs under the feathered edge too, so the photo fades into its own backdrop (never into black)
-  if(x > 0){                                                           // left and right: continue the side columns
-    edgeFill(ctx, src, 0, 0, strip, ih, 0, y, x + fx + 2, dh, true);
-    edgeFill(ctx, src, iw - strip, 0, strip, ih, x + dw - fx - 2, y, W - x - dw + fx + 2, dh, true);
-  }
-  if(y > 0){                                                           // top and bottom: continue the top / bottom rows
-    edgeFill(ctx, src, 0, 0, iw, strip, Math.max(0, x), 0, Math.min(W, dw), y + fy + 2, false);
-    edgeFill(ctx, src, 0, ih - strip, iw, strip, Math.max(0, x), y + dh - fy - 2, Math.min(W, dw), H - y - dh + fy + 2, false);
-  }
-  if(x > 0 && y > 0){                                                  // corners: the corner colour
-    const c = [[0, 0, 0, 0], [iw - strip, 0, x + dw, 0], [0, ih - strip, 0, y + dh], [iw - strip, ih - strip, x + dw, y + dh]];
-    for(const [sx, sy, dx, dy] of c){ try{ ctx.drawImage(src, sx, sy, strip, strip, dx, dy, dx ? W - dx : x, dy ? H - dy : y); }catch(e){} }
-  }
-  if(ART_FIT.width !== dw || ART_FIT.height !== dh){ ART_FIT.width = dw; ART_FIT.height = dh; }
-  const g = ART_FIT.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, dw, dh);
-  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-  try{ g.drawImage(src, 0, 0, dw, dh); }catch(e){}
-  if(fx || fy){
-    g.globalCompositeOperation = 'destination-in';
-    if(fx){ const lg = g.createLinearGradient(0, 0, dw, 0); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fx / dw, '#000'); lg.addColorStop(1 - fx / dw, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
-    if(fy){ const lg = g.createLinearGradient(0, 0, 0, dh); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fy / dh, '#000'); lg.addColorStop(1 - fy / dh, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
-    g.globalCompositeOperation = 'source-over';
-  }
-  ctx.drawImage(ART_FIT, x, y);
+function fitWhole(ctx, src, iw, ih, W, H, a, zoom, tone){
+  const [r0, g0, b0] = gradePx(SCULPT_BG, tone);
+  ctx.save(); ctx.fillStyle = `rgb(${r0|0},${g0|0},${b0|0})`; ctx.fillRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const z = 1 + (zoom - 1) * 0.5, r = Math.min(W / iw, H / ih) * 0.95 * z, dw = iw * r, dh = ih * r;
+  try{ ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh); }catch(e){}
   ctx.restore();
 }
 function artBackdrop(ctx, W, H, t, ao, p, blur){
@@ -553,7 +529,7 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
   const a = artPick(t, ao), im = artImg(a);
   if(!(im && im.complete && im.naturalWidth)) return;
   const src = artGrade(a, im, ao.tone), iw = im.naturalWidth, ih = im.naturalHeight;
-  if(a.kind === 'sculpt' && !blur) fitWhole(ctx, src, iw, ih, W, H, a, zoom);
+  if(a.kind === 'sculpt' && !blur) fitWhole(ctx, src, iw, ih, W, H, a, zoom, ao.tone);
   else focalDraw(ctx, blur ? softBlur(src, iw, ih, Math.max(iw, ih) / 48) : src, iw, ih, W, H, a.fx, a.fy, zoom);
   const dim = a.dim + (ao.tone === 'dark' ? 0.24 : 0);
   if(dim > 0){ ctx.fillStyle = `rgba(0,0,0,${dim})`; ctx.fillRect(0, 0, W, H); }
