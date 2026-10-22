@@ -2442,6 +2442,31 @@ document.getElementById('btnPubkey').addEventListener('click', async ()=>{
   await loginWithPubkey(pk, authNote);
 });
 
+/* landing: the address field in the hero (and at the bottom) leads straight into the watch-only sign-in */
+document.querySelectorAll('[data-lp-wallet]').forEach(f => f.addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = f.querySelector('input'), note = f.nextElementSibling && f.nextElementSibling.matches('[data-lp-note]') ? f.nextElementSibling : null;
+  const pk = (inp.value || '').trim();
+  const say = (msg, bad) => { if(note){ note.textContent = msg; note.classList.toggle('is-error', !!bad); } };
+  if(!B58.test(pk)){ say(pk ? "That doesn't look like a Solana address. It's 32 to 44 letters and numbers." : 'Paste the public address of the wallet you trade with.', true); inp.focus(); return; }
+  say('Read-only. A public address can’t move funds.', false);
+  document.getElementById('authPubkey').value = pk;
+  const consent = document.getElementById('authConsent'), ready = consent && consent.checked && hcWidget !== null && window.hcaptcha && window.hcaptcha.getResponse(hcWidget);
+  if(ready){ document.getElementById('btnPubkey').click(); return; }
+  const box = document.querySelector('#signin .authbox');
+  (box || document.getElementById('signin')).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center' });
+  setNote(authNote, 'Address ready. Tick the box, solve the captcha, then Show my cards.', 'info');
+  if(box){ box.classList.remove('lp-focus'); void box.offsetWidth; box.classList.add('lp-focus'); }
+}));
+/* landing: sections settle in once as they scroll into view (content stays visible without JS) */
+(() => {
+  const els = document.querySelectorAll('#landing .lp-reveal'); if(!els.length || !('IntersectionObserver' in window)) return;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.documentElement.classList.add('lp-anim');
+  const io = new IntersectionObserver(es => es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin:'0px 0px -12% 0px' });
+  els.forEach(el => io.observe(el));
+})();
+
 async function reload(){
   idCounter = 0;
   [trades, deletedTrades] = await Promise.all([store.getTrades(), store.getDeleted()]);

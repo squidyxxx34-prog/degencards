@@ -311,3 +311,11 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Titres en Instrument Serif (OFL, auto-hébergée dans /fonts, via @fontsource) : landing, titres de pages, « GM. », gros montant P&L, objectif, sections Achievements, gros chiffre des cartes de la collection. L'interface reste en Outfit ; les petits libellés passent en Outfit espacé (fini le JetBrains Mono pour les labels).
 - Boutons principaux ivoire (pilule) au lieu du vert / dégradé ; landing : chiffres romains pour les étapes, filets au lieu de boîtes, FAQ en lignes, titre « Turned into cards. » en italique dégradé violet → doré.
 - Images de la landing (`lp/story.webp`, `post.webp`, `loss.webp`, + `victory.webp`, `wide.webp` en réserve) régénérées avec le style ART (l'ancien style CARD a été retiré).
+
+## Landing calme, orientée conversion des sceptiques (2026-10-22)
+- Hero : titre + 1 phrase + **champ d'adresse Solana directement dans le hero** (« Show my cards ») + « Read-only… » + 3 assurances (No wallet connection · No email needed · Free). Visuel : 2 cartes ART qui flottent lentement (coupé si reduced motion).
+- Le champ du hero / du bas (`[data-lp-wallet]`) valide l'adresse (B58), la recopie dans `#authPubkey` ; si consentement coché + captcha résolu → connexion watch-only directe, sinon défilement doux vers la boîte de connexion avec un message « Address ready… » et un halo violet sur la boîte.
+- Section « The questions you should ask » avant tout le reste : Can it move my funds? / Are the numbers real? / What's the catch? (gratuit, PRO $4.99/mois) / Will it work with my setup?
+- Puis How it works (I, II, III), formats, boîte de connexion **adresse d'abord** (email / Google en dessous, « OR WITH AN ACCOUNT »), FAQ, appel final « Ready when you are. » avec le même champ.
+- Beaucoup plus d'air (sections 110 px), sections qui apparaissent en fondu une fois au défilement (`.lp-reveal`, désactivé si reduced motion ; contenu visible sans JS). Vert / rouge adoucis (#62D7A2 / #EF6B75).
+- Note test : le body est le conteneur de défilement (html, body height:100%) → pour les captures, faire défiler `document.body.scrollTop`, pas window.

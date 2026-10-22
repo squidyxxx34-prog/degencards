@@ -1386,3 +1386,77 @@ header{background:rgba(10,9,8,.78);}
 .card::before{opacity:.38;}
 .card .pnl{font-family:var(--serif); font-weight:400; font-size:30px; letter-spacing:-.01em; line-height:1.05; margin-top:4px;}
 .card .ticker{font-weight:600; letter-spacing:.06em; font-size:13px;}
+
+/* ======================================================================
+   CALM LANDING (2026-10-22): one idea per screen, lots of air, the wallet
+   field first, the skeptic's questions answered before the sign-in.
+   ====================================================================== */
+:root{ --green:#62D7A2; --red:#EF6B75; }
+#landing .lp-wrap{max-width:1120px;}
+#landing .lp-top{padding:22px 24px;}
+#landing .lp-hero{grid-template-columns:1.05fr .95fr; gap:56px; padding:72px 0 110px; align-items:center;}
+#landing .lp-hero:before{inset:-140px -220px auto auto; width:760px; height:760px; background:radial-gradient(circle, rgba(192,158,255,.09), rgba(226,204,154,.04) 42%, transparent 66%);}
+#landing h1{font-size:clamp(50px,6.2vw,86px); margin:22px 0 26px;}
+#landing .lp-lead{font-size:18px; line-height:1.6; max-width:520px; margin:0 0 34px;}
+#landing .lp-kicker{margin-bottom:4px;}
+.lp-wallet{display:flex; align-items:center; gap:6px; max-width:540px; padding:6px; border-radius:999px; background:rgba(246,241,231,.04); border:1px solid rgba(246,241,231,.16); transition:border-color .2s, background .2s;}
+.lp-wallet:focus-within{border-color:rgba(192,158,255,.7); background:rgba(246,241,231,.06);}
+.lp-wallet input{flex:1; min-width:0; min-height:48px; padding:0 0 0 18px; background:none; border:0; border-radius:0; box-shadow:none; color:var(--tx); font:500 16px var(--font);}
+.lp-wallet input:focus{outline:none; box-shadow:none;}
+.lp-wallet button{flex-shrink:0; min-height:48px; padding:0 24px; border-radius:999px; background:var(--ivory); color:#0A0908; font:600 15px var(--font); letter-spacing:.01em; border:0; transition:background .15s;}
+.lp-wallet button:hover{background:#fff;}
+.lp-wallet button:focus-visible{outline:3px solid var(--purple); outline-offset:3px;}
+.lp-wallet-note{font-size:13px; color:var(--tx2); margin:12px 0 0 20px; min-height:1.4em;}
+.lp-wallet-note.is-error{color:#F2A0A6;}
+.lp-assure{display:flex; flex-wrap:wrap; gap:10px 26px; list-style:none; padding:0; margin:30px 0 0 20px; font-size:14px; color:var(--tx2);}
+.lp-assure li{display:flex; align-items:center; gap:10px;}
+.lp-assure li::before{content:""; width:5px; height:5px; border-radius:50%; background:var(--gilt); opacity:.8;}
+.lp-show{position:relative; height:620px;}
+.lp-show img{position:absolute; height:auto; border-radius:8px; display:block;}
+.lp-show-front{width:330px; right:24px; top:0; z-index:2; box-shadow:0 60px 120px -40px rgba(0,0,0,.95), 0 0 0 1px rgba(246,241,231,.1);}
+.lp-show-back{width:290px; left:10px; top:150px; opacity:.5; filter:saturate(.8); box-shadow:0 40px 90px -40px rgba(0,0,0,.9);}
+@media(prefers-reduced-motion:no-preference){
+  .lp-show-front{animation:lpFloat 10s ease-in-out infinite;}
+  .lp-show-back{animation:lpFloat 12s ease-in-out infinite reverse;}
+}
+@keyframes lpFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);}}
+#landing .lp-sec{padding:110px 0; border-top:0;}
+#landing .lp-sec h2{margin:14px 0 22px;}
+#landing .lp-sub{font-size:17px; line-height:1.65;}
+.lp-qa{display:grid; grid-template-columns:1fr 1fr; gap:46px 64px; margin-top:44px;}
+.lp-qa > div{border-top:1px solid rgba(246,241,231,.14); padding-top:24px;}
+#landing .lp-qa h3{font-family:var(--serif); font-weight:400; font-size:30px; letter-spacing:-.005em; line-height:1.1; margin:0 0 12px;}
+.lp-qa p{color:var(--tx2); font-size:16px; line-height:1.65; margin:0; max-width:460px;}
+#landing .lp-steps{margin-top:44px; gap:40px;}
+#landing .lp-formats{margin-top:44px; gap:22px;}
+#landing figcaption{display:flex; flex-direction:column; gap:4px; color:var(--tx2); font-size:14px;}
+#landing figcaption b{color:var(--tx);}
+#landing .lp-signin{gap:72px; align-items:center;}
+#landing .authbox{background:rgba(246,241,231,.03); border:1px solid rgba(246,241,231,.12); border-radius:20px; padding:28px; transition:box-shadow .4s;}
+#landing .authbox h3{font:400 32px/1.1 var(--serif); letter-spacing:-.005em; text-transform:none; margin:0 0 18px; color:var(--tx);}
+#landing .authbox .consent{margin:4px 0 12px;}
+#landing .authbox.lp-focus{animation:lpFocus 1.6s ease-out 1;}
+@keyframes lpFocus{0%{box-shadow:0 0 0 0 rgba(192,158,255,.0);} 25%{box-shadow:0 0 0 6px rgba(192,158,255,.28);} 100%{box-shadow:0 0 0 0 rgba(192,158,255,0);}}
+#landing .lp-final{text-align:center; padding:130px 0 120px;}
+#landing .lp-final .lp-wallet{margin:0 auto;}
+#landing .lp-final .lp-wallet-note{margin:12px auto 0; text-align:center;}
+#landing .lp-final .lp-lead{margin:0 auto 34px;}
+html.lp-anim #landing .lp-reveal{opacity:0; transform:translateY(18px); transition:opacity 1s ease, transform 1s cubic-bezier(.2,.7,.2,1);}
+html.lp-anim #landing .lp-reveal.in{opacity:1; transform:none;}
+@media(max-width:900px){
+  #landing .lp-hero{grid-template-columns:1fr; gap:24px; padding:36px 0 70px;}
+  .lp-show{height:470px; max-width:420px; width:100%; margin:0 auto;}
+  .lp-show-front{width:250px; right:8%;} .lp-show-back{width:220px; left:4%; top:110px;}
+  .lp-qa{grid-template-columns:1fr; gap:32px;}
+  #landing .lp-sec{padding:72px 0;}
+  #landing .lp-signin{gap:36px;}
+}
+@media(max-width:520px){
+  .lp-wallet{flex-direction:column; align-items:stretch; border-radius:18px; padding:8px;}
+  .lp-wallet input{padding:0 12px; min-height:46px;}
+  .lp-wallet button{width:100%;}
+  .lp-wallet-note{margin-left:6px;}
+  .lp-assure{margin-left:6px;}
+  #landing .lp-qa h3{font-size:26px;}
+  #landing .authbox{padding:20px;}
+}
