@@ -1305,3 +1305,5 @@ input:-webkit-autofill{-webkit-text-fill-color:var(--tx); -webkit-box-shadow:0 0
 .authbox input,.field input,.acc-form input,.goal-editrow input,.pg-input input{border-radius:10px; min-height:44px; font-size:16px; background:var(--surf2); border:1px solid var(--border);}
 .authbox input,.field input,.acc-form input,.goal-editrow input{font-family:var(--font); font-weight:500;}
 .authbox input:focus,.field input:focus,.acc-form input:focus,.goal-editrow input:focus,.pg-input input:focus{outline:none; border-color:var(--purple);}
+.art-kinds{margin:2px 0 8px;}
+.art-kinds .rc-chip{min-height:32px; font-size:12px;}

@@ -380,37 +380,66 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   ctx.restore();
 }
 
-/* ---------- ART card: the trade laid over a real old-master painting ----------
-   Paintings: The Metropolitan Museum of Art, Open Access (public domain, CC0), cropped and served from /art (same origin, CSP-safe).
-   White monochrome candles, Entry / Exit tags, big result, quiet stats: the painting does the talking. */
+/* ---------- ART card: the trade laid over a real masterpiece ----------
+   Paintings, sculptures and engravings in the public domain: The Metropolitan Museum of Art and The Cleveland Museum of Art,
+   Open Access (CC0). Cropped (sculptures re-lit darker) and served from /art (same origin, CSP-safe).
+   White monochrome candles, Entry / Exit tags, big result, quiet stats: the artwork does the talking. */
 const ART_MS = 6200;
+const ART_KINDS = [['all','All'],['paint','Paintings'],['sculpt','Sculpture'],['print','Engravings']];
 const ART = [
-  { id:'socrates',  name:'Socrates',      title:'The Death of Socrates',                       by:'Jacques-Louis David',    year:'1787',    fx:.47, fy:.40, dim:.20, mood:'loss', free:true },
-  { id:'lions',     name:'Lions',         title:'Lions in a Mountainous Landscape',            by:'Théodore Géricault',     year:'c. 1819', fx:.36, fy:.45, dim:.12, mood:'win',  free:true },
-  { id:'tempest',   name:'Tempest',       title:'Christ Asleep during the Tempest',            by:'Eugène Delacroix',       year:'c. 1853', fx:.45, fy:.45, dim:.16, mood:'loss', free:true },
-  { id:'summit',    name:'Summit',        title:"The Rocky Mountains, Lander's Peak",          by:'Albert Bierstadt',       year:'1863',    fx:.50, fy:.30, dim:.36, mood:'win',  free:true },
-  { id:'crossing',  name:'Crossing',      title:'Washington Crossing the Delaware',            by:'Emanuel Leutze',         year:'1851',    fx:.40, fy:.40, dim:.24, mood:'win' },
-  { id:'vercellae', name:'Vercellae',     title:'The Battle of Vercellae',                     by:'Giovanni Battista Tiepolo', year:'c. 1727', fx:.45, fy:.45, dim:.22, mood:'win' },
-  { id:'riderless', name:'Riderless',     title:'The Start of the Race of the Riderless Horses', by:'Horace Vernet',        year:'1820',    fx:.44, fy:.45, dim:.24, mood:'win' },
-  { id:'hunt',      name:'The Hunt',      title:'Wolf and Fox Hunt',                           by:'Peter Paul Rubens',      year:'c. 1616', fx:.52, fy:.45, dim:.24, mood:'win' },
-  { id:'tiger',     name:'Tiger',         title:'Tiger and Cubs',                              by:'Jean-Léon Gérôme',       year:'c. 1884', fx:.60, fy:.55, dim:.08, mood:'win' },
-  { id:'horsefair', name:'Horse Fair',    title:'The Horse Fair',                              by:'Rosa Bonheur',           year:'1855',    fx:.50, fy:.50, dim:.24, mood:'win' },
-  { id:'fleet',     name:'Fleet',         title:'The Trojan Women Setting Fire to Their Fleet', by:'Claude Lorrain',        year:'c. 1643', fx:.56, fy:.40, dim:.28, mood:'win' },
-  { id:'champigny', name:'Last Stand',    title:'The Defense of Champigny',                    by:'Édouard Detaille',       year:'1879',    fx:.62, fy:.55, dim:.30, mood:'win' },
-  { id:'andes',     name:'Andes',         title:'Heart of the Andes',                          by:'Frederic Edwin Church',  year:'1859',    fx:.56, fy:.40, dim:.34, mood:'win' },
-  { id:'toledo',    name:'Toledo',        title:'View of Toledo',                              by:'El Greco',               year:'c. 1600', fx:.55, fy:.35, dim:.18, mood:'loss' },
-  { id:'shipwreck', name:'Shipwreck',     title:'A Shipwreck in a Storm',                      by:'Jean Pillement',         year:'1782',    fx:.44, fy:.45, dim:.18, mood:'loss' },
-  { id:'sodom',     name:'Sodom',         title:'The Burning of Sodom',                        by:'Camille Corot',          year:'1857',    fx:.34, fy:.45, dim:.08, mood:'loss' },
+  { id:'perseus',   kind:'sculpt', name:'Perseus',     title:'Perseus with the Head of Medusa',          by:'Antonio Canova',          year:'1806',    fx:.50, fy:.38, dim:.06, mood:'win',  free:true },
+  { id:'victory',   kind:'sculpt', name:'Victory',     title:'Victory with Cornucopia',                  by:'Roman',                   year:'c. 50 CE', fx:.50, fy:.30, dim:.04, mood:'win',  free:true },
+  { id:'saintmichael', kind:'paint', name:'Saint Michael', title:'Saint Michael the Archangel',          by:'Ignacio de Ries',         year:'1640s',   fx:.45, fy:.30, dim:.16, mood:'win' },
+  { id:'horsemen',  kind:'print',  name:'Horsemen',    title:'The Four Horsemen of the Apocalypse',      by:'Albrecht Dürer',          year:'1498',    fx:.50, fy:.42, dim:.42, mood:'loss', free:true },
+  { id:'lions',     kind:'paint',  name:'Lions',       title:'Lions in a Mountainous Landscape',         by:'Théodore Géricault',      year:'c. 1819', fx:.36, fy:.45, dim:.12, mood:'win',  free:true },
+  { id:'socrates',  kind:'paint',  name:'Socrates',    title:'The Death of Socrates',                    by:'Jacques-Louis David',     year:'1787',    fx:.47, fy:.40, dim:.20, mood:'loss', free:true },
+  { id:'tempest',   kind:'paint',  name:'Tempest',     title:'Christ Asleep during the Tempest',         by:'Eugène Delacroix',        year:'c. 1853', fx:.45, fy:.45, dim:.16, mood:'loss', free:true },
+  { id:'summit',    kind:'paint',  name:'Summit',      title:"The Rocky Mountains, Lander's Peak",       by:'Albert Bierstadt',        year:'1863',    fx:.50, fy:.30, dim:.36, mood:'win',  free:true },
+  { id:'angel',     kind:'sculpt', name:'Angel',       title:'Kneeling Angel',                           by:'Ignaz Günther',           year:'c. 1760', fx:.55, fy:.30, dim:.04, mood:'win' },
+  { id:'medusa',    kind:'sculpt', name:'Medusa',      title:'Head of Medusa',                           by:'Antonio Canova',          year:'1807',    fx:.50, fy:.48, dim:.06, mood:'loss' },
+  { id:'archangel', kind:'print',  name:'Archangel',   title:'Saint Michael Fighting the Dragon',        by:'Albrecht Dürer',          year:'1498',    fx:.50, fy:.32, dim:.42, mood:'win' },
+  { id:'psyche',    kind:'sculpt', name:'Psyche',      title:'Cupid and Psyche',                         by:'Antonio Canova',          year:'1794',    fx:.55, fy:.40, dim:.06, mood:'win' },
+  { id:'ugolino',   kind:'sculpt', name:'Ugolino',     title:'Ugolino and His Sons',                     by:'Jean-Baptiste Carpeaux',  year:'1867',    fx:.50, fy:.36, dim:.08, mood:'loss' },
+  { id:'triumph',   kind:'paint',  name:'Triumph',     title:'The Triumph of the Church',                by:'Peter Paul Rubens',       year:'c. 1628', fx:.50, fy:.45, dim:.22, mood:'win' },
+  { id:'abyss',     kind:'print',  name:'Abyss',       title:'And I Saw an Angel Coming Down from Heaven', by:'Odilon Redon',          year:'1899',    fx:.45, fy:.45, dim:.08, mood:'loss' },
+  { id:'hercules',  kind:'sculpt', name:'Hercules',    title:'Statue of a Youthful Hercules',            by:'Roman',                   year:'c. 80 CE', fx:.50, fy:.30, dim:.06, mood:'win' },
+  { id:'tombangel', kind:'sculpt', name:'Tomb Angel',  title:'Angel from a Tomb',                        by:'Tino di Camaino',         year:'c. 1335', fx:.55, fy:.32, dim:.06, mood:'loss' },
+  { id:'northcape', kind:'paint',  name:'North Cape',  title:'The North Cape by Moonlight',              by:'Peder Balke',             year:'1848',    fx:.50, fy:.45, dim:.04, mood:'win' },
+  { id:'heavenhell',kind:'paint',  name:'Heaven & Hell', title:'Heaven and Hell',                        by:'Octave Tassaert',         year:'c. 1850', fx:.45, fy:.42, dim:.10, mood:'loss' },
+  { id:'michael',   kind:'print',  name:'Michael',     title:'The Archangel Michael Piercing the Dragon', by:'Martin Schongauer',      year:'c. 1475', fx:.50, fy:.32, dim:.42, mood:'win' },
+  { id:'daphne',    kind:'sculpt', name:'Daphne',      title:'Apollo and Daphne',                        by:'Massimiliano Soldani',    year:'c. 1700', fx:.50, fy:.38, dim:.06, mood:'win' },
+  { id:'vestal',    kind:'sculpt', name:'Vestal',      title:'The Vestal',                               by:'Antonio Canova',          year:'c. 1821', fx:.50, fy:.34, dim:.08, mood:'loss' },
+  { id:'paris',     kind:'sculpt', name:'Paris',       title:'Paris',                                    by:'Antonio Canova',          year:'1822',    fx:.50, fy:.32, dim:.06, mood:'win' },
+  { id:'amazon',    kind:'sculpt', name:'Amazon',      title:'Statue of a Wounded Amazon',               by:'Roman',                   year:'1st–2nd c.', fx:.50, fy:.28, dim:.06, mood:'loss' },
+  { id:'nemean',    kind:'sculpt', name:'Nemean Lion', title:'Hercules and the Nemean Lion',             by:'Italian',                 year:'1500s',   fx:.50, fy:.40, dim:.06, mood:'win' },
+  { id:'prisons',   kind:'print',  name:'Prisons',     title:'Prisoners on a Projecting Platform',       by:'Giovanni Battista Piranesi', year:'1750', fx:.50, fy:.45, dim:.40, mood:'loss' },
+  { id:'colosseum', kind:'print',  name:'Colosseum',   title:'The Colosseum',                            by:'Giovanni Battista Piranesi', year:'1776', fx:.50, fy:.50, dim:.40, mood:'win' },
+  { id:'angels',    kind:'paint',  name:'Angels',      title:'The Angels Appearing to Abraham',          by:'Francesco Guardi',        year:'1750s',   fx:.40, fy:.42, dim:.22, mood:'win' },
+  { id:'mountainstorm', kind:'paint', name:'Mountain Storm', title:'Storm in the Mountains',             by:'Frederic Edwin Church',   year:'1847',    fx:.45, fy:.45, dim:.14, mood:'loss' },
+  { id:'catskill',  kind:'paint',  name:'Catskill',    title:'The Clove, a Storm Scene',                 by:'Jasper F. Cropsey',       year:'1851',    fx:.60, fy:.45, dim:.10, mood:'loss' },
+  { id:'afterstorm',kind:'paint',  name:'After the Storm', title:'Early Morning After a Storm at Sea',    by:'Winslow Homer',           year:'1903',    fx:.50, fy:.50, dim:.24, mood:'loss' },
+  { id:'crossing',  kind:'paint',  name:'Crossing',    title:'Washington Crossing the Delaware',         by:'Emanuel Leutze',          year:'1851',    fx:.40, fy:.40, dim:.24, mood:'win' },
+  { id:'vercellae', kind:'paint',  name:'Vercellae',   title:'The Battle of Vercellae',                  by:'Giovanni Battista Tiepolo', year:'c. 1727', fx:.45, fy:.45, dim:.22, mood:'win' },
+  { id:'riderless', kind:'paint',  name:'Riderless',   title:'The Start of the Race of the Riderless Horses', by:'Horace Vernet',      year:'1820',    fx:.44, fy:.45, dim:.24, mood:'win' },
+  { id:'hunt',      kind:'paint',  name:'The Hunt',    title:'Wolf and Fox Hunt',                        by:'Peter Paul Rubens',       year:'c. 1616', fx:.52, fy:.45, dim:.24, mood:'win' },
+  { id:'tiger',     kind:'paint',  name:'Tiger',       title:'Tiger and Cubs',                           by:'Jean-Léon Gérôme',        year:'c. 1884', fx:.60, fy:.55, dim:.08, mood:'win' },
+  { id:'horsefair', kind:'paint',  name:'Horse Fair',  title:'The Horse Fair',                           by:'Rosa Bonheur',            year:'1855',    fx:.50, fy:.50, dim:.24, mood:'win' },
+  { id:'fleet',     kind:'paint',  name:'Fleet',       title:'The Trojan Women Setting Fire to Their Fleet', by:'Claude Lorrain',      year:'c. 1643', fx:.56, fy:.40, dim:.28, mood:'win' },
+  { id:'champigny', kind:'paint',  name:'Last Stand',  title:'The Defense of Champigny',                 by:'Édouard Detaille',        year:'1879',    fx:.62, fy:.55, dim:.30, mood:'win' },
+  { id:'andes',     kind:'paint',  name:'Andes',       title:'Heart of the Andes',                       by:'Frederic Edwin Church',   year:'1859',    fx:.56, fy:.40, dim:.34, mood:'win' },
+  { id:'toledo',    kind:'paint',  name:'Toledo',      title:'View of Toledo',                           by:'El Greco',                year:'c. 1600', fx:.55, fy:.35, dim:.18, mood:'loss' },
+  { id:'shipwreck', kind:'paint',  name:'Shipwreck',   title:'A Shipwreck in a Storm',                   by:'Jean Pillement',          year:'1782',    fx:.44, fy:.45, dim:.18, mood:'loss' },
+  { id:'sodom',     kind:'paint',  name:'Sodom',       title:'The Burning of Sodom',                     by:'Camille Corot',           year:'1857',    fx:.34, fy:.45, dim:.08, mood:'loss' },
 ];
 const AO_KEY = 'dc_art_opts';
 const AO_DEF = { pick:'auto', big:'pnl', tone:'natural', ink:'white', chart:true, stats:true, coin:true, credit:true };
 const AO_GROUPS = [
   ['big',  'Big number', [['pnl','PnL $'],['roi','ROI %']]],
-  ['tone', 'Tone',       [['natural','Natural'],['noir','Noir'],['dark','Dark']]],
+  ['tone', 'Tone',       [['natural','Natural'],['noir','Noir'],['marble','Marble'],['gold','Gold'],['dark','Dark']]],
   ['ink',  'Number',     [['white','White'],['result','Green / red']]],
 ];
-const AO_SHOW = [['chart','Chart'],['stats','Stats'],['coin','Coin logo'],['credit','Painting credit']];
-const AO_PRO = { tone:['noir','dark'] };
+const AO_SHOW = [['chart','Chart'],['stats','Stats'],['coin','Coin logo'],['credit','Artwork credit']];
+const AO_PRO = { tone:['marble','gold','dark'] };
 const artById = id => ART.find(a => a.id === id);
 const artLocked = a => proLocked() && !a.free;
 let AO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(AO_KEY) || '{}') || {}; }catch(e){} const o = { ...AO_DEF };
@@ -431,7 +460,7 @@ function artPick(t, o){
   let pool = ART.filter(x => x.mood === mood && !artLocked(x)); if(!pool.length) pool = ART.filter(x => !artLocked(x));
   return pool[hashId((t && (t.id || t.tradeId)) + ':' + mood) % pool.length];
 }
-const ART_IMG = new Map(), ART_NOIR = new Map();
+const ART_IMG = new Map();
 let artOnLoad = null;                                                 // the sheet re-renders its thumbnails once a painting lands
 function artImg(a){
   if(!a) return null;
@@ -444,15 +473,28 @@ function artReady(t, ao){
   if(im.complete && im.naturalWidth) return Promise.resolve(im);
   return new Promise(r => { const to = setTimeout(() => r(null), 8000); im.addEventListener('load', () => { clearTimeout(to); r(im); }, { once:true }); im.addEventListener('error', () => { clearTimeout(to); r(null); }, { once:true }); });
 }
-/* noir grade, computed once per painting (no ctx.filter: it isn't on every Safari) */
-function artNoir(a, im){
-  let c = ART_NOIR.get(a.id); if(c) return c;
+/* tones, computed once per artwork and tone (no ctx.filter: it isn't on every Safari)
+   noir = black & white, deep contrast · marble = soft silver black & white · gold = warm duotone */
+const ART_GRADE = new Map();
+const GOLD_RAMP = (() => { const st = [[0,[10,7,4]],[0.38,[88,58,26]],[0.72,[201,160,98]],[1,[255,244,220]]], r = new Uint8ClampedArray(256*3);
+  for(let v = 0; v < 256; v++){ const x = v/255; let k = 0; while(k < st.length - 2 && x > st[k+1][0]) k++;
+    const [a, ca] = st[k], [b, cb] = st[k+1], f = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    for(let c = 0; c < 3; c++) r[v*3+c] = ca[c] + (cb[c] - ca[c]) * f; }
+  return r; })();
+function artGrade(a, im, tone){
+  if(tone !== 'noir' && tone !== 'marble' && tone !== 'gold') return im;
+  const key = a.id + ':' + tone; let c = ART_GRADE.get(key); if(c) return c;
   c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
   const g = c.getContext('2d'); g.drawImage(im, 0, 0);
   try{ const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
-    for(let i = 0; i < px.length; i += 4){ let v = px[i] * 0.3 + px[i+1] * 0.59 + px[i+2] * 0.11; v = (v - 128) * 1.18 + 122; v = v < 0 ? 0 : v > 255 ? 255 : v; px[i] = v * 1.02; px[i+1] = v; px[i+2] = v * 0.96; }
+    for(let i = 0; i < px.length; i += 4){
+      let v = px[i] * 0.3 + px[i+1] * 0.59 + px[i+2] * 0.11;
+      if(tone === 'noir'){ v = (v - 128) * 1.22 + 120; v = v < 0 ? 0 : v > 255 ? 255 : v; px[i] = v * 1.02; px[i+1] = v; px[i+2] = v * 0.96; }
+      else if(tone === 'marble'){ v = 26 + v * 0.84; v = (v - 128) * 0.96 + 134; v = v < 0 ? 0 : v > 255 ? 255 : v; px[i] = v * 0.96; px[i+1] = v * 0.985; px[i+2] = Math.min(255, v * 1.04); }
+      else { v = (v - 128) * 1.1 + 126; v = v < 0 ? 0 : v > 255 ? 255 : v | 0; px[i] = GOLD_RAMP[v*3]; px[i+1] = GOLD_RAMP[v*3+1]; px[i+2] = GOLD_RAMP[v*3+2]; }
+    }
     g.putImageData(d, 0, 0); }catch(e){}
-  ART_NOIR.set(a.id, c); return c;
+  ART_GRADE.set(key, c); return c;
 }
 /* cover-draw around a focal point (fx, fy), slow push-in with zoom > 1 */
 function focalDraw(ctx, src, iw, ih, W, H, fx, fy, zoom){
@@ -468,7 +510,7 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
   if(bgReady()){ const b = BG.blur; if(blur) BG.blur = true; drawBg(ctx, W, H, zoom); BG.blur = b; return; }
   const a = artPick(t, ao), im = artImg(a);
   if(!(im && im.complete && im.naturalWidth)) return;
-  const src = ao.tone === 'noir' ? artNoir(a, im) : im, iw = im.naturalWidth, ih = im.naturalHeight;
+  const src = artGrade(a, im, ao.tone), iw = im.naturalWidth, ih = im.naturalHeight;
   focalDraw(ctx, blur ? softBlur(src, iw, ih, Math.max(iw, ih) / 48) : src, iw, ih, W, H, a.fx, a.fy, zoom);
   const dim = a.dim + (ao.tone === 'dark' ? 0.24 : 0);
   if(dim > 0){ ctx.fillStyle = `rgba(0,0,0,${dim})`; ctx.fillRect(0, 0, W, H); }
@@ -487,7 +529,7 @@ function artChart(ctx, t, x, y, w, h, p, u){
   const g = ART_LAYER.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, lw, lh);
   const X = v => ((v - x0) / (x1 - x0)) * w, Y = v => (1 - (v - y0) / (y1 - y0)) * h;
   const drawP = easeOut(seg(p, 0.12, 0.62)), n = Math.ceil(cs.length * drawP);
-  const slot = (iv / (x1 - x0)) * w, bw = Math.max(1.6 * u, slot * 0.64), hollow = bw >= 7 * u;
+  const slot = (iv / (x1 - x0)) * w, bw = Math.max(1.6 * u, Math.min(slot * 0.64, 15 * u)), hollow = bw >= 7 * u;
   for(let i = 0; i < n; i++){
     const [ts, o, hi, lo, c] = cs[i], up = c >= o, cx = X(ts + iv / 2), top = Y(Math.max(o, c)), bot = Y(Math.min(o, c)), bh = Math.max(1.6 * u, bot - top);
     g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.62)'; g.lineWidth = Math.max(1.2 * u, Math.min(2.4 * u, bw * 0.16));
@@ -508,78 +550,98 @@ function artChart(ctx, t, x, y, w, h, p, u){
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
-  const tag = (f, label, i) => {
-    if(!f) return;
+  ctx.font = `700 ${22 * u}px ${SANS}`;
+  const th = 36 * u, mk = (f, label) => { const fx = px(f), fy = py(f), tw = ctx.measureText(label).width + 26 * u, tx = Math.min(x + w - tw, Math.max(x, fx - tw / 2));
+    const roomUp = fy - th - 30 * u > y - 64 * u; return { f, label, fx, fy, tw, tx, above: roomUp }; };
+  const place = T => { T.ty = T.above ? T.fy - 22 * u - th : T.fy + 22 * u; return T; };
+  let T = [];
+  if(entry && exit && Math.abs(px(entry) - px(exit)) < 70 * u && Math.abs(py(entry) - py(exit)) < 48 * u){
+    T = [place(mk(exit, 'Entry  ·  Exit'))]; T[0].both = entry;                       // in and out on the same spot: one tag
+  } else {
+    if(entry) T.push(place(mk(entry, 'Entry'))); if(exit) T.push(place(mk(exit, 'Exit')));
+    if(T.length === 2){ const [A, B] = T, hit = !(A.tx + A.tw + 8 * u < B.tx || B.tx + B.tw + 8 * u < A.tx) && Math.abs(A.ty - B.ty) < th + 8 * u;
+      if(hit){ const hi = A.fy <= B.fy ? A : B, lo = hi === A ? B : A; hi.above = true; lo.above = false; place(hi); place(lo);
+        if(lo.ty + th > y + h + 40 * u){ lo.above = true; place(lo); lo.ty = Math.min(lo.ty, hi.ty - th - 10 * u); } } }
+  }
+  T.forEach((G, i) => {
     const k = easeOutBack(seg(p, 0.64 + i * 0.06, 0.76 + i * 0.06)); if(k <= 0) return;
-    const fx = px(f), fy = py(f);
+    const { fx, fy, tw, tx, ty, above } = G;
     ctx.save(); ctx.globalAlpha *= clamp01(k);
-    ctx.font = `700 ${22 * u}px ${SANS}`; const tw = ctx.measureText(label).width + 26 * u, th = 36 * u;
-    const above = fy - th - 30 * u > y - 64 * u, ty = above ? fy - 22 * u - th : fy + 22 * u;
-    const tx = Math.min(x + w - tw, Math.max(x, fx - tw / 2));
     ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(fx, fy + (above ? -9 : 9) * u); ctx.lineTo(fx, above ? ty + th : ty); ctx.stroke();
     ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 16 * u; ctx.shadowOffsetY = 3 * u;
     ctx.translate(tx + tw / 2, ty + th / 2); ctx.scale(k, k);
     rrect(ctx, -tw / 2, -th / 2, tw, th, 9 * u); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, 0, 1.5 * u);
+    ctx.font = `700 ${22 * u}px ${SANS}`; ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(G.label, 0, 1.5 * u);
     ctx.restore();
     ctx.save(); ctx.globalAlpha *= clamp01(k);
-    ctx.beginPath(); ctx.arc(fx, fy, 7 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+    const dot = (X, Y) => { ctx.beginPath(); ctx.arc(X, Y, 7 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke(); };
+    if(G.both) dot(px(G.both), py(G.both)); dot(fx, fy);
     ctx.restore(); ctx.textBaseline = 'alphabetic';
-  };
-  tag(entry, 'Entry', 0); tag(exit, 'Exit', 1);
+  });
 }
 const hasArtChart = t => !!(t.chart && t.chart.v === 2 && t.chart.c && t.chart.c.length);
-/* STORY: the 4:5 art card floats on the same painting, blurred and darker, with the CTA under it */
-const ART_CARD = document.createElement('canvas');
-function drawArtStory(ctx, W, H, t, meta, p, opt){
-  const ao = { ...artOpts(), ...(opt.ao || {}) }, u = W / 1080;
-  ctx.save();
-  artBackdrop(ctx, W, H, t, ao, p, true);
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
-  const v = ctx.createRadialGradient(W / 2, H * 0.48, W * 0.3, W / 2, H * 0.48, H * 0.78);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.65)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
-  const cw = Math.round(W - 2 * 64 * u), ch = Math.round(cw * 1.25), r = 40 * u;
-  if(ART_CARD.width !== cw || ART_CARD.height !== ch){ ART_CARD.width = cw; ART_CARD.height = ch; }
-  const cc = ART_CARD.getContext('2d'); cc.setTransform(1, 0, 0, 1, 0, 0); cc.clearRect(0, 0, cw, ch);
-  drawArt(cc, cw, ch, t, meta, p, { ...opt, inner:true });
-  const ctaGap = 58 * u, ctaBlock = 92 * u, top = Math.max(80 * u, (H - (ch + ctaGap + ctaBlock)) / 2), cx = W / 2, cy = top + ch / 2;
-  const k = easeOutBack(seg(p, 0, 0.2)), e = easeOut(seg(p, 0, 0.2));
-  ctx.save();
-  ctx.translate(cx, cy + (1 - e) * 90 * u); ctx.rotate((1 - e) * -0.04); ctx.scale(0.92 + 0.08 * k, 0.92 + 0.08 * k);
-  ctx.globalAlpha = clamp01(e * 1.4);
-  ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 100 * u; ctx.shadowOffsetY = 40 * u;
-  rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.fillStyle = '#0B0A09'; ctx.fill(); ctx.shadowColor = 'transparent';
-  ctx.save(); rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.clip(); ctx.drawImage(ART_CARD, -cw / 2, -ch / 2); ctx.restore();
-  rrect(ctx, -cw / 2, -ch / 2, cw, ch, r); ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.stroke();
-  ctx.restore();
-  const a = easeOut(seg(p, 0.55, 0.7)), cY = top + ch + ctaGap; ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16 * u;
-  ctx.font = `800 ${40 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, cY + 36 * u + (1 - a) * 16 * u);
-  ctx.font = `700 ${30 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText('DEGENCARDS', cx, cY + 84 * u + (1 - a) * 16 * u);
-  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-  const intro = easeOut(seg(p, 0, 0.04)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
-  ctx.restore();
-}
 function drawArt(ctx, W, H, t, meta, p, opt){
-  if(!opt.inner && H / W > 1.5) return drawArtStory(ctx, W, H, t, meta, p, opt);
-  const ao = { ...artOpts(), ...(opt.ao || {}) }, u = Math.min(W / 1080, H / 1350), win = t.pnl >= 0;
+  const ao = { ...artOpts(), ...(opt.ao || {}) }, wide = W > H * 1.2, story = H / W > 1.5, win = t.pnl >= 0;
+  const u = Math.min(W, H) / 1350, k = W / 1080;
   const fa = (a, b) => easeOut(seg(p, a, b));
   const shadow = (b, a) => { ctx.shadowColor = `rgba(0,0,0,${a == null ? 0.55 : a})`; ctx.shadowBlur = b * u; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = Math.max(1, b * 0.12) * u; };
   const noShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; };
+  // what goes on the card
+  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
+  const bigRoi = ao.big === 'roi' || opt.hideUsd, mult = t.entryMc > 0 && t.exitMc > 0 ? t.exitMc / t.entryMc : 0;
+  const rows = !ao.stats ? [] : [
+    ['Entry', mcShort(t.entryMc) + ' MC'],
+    ['Exit', mcShort(t.exitMc) + ' MC'],
+    money ? ['Size', '$' + inv.toFixed(2)] : ['Hold', fmt.hold(t.holdTime || 0)],
+    !bigRoi ? ['Return', fmt.pct(t.roi)] : money ? ['PnL', fmt.usd(t.pnl)] : ['Multiple', mult ? '×' + (mult >= 10 ? mult.toFixed(1) : mult.toFixed(2)) : '—'],
+  ];
+  const bigTxt = v => bigRoi ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
+  const chartOn = ao.chart && hasArtChart(t), rowH = 46 * u, statsH = rows.length * rowH, cx = W / 2;
+  // layout. Wide: header on top, chart in the upper middle, numbers below (the look everything else follows).
+  // Post / story: the same small, cinematic scale, but as a poster: the artwork owns the top, the trade sits in the lower part.
+  let hy, colW, bigSize, bigBase, statsTop, chartTop, chartBot, fy, creditY;
+  if(wide){
+    hy = 82 * u; colW = Math.min(W - 2 * 92 * u, 1180 * u);
+    const footTop = H - 132 * u; statsTop = footTop - 26 * u - statsH;
+    bigSize = fitFont(ctx, bigTxt(1), 800, SANS, 184 * u, Math.min(colW, 940 * u));
+    bigBase = statsTop - (rows.length ? 40 : 0) * u;
+    chartTop = hy + 104 * u; chartBot = bigBase - bigSize * 0.78 - 56 * u;
+    if(!chartOn){ const blockH = bigSize * 0.78 + (rows.length ? 40 * u + statsH : 0), f0 = hy + 60 * u, f1 = footTop - 26 * u;
+      bigBase = f0 + Math.max(0, (f1 - f0 - blockH) * 0.6) + bigSize * 0.78; statsTop = bigBase + 40 * u; }
+    fy = H - 74 * u; creditY = H - 22 * u;
+  } else {
+    const topSafe = (story ? 196 : 58) * k, botSafe = (story ? 250 : 52) * k;      // story: clear of the app's own header and caption
+    hy = topSafe + 26 * u; colW = W * (story ? 0.8 : 0.74);
+    fy = H - botSafe - 34 * u;
+    statsTop = fy - 64 * u - statsH;
+    bigSize = fitFont(ctx, bigTxt(1), 800, SANS, (story ? 200 : 178) * u, W * 0.84);
+    bigBase = statsTop - (rows.length ? 34 : 0) * u;
+    chartBot = bigBase - bigSize * 0.78 - 50 * u;
+    chartTop = Math.max(hy + 100 * u, chartBot - H * (story ? 0.2 : 0.215));
+    creditY = story ? fy + 70 * u : H - 22 * u;
+  }
   ctx.save();
   artBackdrop(ctx, W, H, t, ao, p, false);
-  // grade: darker top (header + chart) and bottom (numbers), soft vignette; the middle of the painting stays alive
-  let g = ctx.createLinearGradient(0, 0, 0, H * 0.4); g.addColorStop(0, 'rgba(0,0,0,0.42)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  g = ctx.createLinearGradient(0, H * 0.48, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.6, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.66)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.4, W / 2, H / 2, Math.max(W, H) * 0.8); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.38)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // grade
+  let g;
+  if(wide){
+    g = ctx.createLinearGradient(0, 0, 0, H * 0.4); g.addColorStop(0, 'rgba(0,0,0,0.42)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    g = ctx.createLinearGradient(0, H * 0.48, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.6, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.66)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.4, W / 2, H / 2, Math.max(W, H) * 0.8); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.38)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  } else {
+    g = ctx.createLinearGradient(0, 0, 0, hy + 160 * u); g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const g0 = (chartOn ? chartTop : bigBase - bigSize) - H * 0.12;
+    g = ctx.createLinearGradient(0, g0, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.3, 'rgba(0,0,0,0.26)'); g.addColorStop(0.65, 'rgba(0,0,0,0.52)'); g.addColorStop(1, 'rgba(0,0,0,0.78)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    g = ctx.createRadialGradient(W / 2, H * 0.4, Math.min(W, H) * 0.42, W / 2, H * 0.45, Math.max(W, H) * 0.72); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.42)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if(!opt.video){ ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // a touch of film grain on stills
 
-  const cx = W / 2, colW = Math.min(W - 2 * 92 * u, 1180 * u);
   // header: coin + ticker + date · hold, centered as one group
   const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = ao.coin && !!(img && img.complete && img.naturalWidth);
-  const hy = 82 * u, tick = tk(t.ticker), sub = new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric' }).toUpperCase() + '  ·  ' + fmt.hold(t.holdTime || 0).toUpperCase();
+  const tick = tk(t.ticker), sub = new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric' }).toUpperCase() + '  ·  ' + fmt.hold(t.holdTime || 0).toUpperCase();
   ctx.globalAlpha = fa(0.02, 0.12); ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   const cs = 50 * u, gap1 = 16 * u, gap2 = 20 * u;
-  fitFont(ctx, tick, 800, SANS, 40 * u, colW * 0.55); const tF = ctx.font, tW = ctx.measureText(tick).width;
+  fitFont(ctx, tick, 800, SANS, 40 * u, W * 0.5); const tF = ctx.font, tW = ctx.measureText(tick).width;
   ctx.font = `600 ${21 * u}px ${MONO}`; const sW = ctx.measureText(sub).width;
   const gw = (hasImg ? cs + gap1 : 0) + tW + gap2 + sW; let hx = cx - gw / 2;
   if(hasImg){
@@ -593,23 +655,6 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   ctx.font = `600 ${21 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(sub, hx, hy + 2 * u);
   noShadow(); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
 
-  // numbers, from the bottom up
-  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
-  const bigRoi = ao.big === 'roi' || opt.hideUsd, mult = t.entryMc > 0 && t.exitMc > 0 ? t.exitMc / t.entryMc : 0;
-  const rows = !ao.stats ? [] : [
-    ['Entry', mcShort(t.entryMc) + ' MC'],
-    ['Exit', mcShort(t.exitMc) + ' MC'],
-    money ? ['Size', '$' + inv.toFixed(2)] : ['Hold', fmt.hold(t.holdTime || 0)],
-    !bigRoi ? ['Return', fmt.pct(t.roi)] : money ? ['PnL', fmt.usd(t.pnl)] : ['Multiple', mult ? '×' + (mult >= 10 ? mult.toFixed(1) : mult.toFixed(2)) : '—'],
-  ];
-  const rowH = 46 * u, footTop = H - 132 * u, statsH = rows.length * rowH, statsTop = footTop - 26 * u - statsH;
-  const bigTxt = v => bigRoi ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
-  const bigSize = fitFont(ctx, bigTxt(1), 800, SANS, 184 * u, Math.min(colW, 940 * u));
-  const chartOn = ao.chart && hasArtChart(t);
-  let bigBase = statsTop - (rows.length ? 40 : 0) * u;
-  const chartTop = hy + 104 * u, chartBot = bigBase - bigSize * 0.78 - 56 * u;
-  if(!chartOn){ const blockH = bigSize * 0.78 + (rows.length ? 40 * u + statsH : 0), free0 = hy + 60 * u, free1 = footTop - 26 * u;
-    bigBase = free0 + Math.max(0, (free1 - free0 - blockH) * 0.6) + bigSize * 0.78; }
   if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u);
 
   // big result, count-up, light sweep at the end
@@ -629,12 +674,11 @@ function drawArt(ctx, W, H, t, meta, p, opt){
 
   // stats: two columns, labels then values, the block centered under the number
   if(rows.length){
-    const sTop = chartOn ? statsTop : bigBase + 40 * u;
     ctx.font = `600 ${27 * u}px ${SANS}`; const lw = Math.max(...rows.map(r => ctx.measureText(r[0]).width));
     ctx.font = `700 ${27 * u}px ${MONO}`; const vw = Math.max(...rows.map(r => ctx.measureText(r[1]).width));
     const colGap = 52 * u, bx = cx - (lw + colGap + vw) / 2;
     rows.forEach(([l, val], i) => {
-      const a = fa(0.42 + i * 0.05, 0.56 + i * 0.05); ctx.globalAlpha = a; const yy = sTop + rowH * (i + 0.7) + (1 - a) * 14 * u;
+      const a = fa(0.42 + i * 0.05, 0.56 + i * 0.05); ctx.globalAlpha = a; const yy = statsTop + rowH * (i + 0.7) + (1 - a) * 14 * u;
       shadow(14, 0.6); ctx.textAlign = 'left';
       ctx.font = `600 ${27 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(l, bx, yy);
       ctx.font = `700 ${27 * u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(val, bx + lw + colGap, yy);
@@ -642,21 +686,21 @@ function drawArt(ctx, W, H, t, meta, p, opt){
     noShadow(); ctx.globalAlpha = 1;
   }
 
-  // footer: brand · @handle, url; the painting's credit in the corner
+  // footer: brand · @handle, url; the artwork's credit in the corner
   ctx.globalAlpha = fa(0.6, 0.74); ctx.textAlign = 'left'; shadow(12, 0.6);
-  const hn = handle(), fy = H - 74 * u;
+  const hn = handle();
   ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} const bW = ctx.measureText('DEGENCARDS').width; try{ ctx.letterSpacing = '0px'; }catch(e){}
   ctx.font = `600 ${24 * u}px ${SANS}`; const hW = hn ? ctx.measureText('  ·  ' + hn).width : 0;
-  let fx = cx - (bW + hW) / 2;
-  ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGENCARDS', fx, fy); try{ ctx.letterSpacing = '0px'; }catch(e){}
-  if(hn){ ctx.font = `600 ${24 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.fillText('  ·  ' + hn, fx + bW, fy); }
+  const fx0 = cx - (bW + hW) / 2;
+  ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGENCARDS', fx0, fy); try{ ctx.letterSpacing = '0px'; }catch(e){}
+  if(hn){ ctx.font = `600 ${24 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.fillText('  ·  ' + hn, fx0 + bW, fy); }
   ctx.textAlign = 'center'; ctx.font = `500 ${18 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('degencards.vercel.app', cx, fy + 32 * u);
-  if(ao.credit && !bgReady()){ const a = artPick(t, ao); ctx.textAlign = 'right'; ctx.font = `italic 500 ${15 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillText(a.by + ', ' + a.year, W - 26 * u, H - 22 * u); }
+  if(ao.credit && !bgReady()){ const a = artPick(t, ao); ctx.font = `italic 500 ${15 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    if(story){ ctx.textAlign = 'center'; ctx.fillText(a.by + ', ' + a.year, cx, creditY); } else { ctx.textAlign = 'right'; ctx.fillText(a.by + ', ' + a.year, W - 26 * u, creditY); } }
   noShadow(); ctx.globalAlpha = 1;
   const intro = fa(0, 0.04); if(!opt.inner && intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
 }
-
 /* ---------- CARD layout options (simplify the card, Axiom-like): saved on this device ---------- */
 const CO_KEY = 'dc_card_opts';
 const CO_DEF = { layout:'full', coin:true, roi:true, chart:true, stats:true, ach:true, badge:true };
@@ -1360,16 +1404,19 @@ function styleThumbs(){
   });
 }
 /* ART customization: the painting (thumbnails), tone, number, what to show */
+let artKind = 'all';
 function renderArtOpts(){
   const box = document.getElementById('shareArt'); if(!box || !state.t) return;
   const prevRow = box.querySelector('.art-row'), keepX = prevRow ? prevRow.scrollLeft : null;
   const o = artOpts(), cur = artPick(state.t, o), free = proLocked(), lk = (k, v) => free && AO_PRO[k] && AO_PRO[k].includes(v), own = bgReady();
-  box.innerHTML = `<div class="rc-head art-head"><span>Painting</span><button type="button" class="rc-chip art-shuffle" id="artShuffle">Shuffle</button></div>
-    <div class="art-row" role="radiogroup" aria-label="Painting">
+  const shown = ART.filter(a => artKind === 'all' || a.kind === artKind);
+  box.innerHTML = `<div class="rc-head art-head"><span>Artwork</span><button type="button" class="rc-chip art-shuffle" id="artShuffle">Shuffle</button></div>
+    <div class="rc-row art-kinds" role="radiogroup" aria-label="Kind of artwork">${ART_KINDS.map(([k, l]) => `<button type="button" class="rc-chip${artKind === k ? ' on' : ''}" role="radio" aria-checked="${artKind === k}" data-akind="${k}">${l}</button>`).join('')}</div>
+    <div class="art-row" role="radiogroup" aria-label="Artwork">
       <button type="button" class="art-tile ${o.pick === 'auto' ? 'on' : ''}" role="radio" aria-checked="${o.pick === 'auto'}" data-ap="auto"><span class="art-auto">AUTO</span><em>By result</em></button>
-      ${ART.map(a => `<button type="button" class="art-tile ${o.pick === a.id ? 'on' : ''}${artLocked(a) ? ' locked' : ''}" role="radio" aria-checked="${o.pick === a.id}" aria-label="${a.name}${artLocked(a) ? ' (PRO)' : ''}" data-ap="${a.id}"${artLocked(a) ? ' data-pro="1"' : ''}><img src="/art/t/${a.id}.webp" alt="" width="66" height="82" loading="lazy" decoding="async"><em>${a.name}</em></button>`).join('')}
+      ${shown.map(a => `<button type="button" class="art-tile ${o.pick === a.id ? 'on' : ''}${artLocked(a) ? ' locked' : ''}" role="radio" aria-checked="${o.pick === a.id}" aria-label="${a.name}${artLocked(a) ? ' (PRO)' : ''}" data-ap="${a.id}"${artLocked(a) ? ' data-pro="1"' : ''}><img src="/art/t/${a.id}.webp" alt="" width="66" height="82" loading="lazy" decoding="async"><em>${a.name}</em></button>`).join('')}
     </div>
-    <p class="art-cap">${own ? 'Your own background is on: it replaces the painting.' : `<i>${cur.title}</i> · ${cur.by}, ${cur.year}${o.pick === 'auto' ? ' · picked for this ' + (state.t.pnl < 0 ? 'loss' : 'win') : ''}`}</p>
+    <p class="art-cap">${own ? 'Your own background is on: it replaces the artwork.' : `<i>${cur.title}</i> · ${cur.by}, ${cur.year}${o.pick === 'auto' ? ' · picked for this ' + (state.t.pnl < 0 ? 'loss' : 'win') : ''}`}</p>
     ${AO_GROUPS.map(([k, label, opts]) => `<div class="rc-group"><div class="rc-label" id="acl-${k}">${label}</div>
       <div class="rc-row" role="radiogroup" aria-labelledby="acl-${k}">${opts.map(([v, l]) => `<button type="button" class="rc-chip ${o[k] === v ? 'on' : ''}${lk(k, v) ? ' locked' : ''}" role="radio" aria-checked="${o[k] === v}" data-ak="${k}" data-av="${v}"${lk(k, v) ? ' data-pro="1"' : ''}>${l}</button>`).join('')}</div></div>`).join('')}
     <div class="rc-group"><div class="rc-label">Show</div><div class="rc-row">${AO_SHOW.map(([k, l]) => `<button type="button" class="rc-chip ${o[k] ? 'on' : ''}" role="switch" aria-checked="${!!o[k]}" data-as="${k}">${o[k] ? '✓ ' : ''}${l}</button>`).join('')}</div></div>`;
@@ -1377,11 +1424,12 @@ function renderArtOpts(){
   if(keepX != null) row.scrollLeft = keepX;
   else { const on = row.querySelector('.on'); if(on) row.scrollLeft = Math.max(0, on.offsetLeft - row.clientWidth / 2 + on.offsetWidth / 2); }
   const save = () => { try{ localStorage.setItem(AO_KEY, JSON.stringify(AO_SAVED)); }catch(e){} renderArtOpts(); styleThumbs(); artReady(state.t).then(() => styleThumbs()); };
+  box.querySelectorAll('[data-akind]').forEach(b => b.addEventListener('click', () => { artKind = b.dataset.akind; const r = box.querySelector('.art-row'); if(r) r.scrollLeft = 0; renderArtOpts(); const r2 = box.querySelector('.art-row'); if(r2) r2.scrollLeft = 0; }));
   box.querySelectorAll('[data-ap]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); AO_SAVED = { ...AO_SAVED, pick:b.dataset.ap }; save(); }));
   box.querySelectorAll('[data-ak]').forEach(b => b.addEventListener('click', () => { if(b.dataset.pro) return window.dcPro.open(); AO_SAVED = { ...AO_SAVED, [b.dataset.ak]: b.dataset.av }; save(); }));
   box.querySelectorAll('[data-as]').forEach(b => b.addEventListener('click', () => { AO_SAVED = { ...AO_SAVED, [b.dataset.as]: !AO_SAVED[b.dataset.as] }; save(); }));
   document.getElementById('artShuffle').addEventListener('click', () => {
-    const pool = ART.filter(a => !artLocked(a) && a.id !== cur.id); if(!pool.length) return;
+    const pool = ART.filter(a => !artLocked(a) && a.id !== cur.id && (artKind === 'all' || a.kind === artKind)); if(!pool.length) return;
     AO_SAVED = { ...AO_SAVED, pick: pool[Math.floor(Math.random() * pool.length)].id }; save();
     const on = box.querySelector('.art-row .on'); if(on) on.scrollIntoView({ block:'nearest', inline:'center', behavior:'smooth' });
   });

@@ -293,3 +293,10 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Bug : la recherche de Collection / History avait perdu son style (classe `.rd-search` supprimée avec le Radar) → renommée `.search-field` et restylée.
 - Base commune pour tous les champs texte (`:where(...)` en fin de styles.css, spécificité 0 donc les composants gardent la main) : fond surf2, bord gris, rayon 10 px, 44 px de haut, police du site en 16 px (évite le zoom iOS au focus), bord violet au focus, apparence native coupée (plus de loupe / fond blanc iOS sur type=search), autofill sombre, flèches des champs nombre retirées.
 - Les anciens champs (auth, nouveau trade, compte, adresse wallet) alignés sur la même base.
+
+## ART v2 (2026-10-22)
+- Post 4:5 et Story 9:16 plein cadre, même échelle « cinéma » que le 16:9 (unité = petit côté / 1350) : l'œuvre occupe le haut, le trade (graphe ~20 % de la hauteur, gros chiffre, stats, pied) est posé dans la partie basse. Story : marges hautes / basses pour rester hors de l'interface TikTok / Insta. Plus de carte flottante en Story. Le 16:9 est inchangé.
+- Étiquettes : si Entry et Exit tombent au même endroit → une seule « Entry · Exit » ; si elles se chevauchent → l'une au-dessus, l'autre en dessous. Bougies plafonnées en largeur. Léger grain film sur les images fixes.
+- 43 œuvres (16 avant) : peintures, sculptures (Canova, Carpeaux, anges, Victoire ailée, Hercule…) et gravures (Dürer, Schongauer, Redon, Piranesi). Met + Cleveland Museum of Art, Open Access CC0 (crédits dans `art/README.txt`). Photos de sculptures ré-éclairées en sombre à l'export (script de recadrage dans l'historique de la conversation, pas dans le repo). ~12 Mo dans `/art`, chargées seulement quand choisies.
+- Filtre dans le panneau : All / Paintings / Sculpture / Engravings. Gratuit : Perseus, Victory, Horsemen, Lions, Socrates, Tempest, Summit ; le reste PRO (visible avec la pastille).
+- Tons : Natural et Noir (gratuits), Marble (N&B doux argenté), Gold (bichromie dorée), Dark (PRO). Calculés une fois par œuvre et par ton (pas de ctx.filter, pour Safari).
