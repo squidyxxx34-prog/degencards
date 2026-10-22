@@ -288,3 +288,8 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Objectif du mois : « October goal » (violet), gros montant + « of $5,000 », barre violette fine (remplace l'anneau), « $X to go in N days, about $Y a day » + %, une phrase du mois (« 130 trades this month, 44% wins, best day +$1435. »), champ « Monthly target » avec $ + bouton Save blanc. Le % ne montre 100 % que si l'objectif est vraiment atteint.
 - Calendrier : cases plus calmes (teinte verte / rouge 14-60 %), aujourd'hui cerclé violet, jours futurs en contour, montants cachés sur téléphone.
 - Overview : liste label / valeur (2 colonnes dès 900 px) ; stats PRO verrouillées = lignes grisées avec « PRO » violet, tap = paywall. `dcProStats()` inchangé (le champ `i` est ignoré).
+
+## Champs de saisie (2026-10-22)
+- Bug : la recherche de Collection / History avait perdu son style (classe `.rd-search` supprimée avec le Radar) → renommée `.search-field` et restylée.
+- Base commune pour tous les champs texte (`:where(...)` en fin de styles.css, spécificité 0 donc les composants gardent la main) : fond surf2, bord gris, rayon 10 px, 44 px de haut, police du site en 16 px (évite le zoom iOS au focus), bord violet au focus, apparence native coupée (plus de loupe / fond blanc iOS sur type=search), autofill sombre, flèches des champs nombre retirées.
+- Les anciens champs (auth, nouveau trade, compte, adresse wallet) alignés sur la même base.
