@@ -504,6 +504,27 @@ function focalDraw(ctx, src, iw, ih, W, H, fx, fy, zoom){
   try{ ctx.drawImage(src, x, y, dw, dh); }catch(e){}
   ctx.restore();
 }
+/* a statue is never cropped: the whole photo, contained, over a blurred and darker copy of itself; the seams are feathered */
+const ART_FIT = document.createElement('canvas');
+function fitWhole(ctx, src, iw, ih, W, H, a, zoom){
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const r0 = Math.max(W / iw, H / ih) * 1.08, bw = iw * r0, bh = ih * r0;
+  try{ ctx.drawImage(softBlur(src, iw, ih, Math.max(iw, ih) / 40), (W - bw) / 2, (H - bh) / 2, bw, bh); }catch(e){}
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
+  const z = 1 + (zoom - 1) * 0.5, r = Math.min(W / iw, H / ih) * z, dw = Math.round(iw * r), dh = Math.round(ih * r);
+  const x = Math.round((W - dw) / 2), y = Math.round((H - dh) / 2 + (H - dh > 4 ? 0 : (1 - z) * dh * 0.25));
+  if(ART_FIT.width !== dw || ART_FIT.height !== dh){ ART_FIT.width = dw; ART_FIT.height = dh; }
+  const g = ART_FIT.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, dw, dh);
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  try{ g.drawImage(src, 0, 0, dw, dh); }catch(e){}
+  g.globalCompositeOperation = 'destination-in';                       // feather only the edges that meet the blurred fill
+  const fxw = dw < W - 2 ? Math.min(dw * 0.14, 160) : 0, fyh = dh < H - 2 ? Math.min(dh * 0.12, 160) : 0;
+  if(fxw){ const lg = g.createLinearGradient(0, 0, dw, 0); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fxw / dw, '#000'); lg.addColorStop(1 - fxw / dw, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
+  if(fyh){ const lg = g.createLinearGradient(0, 0, 0, dh); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(fyh / dh, '#000'); lg.addColorStop(1 - fyh / dh, '#000'); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(0, 0, dw, dh); }
+  g.globalCompositeOperation = 'source-over';
+  ctx.drawImage(ART_FIT, x, y);
+  ctx.restore();
+}
 function artBackdrop(ctx, W, H, t, ao, p, blur){
   const zoom = blur ? 1.15 : 1.1 - 0.1 * easeOut(seg(p, 0, 1));
   ctx.fillStyle = '#0B0A09'; ctx.fillRect(0, 0, W, H);
@@ -511,7 +532,8 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
   const a = artPick(t, ao), im = artImg(a);
   if(!(im && im.complete && im.naturalWidth)) return;
   const src = artGrade(a, im, ao.tone), iw = im.naturalWidth, ih = im.naturalHeight;
-  focalDraw(ctx, blur ? softBlur(src, iw, ih, Math.max(iw, ih) / 48) : src, iw, ih, W, H, a.fx, a.fy, zoom);
+  if(a.kind === 'sculpt' && !blur) fitWhole(ctx, src, iw, ih, W, H, a, zoom);
+  else focalDraw(ctx, blur ? softBlur(src, iw, ih, Math.max(iw, ih) / 48) : src, iw, ih, W, H, a.fx, a.fy, zoom);
   const dim = a.dim + (ao.tone === 'dark' ? 0.24 : 0);
   if(dim > 0){ ctx.fillStyle = `rgba(0,0,0,${dim})`; ctx.fillRect(0, 0, W, H); }
 }
@@ -529,7 +551,7 @@ function artChart(ctx, t, x, y, w, h, p, u){
   const g = ART_LAYER.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, lw, lh);
   const X = v => ((v - x0) / (x1 - x0)) * w, Y = v => (1 - (v - y0) / (y1 - y0)) * h;
   const drawP = easeOut(seg(p, 0.12, 0.62)), n = Math.ceil(cs.length * drawP);
-  const slot = (iv / (x1 - x0)) * w, bw = Math.max(1.6 * u, Math.min(slot * 0.64, 15 * u)), hollow = bw >= 7 * u;
+  const slot = (iv / (x1 - x0)) * w, bw = Math.max(1.6 * u, slot * 0.64), hollow = bw >= 7 * u;
   for(let i = 0; i < n; i++){
     const [ts, o, hi, lo, c] = cs[i], up = c >= o, cx = X(ts + iv / 2), top = Y(Math.max(o, c)), bot = Y(Math.min(o, c)), bh = Math.max(1.6 * u, bot - top);
     g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.62)'; g.lineWidth = Math.max(1.2 * u, Math.min(2.4 * u, bw * 0.16));
@@ -611,13 +633,13 @@ function drawArt(ctx, W, H, t, meta, p, opt){
     fy = H - 74 * u; creditY = H - 22 * u;
   } else {
     const topSafe = (story ? 196 : 58) * k, botSafe = (story ? 250 : 52) * k;      // story: clear of the app's own header and caption
-    hy = topSafe + 26 * u; colW = W * (story ? 0.8 : 0.74);
+    hy = topSafe + 26 * u; colW = W * (story ? 0.84 : 0.8);
     fy = H - botSafe - 34 * u;
     statsTop = fy - 64 * u - statsH;
     bigSize = fitFont(ctx, bigTxt(1), 800, SANS, (story ? 200 : 178) * u, W * 0.84);
     bigBase = statsTop - (rows.length ? 34 : 0) * u;
     chartBot = bigBase - bigSize * 0.78 - 50 * u;
-    chartTop = Math.max(hy + 100 * u, chartBot - H * (story ? 0.2 : 0.215));
+    chartTop = Math.max(hy + 100 * u, chartBot - H * (story ? 0.24 : 0.27));
     creditY = story ? fy + 70 * u : H - 22 * u;
   }
   ctx.save();
