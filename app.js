@@ -972,7 +972,7 @@ function renderAchievements(){
     <div class="hm-kicker">ACHIEVEMENTS</div>
     <h1 class="pg-title aw-title"><span id="awGot">${got}</span><span class="aw-of"> of ${total}</span> unlocked</h1>
     <div class="aw-track" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${got}" aria-label="Achievements unlocked"><i style="--w:${pct.toFixed(1)}%"></i></div>
-    <p class="aw-sum">${TIER_ORDER.map(tr=>`${tierCount[tr]} ${TIER_NAME[tr]}`).join(', ').replace(/, ([^,]*)$/, ' and $1')}. ${got ? `${(got*120).toLocaleString('en-US')} XP from badges.` : 'Your first trade unlocks the first one.'}</p>`;
+    <p class="aw-sum">${TIER_ORDER.map(tr=>`<b>${tierCount[tr]}</b> ${TIER_NAME[tr]}`).join(', ').replace(/, ([^,]*)$/, ' and $1')}. ${got ? `<b class="aw-xp">${(got*120).toLocaleString('en-US')} XP</b> from badges.` : 'Your first trade unlocks the first one.'}</p>`;
 
   // next up: the closest locked badge that can be measured
   const nextK = Object.keys(prog).filter(k=>frac(k) < 1).sort((a,b)=>frac(b)-frac(a) || rank(a)-rank(b))[0];
@@ -993,10 +993,10 @@ function renderAchievements(){
   document.getElementById('awTiers').innerHTML = TIER_ORDER.map(tr=>{
     const items = ACH_CATALOG.filter(a=>tierOf(a.key)===tr).sort((a,b)=> (unlocked.has(b.key) - unlocked.has(a.key)) || (lastAt(b.key) - lastAt(a.key)) || (frac(b.key) - frac(a.key)));
     return `<section class="aw-sec">
-      <h2 class="aw-sec-h">${TIER_NAME[tr]}<span>${tierCount[tr]} of ${tierAll[tr]}</span></h2>
+      <h2 class="aw-sec-h">${TIER_NAME[tr]}<span><b>${tierCount[tr]}</b> of ${tierAll[tr]}</span></h2>
       <div class="aw-list">${items.map(a=>{
         const has = unlocked.has(a.key), list = earned[a.key] || [], p = prog[a.key], pc = Math.round(frac(a.key)*100);
-        const side = has ? `<span>${a.key === latest ? 'Latest, ' : ''}${list.length ? awDay(list[0].timestamp) : 'Unlocked'}</span>${list.length > 1 ? `<small>${list.length} times</small>` : ''}`
+        const side = has ? `<span>${a.key === latest ? '<b class="aw-latest">Latest</b>, ' : ''}${list.length ? awDay(list[0].timestamp) : 'Unlocked'}</span>${list.length > 1 ? `<small>${list.length} times</small>` : ''}`
           : p ? `<span>${esc(awShort(p[2]))}</span>` : '<span>Locked</span>';
         return `<button type="button" class="aw-row ${has?'has':'locked'}${!has && p ? ' prog' : ''}" data-ach="${a.key}" style="--i:${Math.min(n++,16)};--w:${pc}%" aria-label="${esc(awTitle(a.name))}, ${TIER_NAME[tr]}, ${has?'unlocked':'locked'}">
           <span class="aw-main"><span class="aw-name">${esc(awTitle(a.name))}</span><span class="aw-desc">${esc(a.desc)}</span></span>

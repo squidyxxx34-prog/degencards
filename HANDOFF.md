@@ -280,4 +280,5 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Haut : « 21 of 29 unlocked », une barre fine blanche, une phrase « 1 Legend, 1 Gold, 9 Silver and 10 Bronze. 2,520 XP from badges. »
 - Next up : bloc neutre (badge verrouillé le plus proche, barre fine, « Best streak 9/10 · 90% »), tap = détail.
 - Puis une section par tier (Legend → Bronze) : une ligne par badge (nom + description à gauche, date / « N times » ou progression à droite), débloqués d'abord (« Latest, » sur le dernier), verrouillés grisés ; la progression d'un verrouillé = le filet sous sa ligne qui se remplit. 2 colonnes dès 900 px.
+- Couleur : palette blanc / violet / gris. Violet (--purple) seulement pour les barres de progression, les filets de progression, « Next up · tier », le %, les compteurs débloqués, « Latest », l'XP et le survol des noms.
 - Entrée < 1 s à chaque ouverture (barres qui se tracent, compteur, lignes qui se posent), coupée si reduced motion.
