@@ -305,3 +305,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 
 ## Style CARD retiré du partage (2026-10-22)
 - La feuille de partage n'a plus que ART / SIMPLE / REPLAY. Supprimés : bouton CARD, panneau Customize de CARD (`dc_card_opts`), `drawFrame` + `drawChart` de share.js. Un ancien choix « card » mémorisé retombe sur ART ; si le Replay n'est pas dispo, repli sur ART. Les sections « CARD » plus haut dans ce fichier sont historiques.
+
+## Direction visuelle « majestueuse » (2026-10-22)
+- Couche en fin de styles.css (« MAJESTIC LAYER ») : fond noir musée chaud (#0A0908), texte ivoire (#F6F1E7), gris chaud, violet royal gardé en accent + doré pâle (`--gilt`) en touche ; léger grain (SVG fractalNoise en data URI, derrière le contenu) et lumière douce en haut de page.
+- Titres en Instrument Serif (OFL, auto-hébergée dans /fonts, via @fontsource) : landing, titres de pages, « GM. », gros montant P&L, objectif, sections Achievements, gros chiffre des cartes de la collection. L'interface reste en Outfit ; les petits libellés passent en Outfit espacé (fini le JetBrains Mono pour les labels).
+- Boutons principaux ivoire (pilule) au lieu du vert / dégradé ; landing : chiffres romains pour les étapes, filets au lieu de boîtes, FAQ en lignes, titre « Turned into cards. » en italique dégradé violet → doré.
+- Images de la landing (`lp/story.webp`, `post.webp`, `loss.webp`, + `victory.webp`, `wide.webp` en réserve) régénérées avec le style ART (l'ancien style CARD a été retiré).
