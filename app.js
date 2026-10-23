@@ -1431,13 +1431,65 @@ function renderAccount(){
 }
 function renderHome(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
-  renderHomeHead(all); renderStreak(all); renderQuests(all); renderBest(all);
+  renderHomeHead(all); renderStreak(all); renderInsights(all); renderQuests(all); renderBest(all);
   const grid = document.getElementById('homeGrid');
   if(all.length===0){ grid.innerHTML = ''; document.querySelector('#homeView .hm-sh').hidden = true; return; }
   document.querySelector('#homeView .hm-sh').hidden = false;
   grid.innerHTML = all.slice(0,8).map(cardHTML).join('');
   bindCards(grid);
 }
+/* ---------- HOME: what to learn from your own trades ----------
+   1. this week vs last week (P&L, trades, win rate, typical hold)
+   2. hold time vs result: where the money is made or lost, with a one-line takeaway
+   3. the loss to review this week (or the latest big one), opened in one tap */
+function renderInsights(all){
+  const box = document.getElementById('hmInsights');
+  if(all.length < 3){ box.hidden = true; return; } box.hidden = false;
+  const now = Date.now(), w0 = weekStart(now), w1 = w0 - 7*864e5;
+  const cur = all.filter(t=>t.timestamp >= w0), prev = all.filter(t=>t.timestamp >= w1 && t.timestamp < w0);
+  const med = a => { const b = a.map(t=>t.holdTime||0).sort((x,y)=>x-y); return b.length ? b[b.length>>1] : 0; };
+  const sum = a => a.reduce((x,t)=>x+t.pnl,0), wr = a => a.length ? Math.round(a.filter(t=>t.pnl>0).length/a.length*100) : 0;
+  const delta = (a, b, fmtD, better) => { if(!prev.length) return '<i class="ins-d">—</i>'; const d = a - b; if(Math.abs(d) < 1e-9) return '<i class="ins-d">=</i>';
+    const good = better === 'up' ? d > 0 : better === 'down' ? d < 0 : null;
+    return `<i class="ins-d ${good===null?'':good?'pos':'neg'}">${d>0?'▲':'▼'} ${fmtD(Math.abs(d))}</i>`; };
+  const money = v => '$' + v.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+  const rows = [
+    ['P&L', `<b class="${sum(cur)>=0?'pos':'neg'}">${usdBig(sum(cur))}</b>`, prev.length ? usdBig(sum(prev)) : '—', delta(sum(cur), sum(prev), money, 'up')],
+    ['Trades', `<b>${cur.length}</b>`, prev.length ? String(prev.length) : '—', delta(cur.length, prev.length, v=>String(v), null)],
+    ['Win rate', `<b>${cur.length ? wr(cur)+'%' : '—'}</b>`, prev.length ? wr(prev)+'%' : '—', cur.length ? delta(wr(cur), wr(prev), v=>v+' pts', 'up') : '<i class="ins-d">—</i>'],
+    ['Typical hold', `<b>${cur.length ? fmt.hold(med(cur)) : '—'}</b>`, prev.length ? fmt.hold(med(prev)) : '—', '<i class="ins-d"></i>'],
+  ];
+  const week = `<div class="hm-panel ins-week"><div class="hm-label">THIS WEEK VS LAST WEEK</div>
+    <div class="ins-tbl"><div class="ins-r ins-h"><span></span><span>This week</span><span>Last week</span><span></span></div>
+    ${rows.map(([l,a,b,d])=>`<div class="ins-r"><span>${l}</span><span>${a}</span><span class="ins-prev">${b}</span><span>${d}</span></div>`).join('')}</div>
+    <p class="ins-note">${!cur.length ? 'No trade yet this week.' : !prev.length ? 'First week on record: next week gets a comparison.' : sum(cur) >= sum(prev) ? 'Ahead of last week so far.' : `Behind last week by ${money(sum(prev)-sum(cur))} so far.`}</p></div>`;
+  // hold time buckets: last 30 days, all time if too few trades
+  let pool = all.filter(t=>t.timestamp >= now - 30*864e5), span = 'last 30 days';
+  if(pool.length < 8){ pool = all; span = 'all time'; }
+  const B = [['Under 30s',0,30],['30s – 5m',30,300],['5m – 1h',300,3600],['Over 1h',3600,Infinity]].map(([l,a,b])=>{
+    const L = pool.filter(t=>(t.holdTime||0) >= a && (t.holdTime||0) < b); return { l, n:L.length, p:sum(L), w:wr(L) }; });
+  const maxP = Math.max(1, ...B.map(b=>Math.abs(b.p)));
+  const used = B.filter(b=>b.n >= 3), worst = used.slice().sort((a,b)=>a.p-b.p)[0], best = used.slice().sort((a,b)=>b.p-a.p)[0];
+  const take = !used.length ? 'Not enough trades yet to see a pattern.'
+    : worst && worst.p < 0 && best && best.p > 0 ? `Your money is made in <b>${best.l.toLowerCase()}</b> holds (${usdBig(best.p)}) and lost in <b>${worst.l.toLowerCase()}</b> ones (${usdBig(worst.p)}).`
+    : best && best.p > 0 ? `Best results on <b>${best.l.toLowerCase()}</b> holds: ${usdBig(best.p)} at ${best.w}% wins.`
+    : `Every hold length is red ${span === 'all time' ? 'so far' : 'this month'}. Least bad: <b>${best.l.toLowerCase()}</b> (${usdBig(best.p)}).`;
+  const hold = `<div class="hm-panel ins-hold"><div class="ins-top"><div class="hm-label">HOLD TIME VS RESULT</div><span class="ins-span">${span}</span></div>
+    ${B.map(b=>`<div class="ins-b${b.n?'':' ins-none'}"><span class="ins-bl">${b.l}</span><div class="ins-bar"><i class="${b.p>=0?'pos':'neg'}" style="width:${b.n ? Math.max(3, Math.abs(b.p)/maxP*100).toFixed(1) : 0}%"></i></div>
+      <span class="ins-bv ${b.p>=0?'pos':'neg'}">${b.n ? usdShort(b.p) : '—'}</span><span class="ins-bn">${b.n ? `${b.n} · ${b.w}%` : ''}</span></div>`).join('')}
+    <p class="ins-note">${take}</p></div>`;
+  // the loss to review: worst of this week, else worst of the last 30 days
+  const lossPool = cur.filter(t=>t.pnl < 0).length ? cur : all.filter(t=>t.timestamp >= now - 30*864e5);
+  const lt = lossPool.filter(t=>t.pnl < 0).sort((a,b)=>a.pnl-b.pnl)[0];
+  const review = lt ? `<div class="hm-panel ins-review"><div class="hm-label">LOSS TO REVIEW</div>
+      <div class="ins-rv-main"><span class="ins-rv-coin">${coinImg(lt, 40)}</span><div><b>${esc(tk(lt.ticker))}</b><span>${ago(lt.timestamp)} · held ${fmt.hold(lt.holdTime||0)}</span></div></div>
+      <div class="ins-rv-pnl neg">${usdBig(lt.pnl)} <span>${fmt.pct(lt.roi)}</span></div>
+      <p class="ins-note">${cur.some(t=>t.pnl<0) ? 'Your biggest loss this week.' : 'Your biggest loss of the last 30 days.'} Replay it: where would a better exit have been?</p>
+      <button type="button" class="hm-btn" data-ins-open="${lt.id}">OPEN THE TRADE</button></div>`
+    : `<div class="hm-panel ins-review"><div class="hm-label">LOSS TO REVIEW</div><p class="ins-note">No losing trade in the last 30 days. Clean.</p></div>`;
+  box.innerHTML = week + hold + review;
+}
+document.getElementById('hmInsights').addEventListener('click', e=>{ const b = e.target.closest('[data-ins-open]'); if(b) openDetail(b.dataset.insOpen); });
 /* greeting + one-line summary of the week + wallet auto-import status */
 function renderHomeHead(all){
   const d = new Date(), day = d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
