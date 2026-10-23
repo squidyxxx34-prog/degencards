@@ -1431,7 +1431,7 @@ function renderAccount(){
 }
 function renderHome(){
   const all = computedTrades().sort((a,b)=>b.timestamp-a.timestamp);
-  renderHomeHead(all); renderStreak(all); renderInsights(all); renderQuests(all); renderBest(all);
+  renderHomeHead(all); renderStreak(all); renderInsights(all); renderReport(all); renderQuests(all); renderBest(all);
   const grid = document.getElementById('homeGrid');
   if(all.length===0){ grid.innerHTML = ''; document.querySelector('#homeView .hm-sh').hidden = true; return; }
   document.querySelector('#homeView .hm-sh').hidden = false;
@@ -1490,6 +1490,49 @@ function renderInsights(all){
   box.innerHTML = week + hold + review;
 }
 document.getElementById('hmInsights').addEventListener('click', e=>{ const b = e.target.closest('[data-ins-open]'); if(b) openDetail(b.dataset.insOpen); });
+/* ---------- HOME: AI report (edge function `report`, one per user per day, built server-side from the trades) ---------- */
+const aiReport = { state: 'idle', live: null, text: '', day: '', err: '', n: -1 };
+async function loadReport(force){
+  if(!session || aiReport.state === 'loading') return;
+  aiReport.state = 'loading'; aiReport.err = ''; paintReport();
+  try{
+    if(aiReport.live === null){ const { data } = await sb.functions.invoke('report', { body:{ action:'status' } }); aiReport.live = !!(data && data.live); }
+    if(!aiReport.live){ aiReport.state = 'off'; paintReport(); return; }
+    const { data, error } = await sb.functions.invoke('report', { body:{ action:'get' } });
+    if(error) throw error;
+    if(data && data.error === 'few_trades'){ aiReport.state = 'few'; }
+    else if(data && data.report){ aiReport.text = String(data.report); aiReport.day = String(data.day||''); aiReport.state = 'ok'; }
+    else throw new Error(data?.error || 'empty');
+  }catch(e){ aiReport.state = 'err'; aiReport.err = /model/.test(String(e?.message||'')) ? 'The AI is busy right now.' : 'Could not load the report.'; }
+  paintReport();
+}
+function renderReport(all){
+  if(!session) return;
+  if(aiReport.n !== all.length && aiReport.state !== 'loading' && (aiReport.state === 'idle' || aiReport.state === 'few')){ aiReport.n = all.length; loadReport(); }
+  paintReport();
+}
+function paintReport(){
+  const box = document.getElementById('hmReport'); if(!box) return;
+  const st = aiReport.state;
+  if(st === 'off' || st === 'idle'){ box.hidden = true; return; } box.hidden = false;
+  const head = `<div class="rp-head"><div class="hm-label">AI REPORT</div><span class="rp-meta">${st === 'ok' && aiReport.day ? 'last 30 days · '+new Date(aiReport.day+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'last 30 days'}</span></div>`;
+  let body = '';
+  if(st === 'loading') body = `<div class="rp-load"><i class="sk" style="width:92%"></i><i class="sk" style="width:78%"></i><i class="sk" style="width:85%"></i><i class="sk" style="width:60%"></i><span>Reading your trades…</span></div>`;
+  else if(st === 'few') body = `<p class="rp-empty">Your report unlocks after a few trades. Close at least 3 and come back.</p>`;
+  else if(st === 'err') body = `<p class="rp-err">${esc(aiReport.err)}</p><button type="button" class="hm-btn" data-rp-retry>TRY AGAIN</button>`;
+  else {
+    const lines = aiReport.text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+    const bullets = lines.filter(l=>/^[-•*]\s*/.test(l)).map(l=>l.replace(/^[-•*]\s*/,''));
+    const focus = lines.find(l=>/^focus:/i.test(l));
+    const other = lines.filter(l=>!/^[-•*]\s*/.test(l) && !/^focus:/i.test(l));
+    const md = x => esc(x).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[\s(])([+-]?\$[\d,]+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?%)/g,'$1<b>$2</b>');
+    body = `${other.map(l=>`<p class="rp-p">${md(l)}</p>`).join('')}${bullets.length ? `<ul class="rp-list">${bullets.map(b=>`<li>${md(b)}</li>`).join('')}</ul>` : ''}
+      ${focus ? `<div class="rp-focus"><span>FOCUS</span><p>${md(focus.replace(/^focus:\s*/i,''))}</p></div>` : ''}
+      <p class="rp-fine">Written by AI from your own trades. Not financial advice. A new report every day.</p>`;
+  }
+  box.innerHTML = head + body;
+}
+document.getElementById('hmReport').addEventListener('click', e=>{ if(e.target.closest('[data-rp-retry]')){ aiReport.state = 'idle'; loadReport(); } });
 /* greeting + one-line summary of the week + wallet auto-import status */
 function renderHomeHead(all){
   const d = new Date(), day = d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
@@ -1535,9 +1578,9 @@ function renderBest(all){
   if(!pool.length){ box.hidden = true; return; }
   const t = pool.reduce((m,x)=>x.pnl>m.pnl ? x : m, pool[0]);
   box.hidden = false;
-  box.innerHTML = `<div class="hm-best-card grid">${cardHTML(t)}</div>
+  box.innerHTML = `<div class="hm-label gold hm-best-h">${wk.length ? 'BEST TRADE THIS WEEK' : 'YOUR BEST TRADE'}</div>
+    <div class="hm-best-card grid">${cardHTML(t)}</div>
     <div class="hm-best-info">
-      <div class="hm-label gold">${wk.length ? 'BEST TRADE THIS WEEK' : 'YOUR BEST TRADE'}</div>
       <div class="hm-best-pnl pos">${usdBig(t.pnl)}</div>
       <div class="hm-best-sub">${esc(tk(t.ticker))} · ${fmt.pct(t.roi)} · held ${fmt.hold(t.holdTime)} · ${t.meta.rarity.toUpperCase()} ${t.meta.grade}</div>
       <p>Post it as a card, a clean PnL image or a trade replay video.</p>

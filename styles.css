@@ -1425,3 +1425,30 @@ input:-webkit-autofill{-webkit-text-fill-color:var(--tx); -webkit-box-shadow:0 0
 .ins-rv-pnl{font:800 24px var(--mono);} .ins-rv-pnl.neg{color:var(--red);} .ins-rv-pnl span{font-size:13px; opacity:.8;}
 .ins-review .hm-btn{margin-top:12px; align-self:flex-start;}
 .ins-review .ins-note{margin-top:0;}
+
+/* ---------- Home: AI report ---------- */
+.hm-report{margin-top:16px; padding:22px 24px;}
+.rp-head{display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:14px;}
+.rp-meta{font:600 10px var(--mono); color:var(--tx2);}
+.rp-p{font-size:14px; line-height:1.55; color:var(--tx); margin-bottom:8px;}
+.rp-list{list-style:none; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 22px; margin:0 0 14px;}
+@media(max-width:760px){ .rp-list{grid-template-columns:1fr;} }
+.rp-list li{position:relative; padding-left:16px; font-size:14px; line-height:1.5; color:var(--tx2);}
+.rp-list li::before{content:''; position:absolute; left:0; top:.6em; width:6px; height:6px; border-radius:50%; background:var(--purple);}
+.rp-list b,.rp-p b,.rp-focus b{color:var(--tx); font-family:var(--mono); font-weight:700;}
+.rp-focus{display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:14px; background:rgba(192,158,255,.08); border:1px solid rgba(192,158,255,.3);}
+.rp-focus span{font:800 10px var(--mono); letter-spacing:.12em; color:var(--purple); padding-top:3px; flex-shrink:0;}
+.rp-focus p{font-size:14px; line-height:1.5; font-weight:600;}
+.rp-fine{margin-top:12px; font-size:11px; color:var(--tx2);}
+.rp-load{display:flex; flex-direction:column; gap:10px;} .rp-load .sk{height:12px;} .rp-load span{font-size:12px; color:var(--tx2);}
+.rp-empty{font-size:14px; color:var(--tx2);}
+.rp-err{font-size:14px; color:var(--red); font-weight:600; margin-bottom:12px;}
+
+/* ---------- Home: panel titles first, sharper ---------- */
+#homeView .hm-label,#homeView .goal-label{font:800 12px/1.2 var(--mono); letter-spacing:.1em; color:var(--tx); text-transform:uppercase;}
+#homeView .hm-label.gold{color:var(--gold);}
+#homeView .goal-label{color:var(--purple); margin-bottom:6px;}
+.hm-best-h{grid-column:1/-1; margin-bottom:-6px;}
+.hm-side .levelbar{grid-template-areas:"h h" "id xp" "track track";}
+.hm-level-h{grid-area:h;}
+.hm-side .hm-streak{display:flex; flex-direction:column; justify-content:flex-start;}
