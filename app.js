@@ -1410,7 +1410,7 @@ function renderAvatar(){
     if(avatarUrl){ el.style.setProperty('--av-img', `url("${avatarUrl}")`); el.classList.add('has-img'); }
     else { el.style.removeProperty('--av-img'); el.classList.remove('has-img'); } });
   const b = document.getElementById('accPicBtn'); if(b) b.textContent = avatarUrl ? 'CHANGE' : 'UPLOAD';
-  if(profile && typeof ranks !== 'undefined'){ ranks.pics.set(profile.username, avatarUrl || ''); if(ranks.rows.length && document.getElementById('ranksView').style.display !== 'none') ranks.render(); }
+  try{ if(profile){ ranks.pics.set(profile.username, avatarUrl || ''); if(ranks.rows.length && document.getElementById('ranksView').style.display !== 'none') ranks.render(); } }catch(_){}
   const r = document.getElementById('accPicRemove'); if(r) r.hidden = !avatarUrl;
 }
 async function loadAvatar(){
