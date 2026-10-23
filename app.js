@@ -2507,6 +2507,11 @@ function onSession(sess){
      (extra replay looks, full stats) is not in the site files: the `pro` edge function sends it to verified
      subscribers only, through a one-time ticket (loadStudio). */
 const PRO_OK = new Set(['active','trialing','completed','canceling','past_due']);
+/* test switch for the owner's own accounts (email contains "squid"): PRO hidden on this browser to try the free plan.
+   It can only hide PRO, never grant it: switching back shows exactly what public.subscriptions says. */
+const proTester = () => /squid/i.test(session?.user?.email || '');
+const proTestKey = () => 'dc_pro_off_' + (session?.user?.id || '');
+const proTestOff = () => { if(!proTester()) return false; try{ return localStorage.getItem(proTestKey()) === '1'; }catch(e){ return false; } };
 let PRO_LIVE = false;
 window.dcPro = { enabled: false, active: false, studio: false, sub: null, open: () => openPro() };
 function renderPro(){
@@ -2529,9 +2534,13 @@ function renderPro(){
     sub.textContent = 'Every replay theme, background, sell effect, intro, hook and the short-logo ending.';
     btn.textContent = 'GO PRO'; btn.classList.add('pro-btn');
   }
+  const tr = document.getElementById('proTestRow');
+  if(tr){ tr.hidden = !proTester(); const off = proTestOff();
+    document.getElementById('proTestState').textContent = off ? 'PRO is off on this browser — you see the free plan' : 'Turn PRO off to test the free plan';
+    document.getElementById('btnProTest').textContent = off ? 'TURN PRO ON' : 'TURN PRO OFF'; }
 }
 async function loadStudio(){
-  if(window.dcPro.studio || !window.dcPro.active) return;
+  if(window.dcPro.studio || !window.dcPro.active || proTestOff()) return;
   try{
     const { data } = await sb.functions.invoke('pro', { body:{} });
     if(!data || !/^[a-f0-9]{64}$/.test(data.ticket || '')) return;
@@ -2552,14 +2561,14 @@ async function loadPro(force){
     if(!PRO_LIVE) return;
   }
   const { data } = await sb.from('subscriptions').select('*').maybeSingle();
-  window.dcPro.sub = data || null; window.dcPro.active = !!(data && PRO_OK.has(data.status) && (!data.renews_at || new Date(data.renews_at) > new Date(Date.now() - 3*864e5)));
+  window.dcPro.sub = data || null; window.dcPro.active = !!(data && PRO_OK.has(data.status) && (!data.renews_at || new Date(data.renews_at) > new Date(Date.now() - 3*864e5)) && !proTestOff());
   renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
   // back from checkout, or an existing row: read the membership back from Whop (renewals, cancellations)
   if(force || data){
     try{
       const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
       if(r && 'pro' in r){
-        const was = window.dcPro.active; window.dcPro.active = !!r.pro; window.dcPro.sub = r.sub || window.dcPro.sub;
+        const was = window.dcPro.active; window.dcPro.active = !!r.pro && !proTestOff(); window.dcPro.sub = r.sub || window.dcPro.sub;
         renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
         if(force && r.pro && !was) showToast('Welcome to PRO — every replay style is unlocked');
         else if(force && !r.pro) showToast('Payment not found yet — it can take a minute, reopen the app');
@@ -2588,6 +2597,11 @@ document.querySelectorAll('.pro-plan').forEach(b => b.addEventListener('click', 
   }catch(e){ note.textContent = 'Checkout unavailable right now — try again in a minute.'; all.forEach(x => x.disabled = false); }
 }));
 document.getElementById('statsPro').addEventListener('click', ()=>openPro());
+document.getElementById('btnProTest').addEventListener('click', ()=>{
+  if(!proTester()) return;
+  try{ if(proTestOff()) localStorage.removeItem(proTestKey()); else localStorage.setItem(proTestKey(), '1'); }catch(e){ return; }
+  location.reload();                                                 // a clean page: PRO code loaded (or not) from scratch
+});
 let proChecked = false;
 function proOnSession(){
   if(proChecked || !session) return; proChecked = true;
