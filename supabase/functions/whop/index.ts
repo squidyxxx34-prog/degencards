@@ -1,6 +1,7 @@
 // DEGENCARDS — whop
 // PRO subscriptions sold on Whop (account DEGENCARDS biz_6CeBfKshynanPD, product DEGENCARDS PRO).
 //   { action:"checkout", plan:"monthly"|"yearly" } -> a Whop checkout link tagged with the user's id (metadata.uid)
+//   { action:"checkout", plan, promo:true }       -> same link with the 10% win-back code (Whop promo STAY10) pre-applied
 //   { action:"sync" }                              -> reads the user's membership back from Whop and stores it in public.subscriptions
 // No webhook needed: the app syncs on return from checkout (?pro=1) and on load when the user already has a row.
 // Secret: WHOP_API_KEY (Whop dashboard > Developer > API keys, company key of DEGENCARDS). Until it is set, status says not live
@@ -17,6 +18,7 @@ const PLANS: Record<string, string> = {
   yearly: Deno.env.get("WHOP_PLAN_YEARLY") || "plan_2S3vMkac5SgWR",     // PRO Yearly $34.99, 21-day trial
 };
 const SITE = "https://degencards.vercel.app";
+const PROMO = Deno.env.get("WHOP_PROMO") || "stay10";                     // 10% off for 12 months, one per customer
 const ALLOWED_ORIGIN = SITE;
 const API = "https://api.whop.com/api/v1";
 const PRO_STATUSES = new Set(["active", "trialing", "completed", "canceling", "past_due"]);
@@ -97,7 +99,8 @@ Deno.serve(async (req) => {
         method: "POST",
         body: JSON.stringify({ account_id: ACCOUNT, plan_id: plan, metadata: { uid }, redirect_url: `${SITE}/?pro=1` }),
       });
-      const url = cfg.purchase_url || cfg.url || `https://whop.com/checkout/${plan}?session=${cfg.id}`;
+      let url = cfg.purchase_url || cfg.url || `https://whop.com/checkout/${plan}?session=${cfg.id}`;
+      if (body.promo === true) url += (url.includes("?") ? "&" : "?") + "promoCode=" + encodeURIComponent(PROMO);
       return json({ url }, 200, origin);
     }
     if (body.action === "sync") {

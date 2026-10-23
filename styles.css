@@ -1307,3 +1307,10 @@ input:-webkit-autofill{-webkit-text-fill-color:var(--tx); -webkit-box-shadow:0 0
 .authbox input:focus,.field input:focus,.acc-form input:focus,.goal-editrow input:focus,.pg-input input:focus{outline:none; border-color:var(--purple);}
 .art-kinds{margin:2px 0 8px;}
 .art-kinds .rc-chip{min-height:32px; font-size:12px;}
+
+/* checkout outcome: win-back deal and thank-you */
+.deal-lead{color:var(--tx2); font-size:13px; line-height:1.5; margin:-4px 0 14px;}
+.pro-plan s{font:700 12px/1 var(--mono); color:var(--tx2); opacity:.8;}
+.deal-skip{display:block; width:100%; margin-top:4px; padding:10px; font-size:12px; color:var(--tx2); border-radius:10px;}
+.deal-skip:hover{color:var(--tx);}
+.thanks-go{width:100%; margin-top:6px; padding:13px; border-radius:12px; font-weight:800; font-size:13px; color:#000; background:linear-gradient(90deg,var(--purple),var(--gold));}

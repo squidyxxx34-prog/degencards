@@ -2570,7 +2570,7 @@ async function loadPro(force){
       if(r && 'pro' in r){
         const was = window.dcPro.active; window.dcPro.active = !!r.pro && !proTestOff(); window.dcPro.sub = r.sub || window.dcPro.sub;
         renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
-        if(force && r.pro && !was) showToast('Welcome to PRO — every replay style is unlocked');
+        if(force && r.pro && !was) showThanks();
         else if(force && !r.pro) showToast('Payment not found yet — it can take a minute, reopen the app');
       }
     }catch(e){}
@@ -2587,15 +2587,63 @@ document.getElementById('btnPro').addEventListener('click', ()=>{
   if(window.dcPro.active) window.open((s && s.manage_url) || 'https://whop.com/@me/settings/memberships/', '_blank', 'noopener');
   else openPro();
 });
+/* checkout opens in a new tab; this tab watches the membership (every 8 s + whenever the user comes back):
+   paid -> thank-you popup; back without paying -> a one-time 10% win-back offer (Whop code STAY10, applied server-side) */
+const showOv = id => document.getElementById(id).classList.add('show');
+const hideOv = id => document.getElementById(id).classList.remove('show');
+function showThanks(){ closePro(); hideOv('dealOverlay'); showOv('thanksOverlay'); }
+['dealOverlay','thanksOverlay'].forEach(id => document.getElementById(id).addEventListener('click', e => {
+  if(e.target.id === id || e.target.closest('[data-close]')) hideOv(id); }));
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ hideOv('dealOverlay'); hideOv('thanksOverlay'); } });
+let checkoutWatch = null;
+function stopCheckoutWatch(){
+  const w = checkoutWatch; if(!w) return; checkoutWatch = null;
+  clearInterval(w.timer); clearTimeout(w.end);
+  document.removeEventListener('visibilitychange', w.back); window.removeEventListener('focus', w.back);
+}
+function watchCheckout(promo){
+  stopCheckoutWatch();
+  const w = { at: Date.now(), promo, busy: false, offered: false };
+  const check = async back => {
+    if(checkoutWatch !== w || w.busy) return; w.busy = true;
+    try{
+      const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
+      if(checkoutWatch !== w) return;
+      if(r && r.pro){
+        stopCheckoutWatch();
+        window.dcPro.sub = r.sub || window.dcPro.sub; window.dcPro.active = !proTestOff();
+        renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio(); showThanks();
+      } else if(back && !w.offered && Date.now() - w.at > 8000){
+        w.offered = true; closePro();
+        if(!w.promo){ document.getElementById('dealNote').textContent = ''; showOv('dealOverlay'); }
+      }
+    }catch(e){} finally{ w.busy = false; }
+  };
+  w.back = () => { if(document.visibilityState === 'visible') check(true); };
+  w.timer = setInterval(() => check(false), 8000);
+  w.end = setTimeout(stopCheckoutWatch, 30 * 60e3);
+  document.addEventListener('visibilitychange', w.back); window.addEventListener('focus', w.back);
+  checkoutWatch = w;
+}
 document.querySelectorAll('.pro-plan').forEach(b => b.addEventListener('click', async ()=>{
-  const note = document.getElementById('proNote'), all = document.querySelectorAll('.pro-plan');
+  const box = b.closest('.modal'), note = box.querySelector('.authnote'), all = box.querySelectorAll('.pro-plan'), promo = b.dataset.promo === '1';
+  const tab = window.open('', '_blank');                             // opened inside the click, so no popup blocker
+  if(tab){ try{ tab.opener = null; tab.document.title = 'Opening checkout…'; }catch(e){} }
   all.forEach(x => x.disabled = true); note.textContent = 'Opening secure checkout…';
   try{
-    const { data, error } = await sb.functions.invoke('whop', { body:{ action:'checkout', plan: b.dataset.plan } });
+    const { data, error } = await sb.functions.invoke('whop', { body:{ action:'checkout', plan: b.dataset.plan, ...(promo ? { promo: true } : {}) } });
     if(error || !data || !data.url) throw error || new Error('no url');
-    location.href = data.url;
-  }catch(e){ note.textContent = 'Checkout unavailable right now — try again in a minute.'; all.forEach(x => x.disabled = false); }
+    if(!tab || tab.closed){ location.href = data.url; return; }        // popups blocked: same tab, back via ?pro=1
+    tab.location.href = data.url;
+    note.textContent = 'Checkout is open in a new tab. Finish there, this page updates by itself.';
+    all.forEach(x => x.disabled = false);
+    watchCheckout(promo);
+  }catch(e){
+    try{ if(tab) tab.close(); }catch(_){}
+    note.textContent = 'Checkout unavailable right now — try again in a minute.'; all.forEach(x => x.disabled = false);
+  }
 }));
+
 document.getElementById('statsPro').addEventListener('click', ()=>openPro());
 document.getElementById('btnProTest').addEventListener('click', ()=>{
   if(!proTester()) return;
