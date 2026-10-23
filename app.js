@@ -1119,7 +1119,7 @@ function renderGoal(){
   { const now = new Date(), end = new Date(now.getFullYear(), now.getMonth()+1, 0), left = end.getDate() - now.getDate() + 1, need = goalTarget - totalPnl;
     document.getElementById('goalPace').innerHTML = !(goalTarget>0) ? 'Set a target below to track this month.'
       : need <= 0 ? `Reached, with ${left} day${left>1?'s':''} to spare.`
-      : `<b>${'$'+need.toLocaleString('en-US',{maximumFractionDigits:0})}</b> to go in ${left} day${left>1?'s':''}, about <b>${'$'+(need/left).toLocaleString('en-US',{maximumFractionDigits:0})}</b> a day`; }
+      : `<b>${'$'+need.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2})}</b> to go in ${left} day${left>1?'s':''}, about <b>${'$'+(Math.ceil(need/left*100)/100).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2})}</b> a day`; }
   { const mt = trades.filter(t=>t.timestamp >= m0.getTime()), mw = mt.filter(t=>t.pnl>0).length, byDay = {};
     mt.forEach(t=>{ const k = new Date(t.timestamp).getDate(); byDay[k] = (byDay[k]||0) + t.pnl; });
     const bestDay = Object.values(byDay).length ? Math.max(...Object.values(byDay)) : null;
