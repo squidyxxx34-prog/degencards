@@ -1331,3 +1331,4 @@ input:-webkit-autofill{-webkit-text-fill-color:var(--tx); -webkit-box-shadow:0 0
 .av-upload{width:100%; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surf2); font-weight:800; font-size:12px; letter-spacing:.04em;}
 .av-upload:hover{border-color:var(--purple);}
 @media(max-width:420px){ .av-grid{gap:8px;} }
+#avNote.err{color:var(--red); font-weight:600;}

@@ -1443,22 +1443,21 @@ async function makeAvatarData(file){
   throw new Error('size');
 }
 /* preset avatars (avatars.js): drawn as SVG, rasterized to the same 256x256 image an upload makes */
-async function makeAvatarFromSvg(svg){
-  const img = await new Promise((res,rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
-  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
-  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, S, S);
-  for(const q of [0.9, 0.8, 0.7]){
-    let d = c.toDataURL('image/webp', q);
-    if(!d.startsWith('data:image/webp')) d = c.toDataURL('image/png');
-    if(d.length <= 78000 && AV_RX.test(d)) return d;
-  }
-  throw new Error('size');
+async function presetAvatarData(id){                               // pre-rendered /av/<id>.jpg (same origin): no canvas, works everywhere
+  if(!/^[a-z]+$/.test(id)) throw new Error('bad id');
+  const r = await fetch('/av/' + id + '.jpg', { cache: 'force-cache' });
+  if(!r.ok) throw new Error('fetch ' + r.status);
+  const blob = await r.blob();
+  const d = await new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload = ()=>res(String(fr.result)); fr.onerror = ()=>rej(new Error('read')); fr.readAsDataURL(blob); });
+  const out = d.replace(/^data:[^;,]*;base64,/, 'data:image/jpeg;base64,');   // some browsers label it application/octet-stream
+  if(out.length > 78000 || !AV_RX.test(out)) throw new Error('size ' + out.length);
+  return out;
 }
 function openAvatarPicker(){
   if(!session) return;
   const list = window.DC_AVATARS || [];
   document.getElementById('avGrid').innerHTML = list.map(a=>`<button type="button" class="av-opt" data-av="${a.id}" aria-label="${esc(a.name)}">${a.svg()}<span>${esc(a.name)}</span></button>`).join('');
-  document.getElementById('avNote').textContent = '';
+  document.getElementById('avNote').textContent = ''; document.getElementById('avNote').classList.remove('err');
   document.getElementById('avOverlay').classList.add('show');
 }
 function closeAvatarPicker(){ document.getElementById('avOverlay').classList.remove('show'); }
@@ -1467,13 +1466,21 @@ document.getElementById('avOverlay').addEventListener('click', async e=>{
   const b = e.target.closest('[data-av]'); if(!b || !session) return;
   const a = (window.DC_AVATARS || []).find(x=>x.id === b.dataset.av); if(!a) return;
   const grid = document.getElementById('avGrid'), note = document.getElementById('avNote');
-  grid.classList.add('busy'); b.classList.add('on'); note.textContent = 'Saving…';
+  grid.classList.add('busy'); b.classList.add('on'); note.classList.remove('err'); note.textContent = 'Saving…';
   try{
-    const d = await makeAvatarFromSvg(a.svg());
+    const d = await presetAvatarData(a.id);
     const { data, error } = await sb.rpc('set_avatar', { p_data: d });
     if(error || data !== true) throw error || new Error('rejected');
     avatarUrl = d; renderAvatar(); closeAvatarPicker(); showToast('Avatar updated');
-  }catch(_){ note.textContent = 'Could not save this avatar — try again'; b.classList.remove('on'); }
+  }catch(err){
+    const m = String(err?.message || err || '');
+    note.textContent = /size/.test(m) ? 'This avatar came out too large to save — try another one'
+      : /security|tainted|insecure/i.test(m) ? 'Your browser blocked the image — try uploading a photo instead'
+      : /fetch|network|load failed/i.test(m) ? 'No connection — check your network and try again'
+      : /rejected/.test(m) ? 'The server refused this image — try again or upload a photo'
+      : `Could not save this avatar (${m.slice(0,60) || 'unknown error'}) — try again`;
+    note.classList.add('err'); b.classList.remove('on');
+  }
   finally{ grid.classList.remove('busy'); }
 });
 document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeAvatarPicker(); });
