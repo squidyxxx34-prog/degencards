@@ -1452,3 +1452,4 @@ input:-webkit-autofill{-webkit-text-fill-color:var(--tx); -webkit-box-shadow:0 0
 .hm-side .levelbar{grid-template-areas:"h h" "id xp" "track track";}
 .hm-level-h{grid-area:h;}
 .hm-side .hm-streak{display:flex; flex-direction:column; justify-content:flex-start;}
+.rp-ai{font-style:normal; margin-left:6px; padding:2px 6px; border-radius:5px; font-size:9px; background:rgba(192,158,255,.15); color:var(--purple); vertical-align:1px;}

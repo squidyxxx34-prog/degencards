@@ -1490,8 +1490,9 @@ function renderInsights(all){
   box.innerHTML = week + hold + review;
 }
 document.getElementById('hmInsights').addEventListener('click', e=>{ const b = e.target.closest('[data-ins-open]'); if(b) openDetail(b.dataset.insOpen); });
-/* ---------- HOME: AI report (edge function `report`, one per user per day, built server-side from the trades) ---------- */
-const aiReport = { state: 'idle', live: null, text: '', day: '', err: '', n: -1 };
+/* ---------- HOME: report (edge function `report`): a neutral analysis of the last 30 days, computed server-side from
+   the trades at no cost; rewritten by a free open model when the server has a GROQ_API_KEY ---------- */
+const aiReport = { state: 'idle', live: null, text: '', day: '', err: '', n: -1, src: 'auto' };
 async function loadReport(force){
   if(!session || aiReport.state === 'loading') return;
   aiReport.state = 'loading'; aiReport.err = ''; paintReport();
@@ -1501,23 +1502,24 @@ async function loadReport(force){
     const { data, error } = await sb.functions.invoke('report', { body:{ action:'get' } });
     if(error) throw error;
     if(data && data.error === 'few_trades'){ aiReport.state = 'few'; }
-    else if(data && data.report){ aiReport.text = String(data.report); aiReport.day = String(data.day||''); aiReport.state = 'ok'; }
+    else if(data && data.report){ aiReport.text = String(data.report); aiReport.day = String(data.day||''); aiReport.src = data.source === 'ai' ? 'ai' : 'auto'; aiReport.state = 'ok'; }
     else throw new Error(data?.error || 'empty');
   }catch(e){ aiReport.state = 'err'; aiReport.err = /model/.test(String(e?.message||'')) ? 'The AI is busy right now.' : 'Could not load the report.'; }
   paintReport();
 }
 function renderReport(all){
   if(!session) return;
-  if(aiReport.n !== all.length && aiReport.state !== 'loading' && (aiReport.state === 'idle' || aiReport.state === 'few')){ aiReport.n = all.length; loadReport(); }
+  if(aiReport.n !== all.length && aiReport.state !== 'loading' && aiReport.state !== 'err'){ aiReport.n = all.length; loadReport(); }   // new trades: fresh analysis
   paintReport();
 }
 function paintReport(){
   const box = document.getElementById('hmReport'); if(!box) return;
   const st = aiReport.state;
   if(st === 'off' || st === 'idle'){ box.hidden = true; return; } box.hidden = false;
-  const head = `<div class="rp-head"><div class="hm-label">AI REPORT</div><span class="rp-meta">${st === 'ok' && aiReport.day ? 'last 30 days · '+new Date(aiReport.day+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'last 30 days'}</span></div>`;
+  const head = `<div class="rp-head"><div class="hm-label">REPORT${st === 'ok' && aiReport.src === 'ai' ? ' <em class="rp-ai">AI</em>' : ''}</div><span class="rp-meta">${st === 'ok' && aiReport.day ? 'last 30 days · '+new Date(aiReport.day+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'last 30 days'}</span></div>`;
   let body = '';
-  if(st === 'loading') body = `<div class="rp-load"><i class="sk" style="width:92%"></i><i class="sk" style="width:78%"></i><i class="sk" style="width:85%"></i><i class="sk" style="width:60%"></i><span>Reading your trades…</span></div>`;
+  if(st === 'loading' && aiReport.text) body = box.querySelector('.rp-body')?.outerHTML || '';
+  else if(st === 'loading') body = `<div class="rp-load"><i class="sk" style="width:92%"></i><i class="sk" style="width:78%"></i><i class="sk" style="width:85%"></i><i class="sk" style="width:60%"></i><span>Reading your trades…</span></div>`;
   else if(st === 'few') body = `<p class="rp-empty">Your report unlocks after a few trades. Close at least 3 and come back.</p>`;
   else if(st === 'err') body = `<p class="rp-err">${esc(aiReport.err)}</p><button type="button" class="hm-btn" data-rp-retry>TRY AGAIN</button>`;
   else {
@@ -1526,9 +1528,9 @@ function paintReport(){
     const focus = lines.find(l=>/^focus:/i.test(l));
     const other = lines.filter(l=>!/^[-•*]\s*/.test(l) && !/^focus:/i.test(l));
     const md = x => esc(x).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[\s(])([+-]?\$[\d,]+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?%)/g,'$1<b>$2</b>');
-    body = `${other.map(l=>`<p class="rp-p">${md(l)}</p>`).join('')}${bullets.length ? `<ul class="rp-list">${bullets.map(b=>`<li>${md(b)}</li>`).join('')}</ul>` : ''}
+    body = `<div class="rp-body">${other.map(l=>`<p class="rp-p">${md(l)}</p>`).join('')}${bullets.length ? `<ul class="rp-list">${bullets.map(b=>`<li>${md(b)}</li>`).join('')}</ul>` : ''}
       ${focus ? `<div class="rp-focus"><span>FOCUS</span><p>${md(focus.replace(/^focus:\s*/i,''))}</p></div>` : ''}
-      <p class="rp-fine">Written by AI from your own trades. Not financial advice. A new report every day.</p>`;
+      <p class="rp-fine">${aiReport.src === 'ai' ? 'Written by an open AI model from the figures of your own trades.' : 'Computed from your own trades.'} Describes, never judges. Not financial advice.</p></div>`;
   }
   box.innerHTML = head + body;
 }
