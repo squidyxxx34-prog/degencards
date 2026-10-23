@@ -11,7 +11,7 @@
 <meta name="application-name" content="DEGENCARDS">
 <meta name="apple-mobile-web-app-title" content="DEGENCARDS">
 <link rel="canonical" href="https://degencards.vercel.app/">
-<meta name="theme-color" content="#0C0B0A">
+<meta name="theme-color" content="#07070A">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -55,58 +55,104 @@
 <!-- LANDING (logged out): static and crawlable, shown to everyone until a session is found -->
 <div id="landing">
   <header class="lp-top">
-    <a class="lp-logo" href="/" aria-label="DEGENCARDS"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M5 22V10a7 7 0 0 1 14 0v12zM11.3 8h1.4v3H14v5.5h-1.3V19h-1.4v-2.5H10V11h1.3z"/></svg><span class="wordmark">DEGENCARDS</span></a>
-    <a class="lp-signin-link" href="#signin" data-lp-open="email">Sign in</a>
+    <a class="lp-logo" href="/" aria-label="DEGENCARDS"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C09EFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg>DEGEN<span>CARDS</span></a>
+    <a class="lp-btn lp-sm" href="#signin">SIGN IN</a>
   </header>
   <main class="lp-wrap">
-    <section class="lp-hero">
+    <div class="lp-hero">
       <div class="lp-hero-txt">
-        <p class="lp-kicker lp-in" style="--d:.05s">Solana &nbsp;·&nbsp; Watch-only &nbsp;·&nbsp; Free</p>
-        <h1><span class="lp-line"><span style="--d:.15s">Your trades.</span></span><span class="lp-line"><span style="--d:.3s"><em>Turned into cards.</em></span></span></h1>
-        <p class="lp-lead lp-in" style="--d:.65s">Paste a wallet address. Every closed trade becomes a card with the real chart and the real PnL, ready to post.</p>
-        <form class="lp-wallet lp-in" style="--d:.8s" data-lp-wallet novalidate>
-          <label class="sr-only" for="lpAddr">Solana wallet address</label>
-          <input id="lpAddr" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="44" placeholder="Solana wallet address">
-          <button type="submit">Show my cards</button>
-        </form>
-        <p class="lp-wallet-note lp-in" style="--d:.9s" data-lp-note>Read-only. An address can't move funds.</p>
+        <span class="lp-kicker">FREE · SOLANA · WATCH-ONLY</span>
+        <h1>Your trades.<br><em>Turned into cards.</em></h1>
+        <p class="lp-lead">Paste your Solana wallet once. Every Pump.fun, Axiom, Photon or Phantom trade becomes a PnL card with the real chart, an animated card and a trade replay video. Ready to post.</p>
+        <div class="lp-cta"><a class="lp-btn" href="#signin">MAKE MY PNL CARDS</a><a class="lp-btn lp-ghost" href="#how">How it works</a></div>
+        <div class="lp-trust"><span><b>No signature</b>, no seed phrase</span><span><b>Auto-import</b> of every closed trade</span><span><b>Free</b> forever plan</span></div>
       </div>
-      <figure class="lp-stage" aria-label="Example card: $ZAPP, a winning trade, on a winged Roman Victory">
-        <canvas id="lpHeroCard" width="1080" height="1350"></canvas>
-        <img class="lp-stage-still" src="/lp/post.webp" width="540" height="675" alt="">
-        <noscript><style>#lpHeroCard{display:none}#landing .lp-stage .lp-stage-still{display:block!important}</style></noscript>
-      </figure>
-    </section>
-
-    <section class="lp-sec lp-truths" aria-label="Why it's safe">
-      <p class="lp-kicker lp-rv">Before you paste anything</p>
-      <div class="lp-truth lp-rv"><h2>It can't touch your funds.</h2><p>Only a public address. No wallet connection, no signature, no seed phrase.</p></div>
-      <div class="lp-truth lp-rv"><h2>The numbers are real.</h2><p>Rebuilt from your on-chain swaps, fees included, with every fill on the real chart.</p></div>
-      <div class="lp-truth lp-rv"><h2>It's free.</h2><p>Cards and trade replays cost nothing. PRO only adds styles and 4K video.</p></div>
-    </section>
-
-    <section class="lp-sec lp-formats-sec">
-      <h2 class="lp-rv">One trade. Every format.</h2>
-      <div class="lp-gallery">
-        <figure class="lp-rv" style="--d:.0s"><img src="/lp/story.webp" width="540" height="960" loading="lazy" alt="Story card 9:16: $ZAPP +$1,729.58 on Washington Crossing the Delaware, with the candle chart and entry / exit"><figcaption>Story · 9:16</figcaption></figure>
-        <figure class="lp-rv" style="--d:.12s"><img src="/lp/post.webp" width="540" height="675" loading="lazy" alt="Post card 4:5 on a winged Roman Victory"><figcaption>Post · 4:5</figcaption></figure>
-        <figure class="lp-rv" style="--d:.24s"><img src="/lp/loss.webp" width="540" height="675" loading="lazy" alt="Losing trade card on The Burning of Sodom by Corot"><figcaption>Losses too</figcaption></figure>
+      <div class="lp-stack" aria-hidden="true">
+        <img class="lp-b" src="/lp/loss.webp" width="540" height="675" alt="">
+        <img class="lp-c" src="/lp/post.webp" width="540" height="675" alt="">
+        <img class="lp-a" src="/lp/story.webp" width="540" height="960" alt="">
       </div>
-      <p class="lp-works lp-rv">Works with Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare and Backpack.</p>
+    </div>
+
+    <section class="lp-sec lp-signin" id="signin">
+      <div>
+        <h2>Start in one minute</h2>
+        <p class="lp-sub">Create an account, paste the address of the wallet you trade with, and your cards build themselves.</p>
+        <ul class="lp-checks">
+          <li><span><b>Watch-only</b>: we read public on-chain data, nothing can be moved.</span></li>
+          <li><span><b>Real PnL</b>: buys and sells read on-chain, fees included.</span></li>
+          <li><span><b>Coin, logo, chart</b> filled in for you, new trades within minutes.</span></li>
+        </ul>
+      </div>
+      <div class="authbox">
+        <h3>SIGN IN</h3>
+        <input id="authEmail" type="email" placeholder="you@email.com" maxlength="254" autocomplete="email">
+        <input id="authPassword" type="password" placeholder="Password (8+ characters)" minlength="8" maxlength="72" autocomplete="current-password">
+        <label class="consent"><input type="checkbox" id="authConsent"><span>I'm 18+ and I accept the <a href="/terms" target="_blank" rel="noopener">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>. Not financial advice.</span></label>
+        <div class="authrow"><button id="btnSignIn">SIGN IN</button><button id="btnSignUp" class="btn-ghost">CREATE ACCOUNT</button></div>
+        <button id="btnForgot" class="btn-link">Forgot password?</button>
+        <div class="authsep" style="margin:14px 0;"><span>OR</span></div>
+        <button id="btnGoogle" style="background:#fff;color:#000;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.2-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3c-7.4 0-13.8 4.1-17.1 10.1z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.5 36 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.9 40.6 16.4 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.5C40.8 36.4 45 30.7 45 24c0-1.4-.2-2.7-.4-3.5z"/></svg>
+          CONTINUE WITH GOOGLE
+        </button>
+        <div id="hcaptchaBox" class="captcha-box"></div>
+        <div class="authnote" id="authNote">The captcha is required for email and wallet sign-in.</div>
+        <div class="authsep" style="margin:14px 0 8px;"><span>OR WALLET TRACKING</span></div>
+        <input id="authPubkey" type="text" placeholder="Paste a public key (Solana address)" maxlength="44" autocomplete="off" spellcheck="false">
+        <button id="btnPubkey" class="btn-ghost">CONTINUE WITH PUBLIC KEY</button>
+        <div class="authnote">Watch-only: no wallet app, no signature, can't move funds.</div>
+      </div>
     </section>
 
-    <section class="lp-sec lp-final">
-      <h2 class="lp-rv">Ready when you are.</h2>
-      <form class="lp-wallet lp-rv" data-lp-wallet novalidate>
-        <label class="sr-only" for="lpAddr2">Solana wallet address</label>
-        <input id="lpAddr2" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="44" placeholder="Solana wallet address">
-        <button type="submit">Show my cards</button>
-      </form>
-      <p class="lp-wallet-note lp-rv" data-lp-note>Read-only. An address can't move funds.</p>
+    <section class="lp-sec" id="how">
+      <h2>How to make a Solana PnL card</h2>
+      <p class="lp-sub">No screenshots, no spreadsheet, no typing numbers. The cards build themselves from the chain.</p>
+      <ol class="lp-steps">
+        <li><h3>Paste your wallet address</h3><p>The public address of the Solana wallet you trade with. Read-only: nobody can move your funds with an address.</p></li>
+        <li><h3>Your trades come in by themselves</h3><p>Coin, logo, entry, exit, hold time, profit and the real price chart with your fills. Prefer typing? Log a trade by hand in 5 seconds.</p></li>
+        <li><h3>Share it</h3><p>PnL card for a story or a post, an animated card, or a full trade replay video. One tap, straight to X, TikTok, Reels or Telegram.</p></li>
+      </ol>
     </section>
 
-    <section class="lp-sec lp-faq">
-      <h2 class="lp-rv">Questions</h2>
+    <section class="lp-sec">
+      <h2>Every format, always with your chart</h2>
+      <p class="lp-sub">The chart on every card is rebuilt from real on-chain swaps, with your buys (B) and sells (S) exactly where they happened.</p>
+      <div class="lp-formats">
+        <figure><img src="/lp/story.webp" width="540" height="960" loading="lazy" alt="Solana PnL card, story 9:16: $ZAPP +$1,729.58 (+321.7%) with candle chart and buy / sell markers"><figcaption><b>Story card · 9:16</b><span>For TikTok, Reels and Stories.</span></figcaption></figure>
+        <figure><img src="/lp/post.webp" width="540" height="675" loading="lazy" alt="PnL card, post 4:5 with entry, exit and hold time"><figcaption><b>Post card · 4:5</b><span>For X and Instagram feeds.</span></figcaption></figure>
+        <figure><img src="/lp/replay.webp" width="540" height="960" loading="lazy" alt="Trade replay video frame with live PnL and candles"><figcaption><b>Trade replay</b><span>Your trade rebuilt candle by candle, as a video.</span></figcaption></figure>
+        <figure><img src="/lp/loss.webp" width="540" height="675" loading="lazy" alt="Losing trade PnL card in red"><figcaption><b>Losses too</b><span>Rugs make great content. Every trade gets a card.</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section class="lp-sec">
+      <div class="lp-split">
+        <div class="lp-video"><video src="/lp/showcase-540.mp4" poster="/lp/showcase-poster.webp" width="540" height="960" muted loop playsinline controls preload="none" aria-label="DEGENCARDS showcase: auto-import, animated card and trade replay"></video></div>
+        <div>
+          <h2>Works with the wallet you already trade with</h2>
+          <p class="lp-sub">Trading bots and terminals all trade from a Solana wallet. Paste that wallet's address and its trades are imported, whatever app placed them.</p>
+          <ul class="lp-wallets"><li>Pump.fun</li><li>Axiom</li><li>Photon</li><li>BullX</li><li>GMGN</li><li>Fomo</li><li>Phantom</li><li>Solflare</li><li>Backpack</li></ul>
+          <ul class="lp-checks" style="margin-top:24px">
+            <li><span><b>Open positions wait</b>: a card appears once the trade is closed.</span></li>
+            <li><span><b>Several wallets</b>: connect them all, each trade is read once.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-sec">
+      <h2>More than a PnL card generator</h2>
+      <p class="lp-sub">DEGENCARDS (also written Degen Cards or DegenCards) is the trading card app for degen traders: your trading history, turned into a collection.</p>
+      <div class="lp-feat">
+        <div><span class="lp-t">COLLECTION</span><h3>Rarity, from common to mythic</h3><p>Every trade gets a rarity, a grade and achievements, driven by ROI, speed and personal records. 250%+ ROI is mythic.</p></div>
+        <div><span class="lp-t">RANKS</span><h3>Weekly leaderboard</h3><p>Claim a username and climb the weekly podium on real, on-chain profit.</p></div>
+        <div><span class="lp-t">STATS</span><h3>Your trading journal</h3><p>Win rate, P&amp;L calendar, monthly goal, best coins, without typing a single trade.</p></div>
+      </div>
+    </section>
+
+    <section class="lp-sec">
+      <h2>FAQ</h2>
       <details><summary>What is DEGENCARDS?</summary><p>A web app for degen traders: every crypto trade becomes a collectible card with rarity, grade and achievements, plus a PnL card image and a trade replay video you can share on X, TikTok, Instagram or Telegram.</p></details>
       <details><summary>How do I make a PnL card for a Solana trade?</summary><p>Paste your Solana wallet address on DEGENCARDS. Your closed trades are imported automatically and each one becomes a PnL card with the real chart, entry, exit, hold time and profit. Tap Share to download it as an image or a video.</p></details>
       <details><summary>Does it work with Pump.fun, Axiom, Photon and Phantom?</summary><p>Yes. Any Solana wallet works: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare or Backpack. Use the address of the wallet that actually makes the trades.</p></details>
@@ -116,32 +162,13 @@
       <details><summary>Can I show a losing trade?</summary><p>Yes. Every closed trade becomes a card, wins and losses alike, with its own rarity from common to mythic.</p></details>
       <details><summary>DEGENCARDS en français ?</summary><p>Oui : DEGENCARDS transforme chaque trade de degen en carte à collectionner, carte PnL et vidéo de trade replay. Import automatique depuis un wallet Solana (Pump.fun, Axiom, Photon, Phantom, Fomo), en lecture seule.</p></details>
     </section>
-  </main>
 
-  <div class="lp-scrim" data-lp-close></div>
-  <section class="lp-panel" id="signin" role="dialog" aria-modal="true" aria-labelledby="lpPanelTitle">
-    <div class="authbox">
-      <a class="lp-x" href="#" data-lp-close aria-label="Close">×</a>
-      <h3 id="lpPanelTitle">Show my cards</h3>
-      <p class="lp-panel-sub">Paste the wallet you trade with. Read-only.</p>
-      <input id="authPubkey" type="text" placeholder="Solana wallet address" maxlength="44" autocomplete="off" spellcheck="false" aria-label="Solana wallet address">
-        <label class="consent"><input type="checkbox" id="authConsent"><span>I'm 18+ and I accept the <a href="/terms" target="_blank" rel="noopener">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>. Not financial advice.</span></label>
-      <div id="hcaptchaBox" class="captcha-box"></div>
-      <button id="btnPubkey">Show my cards</button>
-      <div class="authnote" id="authNote">No wallet app, no signature, can't move funds.</div>
-      <details class="lp-alt" id="lpAlt">
-        <summary>Use email or Google instead</summary>
-        <button id="btnGoogle" style="background:#fff;color:#000;display:flex;align-items:center;justify-content:center;gap:8px;">
-          <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.2-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3c-7.4 0-13.8 4.1-17.1 10.1z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.5 36 26.9 37 24 37c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.9 40.6 16.4 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.5C40.8 36.4 45 30.7 45 24c0-1.4-.2-2.7-.4-3.5z"/></svg>
-          CONTINUE WITH GOOGLE
-        </button>
-        <input id="authEmail" type="email" placeholder="you@email.com" maxlength="254" autocomplete="email">
-        <input id="authPassword" type="password" placeholder="Password (8+ characters)" minlength="8" maxlength="72" autocomplete="current-password">
-        <div class="authrow"><button id="btnSignIn">Sign in</button><button id="btnSignUp" class="btn-ghost">Create account</button></div>
-        <button id="btnForgot" class="btn-link">Forgot password?</button>
-      </details>
-    </div>
-  </section>
+    <section class="lp-sec lp-final">
+      <h2>Your trades. Turned into cards.</h2>
+      <p class="lp-lead">Free, watch-only, ready in a minute.</p>
+      <a class="lp-btn" href="#signin">MAKE MY PNL CARDS</a>
+    </section>
+  </main>
   <footer>DEGENCARDS · Not financial advice. Crypto-assets are highly risky. Watch-only: we never touch your funds.<div class="foot-links"><a href="/legal">Legal notice</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div></footer>
 </div>
 
@@ -149,7 +176,7 @@
 <div id="app" hidden>
 <header>
   <div class="headerrow">
-    <div class="logo"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M5 22V10a7 7 0 0 1 14 0v12zM11.3 8h1.4v3H14v5.5h-1.3V19h-1.4v-2.5H10V11h1.3z"/></svg><span class="wordmark">DEGENCARDS</span></div>
+    <div class="logo"><span style="color:var(--purple);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px;"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg></span> DEGEN<span>CARDS</span></div>
     <nav id="nav" aria-label="Pages">
       <button type="button" class="active" data-v="home" aria-current="page">Home</button>
       <button type="button" data-v="collection">Collection</button>
@@ -212,7 +239,7 @@
             </div>
             <div class="goal-ring-wrap">
               <svg viewBox="0 0 80 80" width="72" height="72">
-                <defs><linearGradient id="goalGradHome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C8A96E"/><stop offset="1" stop-color="#E2CB97"/></linearGradient></defs>
+                <defs><linearGradient id="goalGradHome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C09EFF"/><stop offset="1" stop-color="#FFD35C"/></linearGradient></defs>
                 <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surf2)" stroke-width="8"/>
                 <circle id="goalRingHome" cx="40" cy="40" r="34" fill="none" stroke="url(#goalGradHome)" stroke-width="8" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)"/>
               </svg>

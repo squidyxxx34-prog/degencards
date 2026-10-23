@@ -341,3 +341,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - Set gratuit : victory, horsemen, lions, tempest, summit, angel, vestal. Une ancienne sélection (pick) supprimée retombe sur l'auto (artPick).
 - Hero landing = Victory (app.js). Images lp/ re-rendues : story = crossing, post = victory, loss = sodom. og.png re-rendu (Victory).
 - Titre hero : jamais coupé (`#landing h1` clamp 48–84px, mobile 44–58px, `.lp-line > span{max-width:100%}`), vérifié 390/1024/1278/1440/1920.
+
+## 2026-10-23 · Retour à l'ancien thème
+Le propriétaire a rejeté la direction « museum black / ivory / gilt » (commits e4743ab → 09a8673).
+Thème, logo (étoile violette + DEGEN**CARDS**), icônes, OG, landing et polices remis à l'état de 330dfed :
+fond sombre, texte blanc, gris, accent violet #C09EFF, coins arrondis, Outfit + JetBrains Mono.
+Conservé de la période annulée : retrait des œuvres avec nudité dans le style ART (share.js + /art).
