@@ -6,9 +6,23 @@
    ============================================================================ */
 (function(){
 const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, story:{ w:1080, h:1920, label:'STORY 9:16' }, wide:{ w:1600, h:900, label:'WIDE 16:9' } };
-const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
-const GREEN = '#3DFFA0', RED = '#FF5C6C', CANDLE_UP = '#18C964', CANDLE_DN = '#FF3B4E';
-const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
+const RARITY_HEX = { common:'#9C958B', uncommon:'#6FB89B', rare:'#7FA3E0', epic:'#B49BE6', legendary:'#DDB76C', mythic:'#E58AC7' };
+const GREEN = '#7DC4A0', RED = '#E07A6A', CANDLE_UP = '#5DB38A', CANDLE_DN = '#D9655A';
+const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace", SERIF = "'Instrument Serif', 'Times New Roman', serif";
+/* the DEGENCARDS mark: an arched niche with a candlestick standing in it (24-unit box, even-odd fill) + the serif wordmark */
+const MARK_PATH = 'M5 22V10a7 7 0 0 1 14 0v12zM11.3 8h1.4v3H14v5.5h-1.3V19h-1.4v-2.5H10V11h1.3z', IVORY = '#EFE8DA', GILT = '#C8A96E';
+let MARK2D = null;
+function drawWordmark(ctx, x, y, size, o){                            // y = baseline; o.center / o.right; returns the width; o.measure = no drawing
+  o = o || {}; const track = size * 0.16, s = size * 0.78 / 19, mw = o.mark === false ? 0 : 14 * s, gap = mw ? size * 0.36 : 0;
+  ctx.save(); ctx.font = `400 ${size}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const ws = [...'DEGENCARDS'].map(ch => ctx.measureText(ch).width), tw = ws.reduce((a, b) => a + b, 0) + track * 9, total = mw + gap + tw;
+  if(!o.measure){
+    let x0 = o.center ? x - total / 2 : o.right ? x - total : x;
+    if(mw){ MARK2D = MARK2D || new Path2D(MARK_PATH); ctx.save(); ctx.translate(x0 - 5 * s, y - 22 * s); ctx.scale(s, s); ctx.fillStyle = o.markColor || GILT; ctx.fill(MARK2D, 'evenodd'); ctx.restore(); x0 += mw + gap; }
+    ctx.fillStyle = o.color || IVORY; [...'DEGENCARDS'].forEach((ch, i) => { ctx.fillText(ch, x0, y); x0 += ws[i] + track; });
+  }
+  ctx.restore(); return total;
+}
 /* the user's @username on shared images / videos (set by app.js once the profile is loaded; can be turned off in the share sheet) */
 let SHOW_NAME = (() => { try{ return localStorage.getItem('dc_share_name') !== '0'; }catch(e){ return true; } })();
 const handle = () => { const n = window.dcUser && window.dcUser.username; return SHOW_NAME && typeof n === 'string' && /^[a-z0-9_]{3,20}$/.test(n) ? '@' + n : ''; };
@@ -118,7 +132,7 @@ const SO_SHOW = [['coin','Coin logo'],['sub','2nd number'],['stats','Stats'],['d
 /* Minimal = Axiom-like: flat background, no glow, 2 stat rows, fewer details (the toggles stay editable after) */
 const SO_LAYOUTS = { full:{ sub:true, date:true, rarity:true, tradeNo:true }, minimal:{ sub:false, date:false, rarity:false, tradeNo:false } };
 const SO_PRO = { accent:['purple','gold','ice','mono'], bg:['aurora','sunset','matrix','coin'] };
-const ACCENT = { purple:'#C09EFF', gold:'#FFD35C', ice:'#6EC0FF', mono:'#FFFFFF' };
+const ACCENT = { purple:'#B49BE6', gold:'#DDB76C', ice:'#7FA3E0', mono:'#FFFFFF' };
 let SO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(SO_KEY) || '{}') || {}; }catch(e){} const o = { ...SO_DEF };
   for(const [k, , opts] of SO_GROUPS) if(opts.some(x => x[0] === v[k])) o[k] = v[k];
   for(const [k] of SO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k];
@@ -143,8 +157,8 @@ function presetBg(ctx, W, H, kind, main, t, p, u, flat){
   }
   if(kind === 'aurora'){
     ctx.fillStyle = '#050816'; ctx.fillRect(0, 0, W, H);
-    blob(W * (0.15 + drift), H * 0.15, M * 0.75, '#3DFFA0', 0.20);
-    blob(W * (0.85 - drift), H * 0.35, M * 0.7, '#7C5CFF', 0.30);
+    blob(W * (0.15 + drift), H * 0.15, M * 0.75, '#7DC4A0', 0.20);
+    blob(W * (0.85 - drift), H * 0.35, M * 0.7, '#8E79C9', 0.30);
     blob(W * 0.6, H * (1.0 - drift), M * 0.7, '#00C2FF', 0.18);
   } else if(kind === 'sunset'){
     const g = ctx.createLinearGradient(0, 0, W * 0.4, H); g.addColorStop(0, '#12061F'); g.addColorStop(0.55, '#3A0F3A'); g.addColorStop(1, '#6B2A12');
@@ -153,17 +167,17 @@ function presetBg(ctx, W, H, kind, main, t, p, u, flat){
     blob(W * 0.1, H * 0.05, M * 0.6, '#FF3DBB', 0.18);
   } else if(kind === 'matrix'){
     ctx.fillStyle = '#020604'; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(61,255,160,0.06)'; ctx.lineWidth = 1.5 * u; const st = 54 * u, off = (p * st * 2) % st;
+    ctx.strokeStyle = 'rgba(125,196,160,0.06)'; ctx.lineWidth = 1.5 * u; const st = 54 * u, off = (p * st * 2) % st;
     for(let x = 0; x < W; x += st){ ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for(let y = -st + off; y < H; y += st){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-    blob(W * 0.8, H * 0.8, M * 0.8, '#3DFFA0', 0.16);
+    blob(W * 0.8, H * 0.8, M * 0.8, '#7DC4A0', 0.16);
   } else if(flat){
     ctx.fillStyle = '#0A0B0F'; ctx.fillRect(0, 0, W, H);
     blob(W * 0.95, H * 1.05, M * 0.9, main, 0.10);
   } else {
     ctx.fillStyle = '#07080B'; ctx.fillRect(0, 0, W, H);
     blob(W * (0.92 - drift), H * 0.95, M * 0.85, main, 0.22);
-    blob(W * 0.05, 0, M * 0.6, '#C09EFF', 0.14);
+    blob(W * 0.05, 0, M * 0.6, '#C8A96E', 0.14);
     ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 2 * u;
     for(let x = -H; x < W; x += 46 * u){ ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + H, 0); ctx.stroke(); }
   }
@@ -225,7 +239,7 @@ function drawSimpleStory(ctx, W, H, t, meta, p, opt){
   const a = easeOut(seg(p, 0.55, 0.7)), cY = cardTop + ch + ctaGap; ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16 * u;
   ctx.font = `800 ${(story ? 40 : 32) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('Turn your trades into cards', cx, cY + (story ? 36 : 28) * u + (1 - a) * 16 * u);
-  ctx.font = `700 ${(story ? 30 : 24) * u}px ${MONO}`; ctx.fillStyle = '#C09EFF'; ctx.fillText('DEGENCARDS', cx, cY + (story ? 84 : 66) * u + (1 - a) * 16 * u);
+  drawWordmark(ctx, cx, cY + (story ? 90 : 70) * u + (1 - a) * 16 * u, (story ? 34 : 28) * u, { center:true });
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   const intro = easeOut(seg(p, 0, 0.04)); if(intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
@@ -299,8 +313,7 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   ctx.textBaseline = 'alphabetic';
   // header: logo + date
   ctx.globalAlpha = fa(0, 0.12); sh(true);
-  ctx.textAlign = 'left'; ctx.font = `900 ${(story ? 50 : 44) * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, pad + 36 * u);
-  const dw = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', L + dw, pad + 36 * u);
+  drawWordmark(ctx, L, pad + 36 * u, (story ? 46 : 40) * u);
   if(so.date){ ctx.textAlign = 'right'; ctx.font = `600 ${(story ? 28 : 25) * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.fillText(fmt.date(t.timestamp).toUpperCase(), Rr, pad + 32 * u); }
   // body content
   const areaT = heroS ? pad + 150 * u + heroS + 90 * u : pad + 70 * u, areaB = H - pad - 60 * u;
@@ -321,7 +334,7 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   const tick = tk(t.ticker), pillW = so.rarity && meta && meta.rarity ? 200 * u : 0;
   fitFont(ctx, tick, 900, SANS, S.tick, maxW - (tx - L) - pillW); ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, tx, midY + 2 * u);
   if(pillW){
-    const tw = ctx.measureText(tick).width, rar = RARITY_HEX[meta.rarity] || '#ADADB8', rt = meta.rarity.toUpperCase();
+    const tw = ctx.measureText(tick).width, rar = RARITY_HEX[meta.rarity] || '#A39B8E', rt = meta.rarity.toUpperCase();
     ctx.font = `800 ${(story ? 26 : 22) * u}px ${MONO}`; const pw = ctx.measureText(rt).width + 30 * u, ph = (story ? 46 : 40) * u, px = tx + tw + 20 * u;
     sh(false); rrect(ctx, px, midY - ph / 2, pw, ph, ph / 2); ctx.fillStyle = hexA(rar, 0.16); ctx.fill(); ctx.lineWidth = 2 * u; ctx.strokeStyle = hexA(rar, 0.6); ctx.stroke();
     ctx.fillStyle = rar; ctx.fillText(rt, px + 15 * u, midY + 2 * u);
@@ -661,7 +674,7 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   ctx.globalAlpha = fa(0.02, 0.12); ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   const cs = 50 * u, gap1 = 16 * u, gap2 = 20 * u;
   fitFont(ctx, tick, 800, SANS, 40 * u, W * 0.5); const tF = ctx.font, tW = ctx.measureText(tick).width;
-  ctx.font = `600 ${21 * u}px ${MONO}`; const sW = ctx.measureText(sub).width;
+  ctx.font = `500 ${21 * u}px ${SANS}`; const sW = ctx.measureText(sub).width;
   const gw = (hasImg ? cs + gap1 : 0) + tW + gap2 + sW; let hx = cx - gw / 2;
   if(hasImg){
     ctx.save(); shadow(14, 0.5); ctx.beginPath(); ctx.arc(hx + cs / 2, hy, cs / 2, 0, Math.PI * 2); ctx.fillStyle = '#0B0B10'; ctx.fill(); noShadow(); ctx.clip();
@@ -671,7 +684,7 @@ function drawArt(ctx, W, H, t, meta, p, opt){
     hx += cs + gap1;
   }
   shadow(16); ctx.font = tF; ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, hx, hy + 2 * u); hx += tW + gap2;
-  ctx.font = `600 ${21 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(sub, hx, hy + 2 * u);
+  ctx.font = `500 ${21 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(sub, hx, hy + 2 * u);
   noShadow(); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
 
   if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u);
@@ -694,13 +707,13 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   // stats: two columns, labels then values, the block centered under the number
   if(rows.length){
     ctx.font = `600 ${27 * u}px ${SANS}`; const lw = Math.max(...rows.map(r => ctx.measureText(r[0]).width));
-    ctx.font = `700 ${27 * u}px ${MONO}`; const vw = Math.max(...rows.map(r => ctx.measureText(r[1]).width));
+    ctx.font = `600 ${28 * u}px ${SANS}`; const vw = Math.max(...rows.map(r => ctx.measureText(r[1]).width));
     const colGap = 52 * u, bx = cx - (lw + colGap + vw) / 2;
     rows.forEach(([l, val], i) => {
       const a = fa(0.42 + i * 0.05, 0.56 + i * 0.05); ctx.globalAlpha = a; const yy = statsTop + rowH * (i + 0.7) + (1 - a) * 14 * u;
       shadow(14, 0.6); ctx.textAlign = 'left';
       ctx.font = `600 ${27 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(l, bx, yy);
-      ctx.font = `700 ${27 * u}px ${MONO}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(val, bx + lw + colGap, yy);
+      ctx.font = `600 ${28 * u}px ${SANS}`; ctx.fillStyle = '#FFFFFF'; ctx.fillText(val, bx + lw + colGap, yy);
     });
     noShadow(); ctx.globalAlpha = 1;
   }
@@ -708,12 +721,12 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   // footer: brand · @handle, url; the artwork's credit in the corner
   ctx.globalAlpha = fa(0.6, 0.74); ctx.textAlign = 'left'; shadow(12, 0.6);
   const hn = handle();
-  ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} const bW = ctx.measureText('DEGENCARDS').width; try{ ctx.letterSpacing = '0px'; }catch(e){}
-  ctx.font = `600 ${24 * u}px ${SANS}`; const hW = hn ? ctx.measureText('  ·  ' + hn).width : 0;
+  const bW = drawWordmark(ctx, 0, 0, 30 * u, { measure:true });
+  ctx.font = `500 ${23 * u}px ${SANS}`; const hW = hn ? ctx.measureText('   ·   ' + hn).width : 0;
   const fx0 = cx - (bW + hW) / 2;
-  ctx.font = `900 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){} ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGENCARDS', fx0, fy); try{ ctx.letterSpacing = '0px'; }catch(e){}
-  if(hn){ ctx.font = `600 ${24 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.fillText('  ·  ' + hn, fx0 + bW, fy); }
-  ctx.textAlign = 'center'; ctx.font = `500 ${18 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('degencards.vercel.app', cx, fy + 32 * u);
+  drawWordmark(ctx, fx0, fy, 30 * u);
+  if(hn){ ctx.textAlign = 'left'; ctx.font = `500 ${23 * u}px ${SANS}`; ctx.fillStyle = 'rgba(239,232,218,0.78)'; ctx.fillText('   ·   ' + hn, fx0 + bW, fy); }
+  ctx.textAlign = 'center'; ctx.font = `500 ${17 * u}px ${SANS}`; try{ ctx.letterSpacing = (1.5 * u) + 'px'; }catch(e){} ctx.fillStyle = 'rgba(239,232,218,0.5)'; ctx.fillText('degencards.vercel.app', cx, fy + 34 * u); try{ ctx.letterSpacing = '0px'; }catch(e){}
   if(ao.credit && (ART_NO_BG || !bgReady())){ const a = artPick(t, ao); ctx.font = `italic 500 ${15 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.5)';
     if(story){ ctx.textAlign = 'center'; ctx.fillText(a.by + ', ' + a.year, cx, creditY); } else { ctx.textAlign = 'right'; ctx.fillText(a.by + ', ' + a.year, W - 26 * u, creditY); } }
   noShadow(); ctx.globalAlpha = 1;
@@ -725,7 +738,7 @@ let STATIC = (() => { try{ return localStorage.getItem('dc_share_static') === '1
 
 /* ---------- export ---------- */
 async function fontsReady(){
-  try{ await Promise.all([document.fonts.load(`900 40px Outfit`), document.fonts.load(`800 40px 'JetBrains Mono'`), document.fonts.load(`600 20px 'JetBrains Mono'`)]); }catch(e){}
+  try{ await Promise.all([document.fonts.load(`900 40px Outfit`), document.fonts.load(`800 40px 'JetBrains Mono'`), document.fonts.load(`600 20px 'JetBrains Mono'`), document.fonts.load(`400 40px 'Instrument Serif'`)]); }catch(e){}
 }
 const drawFor = style => style === 'simple' ? drawSimple : drawArt;
 function renderStill(t, meta, fmtKey, opt){

@@ -47,7 +47,7 @@ let view = "home";
 let activeFilter = "all";
 let sortMode = "newest";
 let rarityFilter = null, colQuery = '';
-const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
+const RARITY_HEX = { common:'#9C958B', uncommon:'#6FB89B', rare:'#7FA3E0', epic:'#B49BE6', legendary:'#DDB76C', mythic:'#E58AC7' };
 
 const RARITY_ORDER=["common","uncommon","rare","epic","legendary","mythic"];
 const ACH_CATALOG = [
@@ -271,8 +271,8 @@ function pnlColor(t){
   const win = t.pnl>=0;
   const mag = Math.min(Math.abs(t.roi)/150, 1);
   return win
-    ? { border:`rgba(57,255,154,${(0.22+mag*0.55).toFixed(2)})`, glow:`rgba(57,255,154,${(0.08+mag*0.2).toFixed(2)})` }
-    : { border:`rgba(255,75,92,${(0.22+mag*0.55).toFixed(2)})`,  glow:`rgba(255,75,92,${(0.08+mag*0.2).toFixed(2)})` };
+    ? { border:`rgba(125,196,160,${(0.22+mag*0.55).toFixed(2)})`, glow:`rgba(125,196,160,${(0.08+mag*0.2).toFixed(2)})` }
+    : { border:`rgba(224,122,106,${(0.22+mag*0.55).toFixed(2)})`,  glow:`rgba(224,122,106,${(0.08+mag*0.2).toFixed(2)})` };
 }
 
 const fmt = {
@@ -506,7 +506,7 @@ function markersHtml(marks, X, Y, big){
     blocks.push(bl); });
   blocks.forEach(bl => bl.items.forEach((g,i)=>{ g.mx = bl.s + bl.o[i]; }));
   const rowTop = r => r * (mkPx + 3);                                 // px from the top
-  const col = k => k==='b' ? '#18c964' : '#ff3b4e';
+  const col = k => k==='b' ? '#5DB38A' : '#D9655A';
   // a group's fills joined in time order by a thin line: reads as one position built in several fills
   const brackets = groups.filter(g=>g.n > 1).map(g=>`<polyline points="${g.items.map(m=>m.x.toFixed(2)+','+m.y.toFixed(2)).join(' ')}" fill="none" stroke="${col(g.kind)}" stroke-opacity=".55" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join('');
   const lines = groups.map(g=>{ const y0 = (rowTop(g.row) + mkPx) / H * 100;
@@ -535,7 +535,7 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   const tb = Math.min(...bs.map(m=>m[0])), te = Math.max(...ss.map(m=>m[0]));
   const en = t.entryMc > 0 ? t.entryMc : bs[0][2], ex = t.exitMc > 0 ? t.exitMc : ss[ss.length-1][2];
   if(!(en > 0) || !(ex > 0) || te <= tb) return { svg:'', html:'' };
-  const win = ex >= en, col = win ? '#18c964' : '#ff3b4e';
+  const win = ex >= en, col = win ? '#5DB38A' : '#D9655A';
   const clampP = v => Math.min(100, Math.max(0, v));
   const xb = clampP(X(tb)), xe = clampP(X(te)), ye = clampP(Y(en)), yx = clampP(Y(ex)), y0 = Math.min(ye, yx), h = Math.max(0.6, Math.abs(ye - yx));
   const lv = (y, op) => `<line x1="${xb.toFixed(2)}" x2="${xe.toFixed(2)}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${col}" stroke-opacity="${op}" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
@@ -572,7 +572,7 @@ function miniChart(t, big){
     const bw = Math.max(0.5, (iv/(x1-x0))*100*0.9);                   // candles side by side, like a trading chart
     const minB = big ? 2.6 : 4;                                       // a candle always reads as a candle, never as a flat line
     const body = cs.map(([ts,o,hi,lo,c])=>{
-      const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
+      const up = c >= o, col = up ? '#5DB38A' : '#D9655A', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
       return `<line x1="${cx.toFixed(2)}" x2="${cx.toFixed(2)}" y1="${Y(hi).toFixed(2)}" y2="${Y(lo).toFixed(2)}" stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"/>`+
              `<rect x="${(cx-bw/2).toFixed(2)}" y="${(Math.min(top, (top+bot)/2 - minB/2)).toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(minB, bot-top).toFixed(2)}" fill="${col}"/>`;
@@ -583,7 +583,7 @@ function miniChart(t, big){
     const zone = tradeZone(t, cs, iv, marks, X, Y, big);
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
     // modern look: faint grid, a glowing area under the price, last-price line
-    const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#18c964' : '#ff3b4e', gid = 'g' + Math.random().toString(36).slice(2,8);
+    const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#5DB38A' : '#D9655A', gid = 'g' + Math.random().toString(36).slice(2,8);
     const lp = cs.map(c=>[c[0]+iv/2, c[4]]);
     const line = lp.map(p=>`${X(p[0]).toFixed(2)},${Y(p[1]).toFixed(2)}`).join(' ');
     const area = `<polygon points="${X(lp[0][0]).toFixed(2)},100 ${line} ${X(lp[lp.length-1][0]).toFixed(2)},100" fill="url(#${gid})"/>`;
@@ -1078,7 +1078,7 @@ function renderStatsCal(){
   const active = per.filter(Boolean), green = active.filter(x=>x.p>=0).length;
   const cells = Array.from({length:lead}, ()=>'<i class="cal-pad"></i>').join('') + Array.from({length:days}, (_,i)=>{
     const d = i+1, x = per[d], fut = d > now.getDate(), a = x ? (0.14 + 0.46*Math.min(1, Math.abs(x.p)/max)).toFixed(2) : 0;
-    const bg = x ? (x.p>=0 ? `rgba(61,255,160,${a})` : `rgba(255,92,108,${a})`) : '';
+    const bg = x ? (x.p>=0 ? `rgba(125,196,160,${a})` : `rgba(224,122,106,${a})`) : '';
     return `<span class="cal-d${fut?' fut':''}${d===now.getDate()?' today':''}${x ? (x.p>=0?' up':' dn') : ''}" style="${bg?`background:${bg}`:''}" title="${x ? `${new Date(y,m,d).toLocaleDateString('en-US',{month:'short',day:'numeric'})}: ${fmt.usd(x.p)} · ${x.n} trade${x.n>1?'s':''}` : ''}"><b>${d}</b>${x ? `<em>${usdShort(x.p)}</em>` : ''}</span>`;
   }).join('');
   box.innerHTML = `<div class="sg-k">This month</div><div class="cal-sum">${active.length ? `<b>${green}</b> green day${green!==1?'s':''}, <b>${active.length-green}</b> red` : 'No trade this month yet'}</div>
@@ -1156,7 +1156,7 @@ function celebrateGoal(target, totalPnl){
     <h3 style="font-size:22px;">GOAL REACHED!</h3>
     <div class="goal-unlock-label">Achievement unlocked</div>
     <div class="achitem" style="justify-content:center; margin:0 0 18px; background:rgba(255,255,255,.04);">
-      <span style="color:var(--purple)">${icon('trophy',20)}</span>
+      <span style="color:var(--accent)">${icon('trophy',20)}</span>
       <div><b>${ach.name}</b><br><span>$${target} target hit — you're at ${fmt.usd(totalPnl)}</span></div>
     </div>
     <button class="btn-neutral" style="width:100%; padding:13px;" id="btnCloseGoalCelebrate">KEEP GOING</button>
@@ -1173,7 +1173,7 @@ function spawnConfetti(){
   canvas.width = innerWidth; canvas.height = innerHeight;
   document.body.appendChild(canvas);
   const ctx2 = canvas.getContext('2d');
-  const colors = ['#C09EFF','#FFD35C','#3DFFA0','#6EC0FF','#FF5C6C'];
+  const colors = ['#C8A96E','#DDB76C','#7DC4A0','#7FA3E0','#E07A6A'];
   const pieces = Array.from({length:140}, ()=>({
     x: Math.random()*canvas.width, y: -20-Math.random()*canvas.height*0.3,
     vx: (Math.random()-0.5)*3, vy: 2+Math.random()*3,
@@ -1408,7 +1408,7 @@ async function makeAvatarData(file){
   if(!w || !h) throw new Error('decode');
   const side = Math.min(w, h), S = 256, c = document.createElement('canvas'); c.width = c.height = S;
   const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = '#0b0d12'; ctx.fillRect(0,0,S,S);
+  ctx.fillStyle = '#12100E'; ctx.fillRect(0,0,S,S);
   ctx.drawImage(img, (w-side)/2, (h-side)/2, side, side, 0, 0, S, S);
   if(img.close) img.close();
   for(const q of [0.86, 0.75, 0.62, 0.5]){

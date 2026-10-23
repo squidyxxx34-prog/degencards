@@ -7,10 +7,11 @@
    ============================================================================ */
 (function(){
 const W0 = 1080, H0 = 1920;
-const GEM = 'M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z';   // the DEGENCARDS jewel (same path as the site logo)
+const GEM = 'M5 22V10a7 7 0 0 1 14 0v12zM11.3 8h1.4v3H14v5.5h-1.3V19h-1.4v-2.5H10V11h1.3z';   // the DEGENCARDS mark (niche + candlestick, same as the site logo; even-odd)
+const GEM_ARCH = 'M5 22V10a7 7 0 0 1 14 0v12z';
 /* ---------- options (all predefined choices) ---------- */
 const THEMES = {
-  neon:   { name:'Neon',   win:'#3DFFA0', loss:'#FF5C6C', up:'#18C964', dn:'#FF3B4E' },
+  neon:   { name:'Classic', win:'#7DC4A0', loss:'#E07A6A', up:'#5DB38A', dn:'#D9655A' },
 };
 /* PRO replay studio: extra themes, backgrounds, sell effects, intros and hook texts are NOT in this public file; they arrive
    from the `pro` edge function only for a verified subscriber (see app.js loadStudio) and register here. Without them,
@@ -72,14 +73,23 @@ function buyPill(ctx, it, x, y, u, col, center){
   ctx.font = `700 ${22*u}px ${MONO}`; const lw = ctx.measureText(it.lab).width;
   ctx.font = `900 ${38*u}px ${SANS}`; const nw = ctx.measureText(it.name).width;
   const h = 96*u, w = h + 18*u + Math.max(lw, nw) + 34*u, x0 = center ? x - w/2 : x;
-  rrect(ctx, x0, y - h/2, w, h, h/2); ctx.fillStyle = 'rgba(5,7,10,0.72)'; ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = hexA(col, 0.7); ctx.stroke();
+  rrect(ctx, x0, y - h/2, w, h, h/2); ctx.fillStyle = 'rgba(12,11,10,0.72)'; ctx.fill(); ctx.lineWidth = 3*u; ctx.strokeStyle = hexA(col, 0.7); ctx.stroke();
   ctx.beginPath(); ctx.arc(x0 + h/2, y, h/2 - 8*u, 0, Math.PI*2); ctx.fillStyle = hexA(col, 0.18); ctx.fill();
   ctx.font = `${50*u}px ${SANS}`; fillCentered(ctx, it.emo, x0 + h/2, y);
   ctx.font = `700 ${22*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText(it.lab, x0 + h + 18*u, y - 20*u);
   ctx.font = `900 ${38*u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.fillText(it.name, x0 + h + 18*u, y + 18*u);
   ctx.restore();
 }
-const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
+const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace", SERIF = "'Instrument Serif', 'Times New Roman', serif";
+function wordmark(ctx, x, y, size, o){                                 // serif wordmark (+ mark), y = baseline, returns the width
+  o = o || {}; const track = size * 0.16, s = size * 0.78 / 19, mw = o.mark === false ? 0 : 14 * s, gap = mw ? size * 0.36 : 0;
+  ctx.save(); ctx.font = `400 ${size}px ${SERIF}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const ws = [...'DEGENCARDS'].map(ch => ctx.measureText(ch).width), total = mw + gap + ws.reduce((a, b) => a + b, 0) + track * 9;
+  if(!o.measure){ let x0 = o.center ? x - total / 2 : x;
+    if(mw){ ctx.save(); ctx.translate(x0 - 5 * s, y - 22 * s); ctx.scale(s, s); ctx.fillStyle = '#C8A96E'; ctx.fill(new Path2D(GEM), 'evenodd'); ctx.restore(); x0 += mw + gap; }
+    ctx.fillStyle = o.color || '#EFE8DA'; [...'DEGENCARDS'].forEach((ch, i) => { ctx.fillText(ch, x0, y); x0 += ws[i] + track; }); }
+  ctx.restore(); return total;
+}
 // TikTok / Reels / Shorts cover the top (search), the right column (like, comment…) and the bottom (caption)
 const SAFE_T = 250, SAFE_B = 480, SAFE_R = 170;
 const userHandle = () => { try{ return (window.dcHandle && window.dcHandle()) || ''; }catch(e){ return ''; } };
@@ -180,7 +190,7 @@ function livePrice(c, f, sd){
 /* ---------- scenes ---------- */
 function bg(ctx, W, H, u, glow, ms = 0){
   if(EXT.bgs[O.bg]) return EXT.bgs[O.bg](ctx, W, H, u, glow, ms);
-  ctx.fillStyle = '#05070A'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#0C0B0A'; ctx.fillRect(0,0,W,H);
   const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, H*0.7);
   g.addColorStop(0, hexA(glow, 0.10)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   if(O.bg === 'grid'){ ctx.fillStyle = 'rgba(255,255,255,0.07)';        // dotted grid
@@ -197,13 +207,12 @@ function coinBadge(ctx, img, x, y, s, u){
 }
 function footer(ctx, W, H, u, a){
   ctx.save(); ctx.globalAlpha = a;
-  ctx.font = `900 ${34*u}px ${SANS}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#fff'; ctx.fillText('DEGEN', 64*u, H - SAFE_B*u); const dw = ctx.measureText('DEGEN').width;
-  ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', 64*u + dw, H - SAFE_B*u);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const wmW = wordmark(ctx, 64*u, H - SAFE_B*u, 36*u);
   ctx.textAlign = 'right'; ctx.font = `700 ${26*u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText('degencards.vercel.app', W - SAFE_R*u, H - SAFE_B*u);
   // the user's @username between the wordmark and the url, shrunk to fit (skipped if it really can't)
   const hn = userHandle();
-  if(hn){ const urlW = ctx.measureText('degencards.vercel.app').width; ctx.font = `900 ${34*u}px ${SANS}`; const x0 = 64*u + ctx.measureText('DEGENCARDS').width + 26*u, room = W - SAFE_R*u - urlW - 26*u - x0;
+  if(hn){ const urlW = ctx.measureText('degencards.vercel.app').width; ctx.font = `900 ${34*u}px ${SANS}`; const x0 = 64*u + wmW + 26*u, room = W - SAFE_R*u - urlW - 26*u - x0;
     let fs = 26; ctx.font = `700 ${fs*u}px ${SANS}`; while(fs > 17 && ctx.measureText(hn).width > room){ fs--; ctx.font = `700 ${fs*u}px ${SANS}`; }
     if(ctx.measureText(hn).width <= room){ ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(hn, x0, H - SAFE_B*u); } }
   ctx.restore();
@@ -250,7 +259,7 @@ function intro(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `900 ${(i === 2 ? 44 : 66) * u}px ${SANS}`;
     const tw = ctx.measureText(w).width + 56*u;
-    if(i === 2){ rrect(ctx, -tw/2, -38*u, tw, 76*u, 38*u); ctx.fillStyle = col; ctx.fill(); ctx.fillStyle = '#05070A'; fillCentered(ctx, w, 0, 0); }
+    if(i === 2){ rrect(ctx, -tw/2, -38*u, tw, 76*u, 38*u); ctx.fillStyle = col; ctx.fill(); ctx.fillStyle = '#0C0B0A'; fillCentered(ctx, w, 0, 0); }
     else { ctx.fillStyle = i === 0 ? '#fff' : 'rgba(255,255,255,0.85)'; fillCentered(ctx, w, 0, 0); }
     ctx.restore();
   });
@@ -310,7 +319,7 @@ function drawFills(ctx, list, u, R, top, bottom){
       const col = p.kind === 'b' ? DOT_B : DOT_S;
       ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 3 * u; ctx.beginPath(); ctx.moveTo(p.ax, p.ay); ctx.lineTo(p.x, p.y); ctx.stroke();
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(p.ax, p.ay, 7 * u, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke(); ctx.restore();
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(12,11,10,0.85)'; ctx.stroke(); ctx.restore();
     }
   });
   pts.forEach(p => { if(p.n < 2) return; const col = p.kind === 'b' ? DOT_B : DOT_S;
@@ -318,16 +327,16 @@ function drawFills(ctx, list, u, R, top, bottom){
     ctx.globalAlpha = 1; ctx.fillStyle = col; p.items.forEach(m => { ctx.beginPath(); ctx.arc(m.ax, m.ay, 6 * u, 0, Math.PI * 2); ctx.fill(); }); ctx.restore(); });
   pts.forEach(p => { tradeDot(ctx, p.x, p.y, u, p.kind, R);
     if(p.n > 1){ const bx = p.x + R * u * 0.8, by = p.y - R * u * 0.8, br = 17 * u;      // count badge
-      ctx.save(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke();
-      ctx.fillStyle = '#05070a'; ctx.font = `900 ${18 * u}px ${MONO}`; fillCentered(ctx, p.n > 9 ? '9+' : String(p.n), bx, by); ctx.restore(); } });
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(12,11,10,0.85)'; ctx.stroke();
+      ctx.fillStyle = '#0C0B0A'; ctx.font = `900 ${18 * u}px ${MONO}`; fillCentered(ctx, p.n > 9 ? '9+' : String(p.n), bx, by); ctx.restore(); } });
 }
 /* a fill on the chart: small filled round, green B = buy, red S = sell */
-const DOT_B = '#18C964', DOT_S = '#FF3B4E';                          // buy / sell stay green / red whatever the theme
+const DOT_B = '#5DB38A', DOT_S = '#D9655A';                          // buy / sell stay green / red whatever the theme
 function tradeDot(ctx, x, y, u, kind, r = 30){                     // r in 1080-units
   const col = kind === 'b' ? DOT_B : DOT_S;
   ctx.save(); ctx.shadowBlur = 0;
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r*u, 0, Math.PI*2); ctx.fill();
-  ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(5,7,10,0.85)'; ctx.stroke();
+  ctx.lineWidth = 3*u; ctx.strokeStyle = 'rgba(12,11,10,0.85)'; ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.font = `900 ${r*1.15*u}px ${MONO}`; fillCentered(ctx, kind === 'b' ? 'B' : 'S', x, y);
   ctx.restore();
 }
@@ -347,7 +356,7 @@ function reticle(ctx, x, y, u, col, k, label, amount){
   ctx.globalAlpha = clamp01(pk);
   ctx.font = `900 ${44*u}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lw = ctx.measureText(label).width + 70*u, ly = y + r + 64*u;
-  rrect(ctx, x - lw/2, ly - 38*u, lw, 76*u, 38*u); ctx.fillStyle = 'rgba(5,7,10,0.85)'; ctx.fill();
+  rrect(ctx, x - lw/2, ly - 38*u, lw, 76*u, 38*u); ctx.fillStyle = 'rgba(12,11,10,0.85)'; ctx.fill();
   ctx.lineWidth = 3*u; ctx.strokeStyle = hexA(col, 0.8); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.fillText(label, x, ly + 2*u);
   if(amount){ ctx.font = `900 ${54*u}px ${MONO}`; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 24*u; ctx.fillText(amount, x, y - r - 50*u); }
@@ -513,7 +522,7 @@ function replay(ctx, W, H, u, t, img, ms, opt, seed){
     ctx.save(); ctx.translate(W*0.4, top + ph * 0.3 - out * 160*u); ctx.rotate((m.up ? -8 : 8) * Math.PI / 180); ctx.scale(sc, sc);
     ctx.globalAlpha = clamp01(f * 10) * (1 - out); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `900 ${200*u}px ${MONO}`; const tw = ctx.measureText(m.txt).width;
-    rrect(ctx, -tw/2 - 50*u, -125*u, tw + 100*u, 250*u, 40*u); ctx.fillStyle = 'rgba(5,7,10,0.72)'; ctx.fill();
+    rrect(ctx, -tw/2 - 50*u, -125*u, tw + 100*u, 250*u, 40*u); ctx.fillStyle = 'rgba(12,11,10,0.72)'; ctx.fill();
     ctx.lineWidth = 8*u; ctx.strokeStyle = c2; ctx.stroke();
     ctx.shadowColor = c2; ctx.shadowBlur = 40*u*FX;
     glitchText(ctx, m.txt, 0, 0, u, c2, FX === 1 && f < 0.3 && Math.floor(ms / 60) % 2 ? 9 : 0); ctx.shadowBlur = 0;
@@ -578,42 +587,43 @@ function outro(ctx, W, H, u, t, img, ms, opt){
 function brand(ctx, W, H, u, ms, seed){
   ms = ms * (2700 / T_BRAND);                                         // short outro = the same animation, faster
   const k = ms / 2700, cx = W/2, cy = H*0.42, R = rng(seed + 21);
-  ctx.fillStyle = '#05050A'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#0A0908'; ctx.fillRect(0,0,W,H);
   const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, W*0.7);
-  halo.addColorStop(0, `rgba(192,158,255,${0.28*easeOut(seg(ms, 400, 1100))})`); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = halo; ctx.fillRect(0,0,W,H);
-  const gem = new Path2D(GEM), S = 26*u;                           // path is 24 units wide
+  halo.addColorStop(0, `rgba(200,169,110,${0.28*easeOut(seg(ms, 400, 1100))})`); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = halo; ctx.fillRect(0,0,W,H);
+  const gem = new Path2D(GEM), arch = new Path2D(GEM_ARCH), S = 26*u;   // path is 24 units wide
   const draw = easeInOut(seg(ms, 80, 800)), fill = easeOut(seg(ms, 650, 1050)), pop = easeOutBack(seg(ms, 650, 1050));
   const rot = (1 - easeOutBack(seg(ms, 0, 1100))) * -0.9 + Math.sin(ms / 520) * 0.04;
-  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(S * (0.85 + 0.15 * pop), S * (0.85 + 0.15 * pop)); ctx.translate(-12, -9);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(S * (0.85 + 0.15 * pop), S * (0.85 + 0.15 * pop)); ctx.translate(-12, -12.5);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   // stroke draws itself
   ctx.setLineDash([70, 70]); ctx.lineDashOffset = 70 * (1 - draw);
-  ctx.strokeStyle = '#C09EFF'; ctx.lineWidth = 1.2; ctx.shadowColor = '#C09EFF'; ctx.shadowBlur = 30*u; ctx.stroke(gem);
+  ctx.strokeStyle = '#C8A96E'; ctx.lineWidth = 0.9; ctx.shadowColor = '#C8A96E'; ctx.shadowBlur = 24*u; ctx.stroke(arch);
   ctx.setLineDash([]);
-  // then fills with the purple -> gold gradient
-  if(fill > 0){ const g = ctx.createLinearGradient(5, 2, 19, 16); g.addColorStop(0, '#C09EFF'); g.addColorStop(1, '#FFD35C');
-    ctx.globalAlpha = fill; ctx.fillStyle = g; ctx.shadowColor = '#FFD35C'; ctx.shadowBlur = 50*u; ctx.fill(gem); }
+  // then fills with gilt
+  if(fill > 0){ const g = ctx.createLinearGradient(5, 3, 19, 22); g.addColorStop(0, '#C8A96E'); g.addColorStop(1, '#DDB76C');
+    ctx.globalAlpha = fill; ctx.fillStyle = g; ctx.shadowColor = '#DDB76C'; ctx.shadowBlur = 40*u; ctx.fill(gem, 'evenodd'); }
   ctx.restore();
   // shine sweeping across the jewel
   const sh = seg(ms, 1100, 1700);
-  if(sh > 0 && sh < 1){ ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(S, S); ctx.translate(-12, -9); ctx.clip(gem);
+  if(sh > 0 && sh < 1){ ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(S, S); ctx.translate(-12, -12.5); ctx.clip(gem, 'evenodd');
     const x = -4 + 32 * sh, lg = ctx.createLinearGradient(x - 3, 0, x + 3, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.9)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = lg; ctx.fillRect(-2, -2, 30, 22); ctx.restore(); }
   // sparkles bursting out of the jewel
   const sp = seg(ms, 700, 1900);
   if(sp > 0 && sp < 1){ for(let i = 0; i < 26; i++){ const a = R()*Math.PI*2, d = (140 + R()*360) * u * easeOut(sp), s2 = (6 + R()*14) * u * (1 - sp);
-    ctx.save(); ctx.translate(cx + Math.cos(a)*d, cy + Math.sin(a)*d); ctx.rotate(a); ctx.fillStyle = R() < 0.5 ? '#FFD35C' : '#C09EFF'; ctx.globalAlpha = 1 - sp;
+    ctx.save(); ctx.translate(cx + Math.cos(a)*d, cy + Math.sin(a)*d); ctx.rotate(a); ctx.fillStyle = R() < 0.5 ? '#DDB76C' : '#C8A96E'; ctx.globalAlpha = 1 - sp;
     ctx.beginPath(); ctx.moveTo(0, -s2); ctx.lineTo(s2*0.3, 0); ctx.lineTo(0, s2); ctx.lineTo(-s2*0.3, 0); ctx.closePath(); ctx.fill(); ctx.restore(); } }
   // wordmark: letters drop in one by one
-  const word = 'DEGENCARDS'; ctx.font = `900 ${100*u}px ${SANS}`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-  const total = ctx.measureText(word).width; let x = cx - total/2; const by = cy + 360*u;
-  [...word].forEach((ch, i) => { const lk = easeOutBack(seg(ms, 900 + i*55, 1200 + i*55)), cw = ctx.measureText(ch).width;
-    ctx.save(); ctx.globalAlpha = clamp01(lk); ctx.translate(x + cw/2, by + (1 - lk) * 60*u); ctx.fillStyle = i < 5 ? '#FFFFFF' : '#C09EFF'; ctx.textAlign = 'center'; ctx.fillText(ch, 0, 0); ctx.restore(); x += cw; });
+  const word = 'DEGENCARDS'; ctx.font = `400 ${118*u}px ${SERIF}`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  const track = 118*u*0.16, ws = [...word].map(ch => ctx.measureText(ch).width), total = ws.reduce((a, b) => a + b, 0) + track * 9;
+  let x = cx - total/2; const by = cy + 360*u;
+  [...word].forEach((ch, i) => { const lk = easeOut(seg(ms, 900 + i*60, 1400 + i*60)), cw = ws[i];      // letters rise and settle, one by one
+    ctx.save(); ctx.globalAlpha = clamp01(lk); ctx.translate(x + cw/2, by + (1 - lk) * 40*u); ctx.fillStyle = '#EFE8DA'; ctx.textAlign = 'center'; ctx.fillText(ch, 0, 0); ctx.restore(); x += cw + track; });
   const ta = easeOut(seg(ms, 1600, 2000));
   ctx.save(); ctx.globalAlpha = ta; ctx.textAlign = 'center';
   ctx.font = `700 ${40*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(L.tag, cx, by + 90*u);
   ctx.font = `800 ${32*u}px ${MONO}`; const url = 'degencards.vercel.app', uw = ctx.measureText(url).width + 60*u;
-  rrect(ctx, cx - uw/2, by + 150*u, uw, 70*u, 35*u); ctx.fillStyle = 'rgba(192,158,255,0.16)'; ctx.fill(); ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(192,158,255,0.6)'; ctx.stroke();
+  rrect(ctx, cx - uw/2, by + 150*u, uw, 70*u, 35*u); ctx.fillStyle = 'rgba(200,169,110,0.16)'; ctx.fill(); ctx.lineWidth = 2*u; ctx.strokeStyle = 'rgba(200,169,110,0.6)'; ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(url, cx, by + 186*u); ctx.textBaseline = 'alphabetic';
   const hn = userHandle(); if(hn){ ctx.font = `700 ${34*u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText('shared by ' + hn, cx, by + 272*u); }
   ctx.restore();
