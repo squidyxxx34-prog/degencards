@@ -1113,7 +1113,8 @@ function renderGoal(){
   const circumference = 213.6;
   const pct = goalTarget>0 ? Math.max(0, Math.min(1, totalPnl/goalTarget)) : 0;
   const offset = circumference*(1-pct);
-  document.getElementById('goalCurrent').textContent = usdBig(totalPnl);
+  { const gc = document.getElementById('goalCurrent'); gc.textContent = usdBig(totalPnl);
+    gc.style.color = totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : ''; }
   document.getElementById('goalTarget').textContent = goalTarget>0 ? 'of $'+goalTarget.toLocaleString('en-US') : 'no goal set';
   document.getElementById('goalMonth').textContent = new Date().toLocaleDateString('en-US',{month:'long'});
   { const now = new Date(), end = new Date(now.getFullYear(), now.getMonth()+1, 0), left = end.getDate() - now.getDate() + 1, need = goalTarget - totalPnl;
