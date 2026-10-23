@@ -1079,15 +1079,19 @@ function renderStatsView(){
   }
   const tone = v => { const t = String(v); return /^\+/.test(t) ? 'pos' : /^-\$|^-\d/.test(t) ? 'neg' : ''; };
   const tile = r => `<div class="st-row"><span>${r.l}</span><b class="${tone(r.v)}">${r.v}</b></div>`;
-  const locked = free ? ['Best ROI','Biggest loss','Profit factor','Avg win / loss','Win streaks','Max drawdown','Avg hold','Best hour','Top coin']
-    .map(l => `<button type="button" class="st-row locked" data-pro-open><span>${l}</span><b><em>PRO</em></b></button>`).join('') : '';
+  // free plan: the PRO modules, blurred. No value is computed or written here: only fixed color bars (decoration)
+  const FAKE = [['Best ROI','pos',62],['Biggest loss','neg',54],['Avg win','pos',48],['Avg loss','neg',44],['Profit factor','',30],['Best win streak','',22],
+    ['Worst loss streak','',22],['Max drawdown','neg',58],['Avg hold','',40],['Best hour','',28],['Top coin','',46],['Top source','',50]];
+  const locked = free ? `<button type="button" class="st-lock" data-pro-open aria-label="Unlock the full stats with PRO">
+      <div class="st-list st-blur" aria-hidden="true">${FAKE.map(([l,t,w])=>`<div class="st-row"><span>${l}</span><i class="st-fake ${t}" style="width:${w}px"></i></div>`).join('')}</div>
+      <span class="st-lock-cta"><b>Unlock the full stats</b><em>Profit factor, streaks, drawdown, best hour, top coin</em><i>GO PRO</i></span>
+    </button>` : '';
   document.getElementById('statsLead').innerHTML = !trades.length ? 'Your stats fill in as your trades come in.'
     : `<b class="${totalPnl>=0?'pos':'neg'}">${usdBig(totalPnl)}</b> all time, over ${trades.length} trades with ${Math.round(wins.length/trades.length*100)}% wins.`;
   renderStatsCal();
-  document.getElementById('statsGrid').innerHTML = rows.map(tile).join('') + locked;
-  document.querySelectorAll('#statsGrid [data-pro-open]').forEach(b=>b.addEventListener('click', ()=>window.dcPro.open()));
-  const cta = document.getElementById('statsPro');
-  if(cta) cta.hidden = !free;
+  document.getElementById('statsGrid').innerHTML = rows.map(tile).join('');
+  const lk = document.getElementById('statsLocked'); lk.innerHTML = locked; lk.hidden = !free;
+  lk.querySelectorAll('[data-pro-open]').forEach(b=>b.addEventListener('click', ()=>window.dcPro.open()));
   renderGoal(totalPnl);
 }
 /* this month, day by day: net P&L per day (goes with the monthly goal) */
@@ -2716,7 +2720,6 @@ document.querySelectorAll('.pro-plan').forEach(b => b.addEventListener('click', 
   }
 }));
 
-document.getElementById('statsPro').addEventListener('click', ()=>openPro());
 document.getElementById('btnProTest').addEventListener('click', ()=>{
   if(!proTester()) return;
   try{ if(proTestOff()) localStorage.removeItem(proTestKey()); else localStorage.setItem(proTestKey(), '1'); }catch(e){ return; }
