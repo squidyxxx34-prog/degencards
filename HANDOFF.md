@@ -335,3 +335,9 @@ Voir README.md (CSP stricte dans vercel.json, PKCE, échappement, validation, RL
 - **Composants** : boutons principaux ivoire en pilule, secondaires en contour fin, pastilles PRO dorées, chips en pilule, cartes de la collection sur fond encre avec filet de rareté (plus de halo néon), modales et panneaux à plat.
 - Thème Replay par défaut renommé « Classic » (clé `neon` gardée) aux couleurs jade / vermillon.
 - Images de la landing (`lp/story|post|loss.webp`) régénérées avec le nouveau pied de carte.
+
+## Nudité retirée + titre hero (2026-10-23)
+- 15 œuvres retirées (catalogue share.js, fichiers art/ + art/t/, crédits README) : perseus, paris, hercules, psyche, daphne, amazon, nemean, ugolino, saintmichael, triumph, heavenhell, angels, socrates, vercellae, riderless. Reste 28 œuvres, aucune nudité.
+- Set gratuit : victory, horsemen, lions, tempest, summit, angel, vestal. Une ancienne sélection (pick) supprimée retombe sur l'auto (artPick).
+- Hero landing = Victory (app.js). Images lp/ re-rendues : story = crossing, post = victory, loss = sodom. og.png re-rendu (Victory).
+- Titre hero : jamais coupé (`#landing h1` clamp 48–84px, mobile 44–58px, `.lp-line > span{max-width:100%}`), vérifié 390/1024/1278/1440/1920.

@@ -1679,3 +1679,9 @@ nav button.active::after{background:var(--accent);}
 .legal a{color:var(--accent);}
 .card .top{gap:10px;}
 @media(max-width:640px){ .card .src{display:none;} }
+/* hero title: never clipped, whatever the width */
+#landing .lp-hero-txt{max-width:600px; min-width:0;}
+#landing h1{font-size:clamp(48px,5.3vw,84px);}
+#landing h1 em{white-space:normal;}
+.lp-line > span{max-width:100%;}
+@media(max-width:520px){ #landing h1{font-size:clamp(44px,12.4vw,58px);} }

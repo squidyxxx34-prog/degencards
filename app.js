@@ -2492,7 +2492,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const chart = { v:2, i:iv, c:cs, w:[t0, t0 + 84 * iv], m:[[t0 + 18 * iv + 20000, 'b', cs[18][4]], [t0 + 61 * iv + 30000, 's', cs[61][4]]] };
   const roi = (cs[61][4] / cs[18][4] - 1) * 100, inv = 537.64;
   window.dcArtHero(document.getElementById('lpHeroCard'), { ticker:'ZAPP', pnl: inv * roi / 100, roi, entryMc: cs[18][4], exitMc: cs[61][4], holdTime: 43 * 60 + 6,
-    timestamp: t0 + 61 * iv, tradeId: 1, id:'demo', source:'wallet', image:null, chart }, { pick:'perseus', tone:'natural', big:'pnl', ink:'white', chart:true, stats:true, coin:false, credit:true });
+    timestamp: t0 + 61 * iv, tradeId: 1, id:'demo', source:'wallet', image:null, chart }, { pick:'victory', tone:'natural', big:'pnl', ink:'white', chart:true, stats:true, coin:false, credit:true });
 });
 
 async function reload(){

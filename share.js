@@ -392,47 +392,32 @@ function drawSimple(ctx, W, H, t, meta, p, opt){
   ctx.restore();
 }
 
-/* ---------- ART card: the trade laid over a real masterpiece ----------
+/* ---------- ART card: the trade laid over a real masterpiece (no nudity: works showing it were removed) ----------
    Paintings, sculptures and engravings in the public domain: The Metropolitan Museum of Art and The Cleveland Museum of Art,
    Open Access (CC0). Cropped (sculptures re-lit darker) and served from /art (same origin, CSP-safe).
    White monochrome candles, Entry / Exit tags, big result, quiet stats: the artwork does the talking. */
 const ART_MS = 6200;
 const ART_KINDS = [['all','All'],['paint','Paintings'],['sculpt','Sculpture'],['print','Engravings']];
 const ART = [
-  { id:'perseus',   kind:'sculpt', name:'Perseus',     title:'Perseus with the Head of Medusa',          by:'Antonio Canova',          year:'1806',    fx:.50, fy:.38, dim:.06, mood:'win',  free:true },
-  { id:'victory',   kind:'sculpt', name:'Victory',     title:'Victory with Cornucopia',                  by:'Roman',                   year:'c. 50 CE', fx:.50, fy:.30, dim:.04, mood:'win',  free:true },
-  { id:'saintmichael', kind:'paint', name:'Saint Michael', title:'Saint Michael the Archangel',          by:'Ignacio de Ries',         year:'1640s',   fx:.45, fy:.30, dim:.16, mood:'win' },
+  { id:'victory',   kind:'sculpt', name:'Victory',     title:'Victory with Cornucopia',                  by:'Roman',                   year:'c. 50 CE', fx:.50, fy:.30, dim:.04, mood:'win', free:true },
   { id:'horsemen',  kind:'print',  name:'Horsemen',    title:'The Four Horsemen of the Apocalypse',      by:'Albrecht Dürer',          year:'1498',    fx:.50, fy:.42, dim:.42, mood:'loss', free:true },
-  { id:'lions',     kind:'paint',  name:'Lions',       title:'Lions in a Mountainous Landscape',         by:'Théodore Géricault',      year:'c. 1819', fx:.36, fy:.45, dim:.12, mood:'win',  free:true },
-  { id:'socrates',  kind:'paint',  name:'Socrates',    title:'The Death of Socrates',                    by:'Jacques-Louis David',     year:'1787',    fx:.47, fy:.40, dim:.20, mood:'loss', free:true },
+  { id:'lions',     kind:'paint',  name:'Lions',       title:'Lions in a Mountainous Landscape',         by:'Théodore Géricault',      year:'c. 1819', fx:.36, fy:.45, dim:.12, mood:'win', free:true },
   { id:'tempest',   kind:'paint',  name:'Tempest',     title:'Christ Asleep during the Tempest',         by:'Eugène Delacroix',        year:'c. 1853', fx:.45, fy:.45, dim:.16, mood:'loss', free:true },
-  { id:'summit',    kind:'paint',  name:'Summit',      title:"The Rocky Mountains, Lander's Peak",       by:'Albert Bierstadt',        year:'1863',    fx:.50, fy:.30, dim:.36, mood:'win',  free:true },
-  { id:'angel',     kind:'sculpt', name:'Angel',       title:'Kneeling Angel',                           by:'Ignaz Günther',           year:'c. 1760', fx:.55, fy:.30, dim:.04, mood:'win' },
+  { id:'summit',    kind:'paint',  name:'Summit',      title:"The Rocky Mountains, Lander's Peak",       by:'Albert Bierstadt',        year:'1863',    fx:.50, fy:.30, dim:.36, mood:'win', free:true },
+  { id:'angel',     kind:'sculpt', name:'Angel',       title:'Kneeling Angel',                           by:'Ignaz Günther',           year:'c. 1760', fx:.55, fy:.30, dim:.04, mood:'win', free:true },
   { id:'medusa',    kind:'sculpt', name:'Medusa',      title:'Head of Medusa',                           by:'Antonio Canova',          year:'1807',    fx:.50, fy:.48, dim:.06, mood:'loss' },
   { id:'archangel', kind:'print',  name:'Archangel',   title:'Saint Michael Fighting the Dragon',        by:'Albrecht Dürer',          year:'1498',    fx:.50, fy:.32, dim:.42, mood:'win' },
-  { id:'psyche',    kind:'sculpt', name:'Psyche',      title:'Cupid and Psyche',                         by:'Antonio Canova',          year:'1794',    fx:.55, fy:.40, dim:.06, mood:'win' },
-  { id:'ugolino',   kind:'sculpt', name:'Ugolino',     title:'Ugolino and His Sons',                     by:'Jean-Baptiste Carpeaux',  year:'1867',    fx:.50, fy:.36, dim:.08, mood:'loss' },
-  { id:'triumph',   kind:'paint',  name:'Triumph',     title:'The Triumph of the Church',                by:'Peter Paul Rubens',       year:'c. 1628', fx:.50, fy:.45, dim:.22, mood:'win' },
   { id:'abyss',     kind:'print',  name:'Abyss',       title:'And I Saw an Angel Coming Down from Heaven', by:'Odilon Redon',          year:'1899',    fx:.45, fy:.45, dim:.08, mood:'loss' },
-  { id:'hercules',  kind:'sculpt', name:'Hercules',    title:'Statue of a Youthful Hercules',            by:'Roman',                   year:'c. 80 CE', fx:.50, fy:.30, dim:.06, mood:'win' },
   { id:'tombangel', kind:'sculpt', name:'Tomb Angel',  title:'Angel from a Tomb',                        by:'Tino di Camaino',         year:'c. 1335', fx:.55, fy:.32, dim:.06, mood:'loss' },
   { id:'northcape', kind:'paint',  name:'North Cape',  title:'The North Cape by Moonlight',              by:'Peder Balke',             year:'1848',    fx:.50, fy:.45, dim:.04, mood:'win' },
-  { id:'heavenhell',kind:'paint',  name:'Heaven & Hell', title:'Heaven and Hell',                        by:'Octave Tassaert',         year:'c. 1850', fx:.45, fy:.42, dim:.10, mood:'loss' },
   { id:'michael',   kind:'print',  name:'Michael',     title:'The Archangel Michael Piercing the Dragon', by:'Martin Schongauer',      year:'c. 1475', fx:.50, fy:.32, dim:.42, mood:'win' },
-  { id:'daphne',    kind:'sculpt', name:'Daphne',      title:'Apollo and Daphne',                        by:'Massimiliano Soldani',    year:'c. 1700', fx:.50, fy:.38, dim:.06, mood:'win' },
-  { id:'vestal',    kind:'sculpt', name:'Vestal',      title:'The Vestal',                               by:'Antonio Canova',          year:'c. 1821', fx:.50, fy:.34, dim:.08, mood:'loss' },
-  { id:'paris',     kind:'sculpt', name:'Paris',       title:'Paris',                                    by:'Antonio Canova',          year:'1822',    fx:.50, fy:.32, dim:.06, mood:'win' },
-  { id:'amazon',    kind:'sculpt', name:'Amazon',      title:'Statue of a Wounded Amazon',               by:'Roman',                   year:'1st–2nd c.', fx:.50, fy:.28, dim:.06, mood:'loss' },
-  { id:'nemean',    kind:'sculpt', name:'Nemean Lion', title:'Hercules and the Nemean Lion',             by:'Italian',                 year:'1500s',   fx:.50, fy:.40, dim:.06, mood:'win' },
+  { id:'vestal',    kind:'sculpt', name:'Vestal',      title:'The Vestal',                               by:'Antonio Canova',          year:'c. 1821', fx:.50, fy:.34, dim:.08, mood:'loss', free:true },
   { id:'prisons',   kind:'print',  name:'Prisons',     title:'Prisoners on a Projecting Platform',       by:'Giovanni Battista Piranesi', year:'1750', fx:.50, fy:.45, dim:.40, mood:'loss' },
   { id:'colosseum', kind:'print',  name:'Colosseum',   title:'The Colosseum',                            by:'Giovanni Battista Piranesi', year:'1776', fx:.50, fy:.50, dim:.40, mood:'win' },
-  { id:'angels',    kind:'paint',  name:'Angels',      title:'The Angels Appearing to Abraham',          by:'Francesco Guardi',        year:'1750s',   fx:.40, fy:.42, dim:.22, mood:'win' },
   { id:'mountainstorm', kind:'paint', name:'Mountain Storm', title:'Storm in the Mountains',             by:'Frederic Edwin Church',   year:'1847',    fx:.45, fy:.45, dim:.14, mood:'loss' },
   { id:'catskill',  kind:'paint',  name:'Catskill',    title:'The Clove, a Storm Scene',                 by:'Jasper F. Cropsey',       year:'1851',    fx:.60, fy:.45, dim:.10, mood:'loss' },
   { id:'afterstorm',kind:'paint',  name:'After the Storm', title:'Early Morning After a Storm at Sea',    by:'Winslow Homer',           year:'1903',    fx:.50, fy:.50, dim:.24, mood:'loss' },
   { id:'crossing',  kind:'paint',  name:'Crossing',    title:'Washington Crossing the Delaware',         by:'Emanuel Leutze',          year:'1851',    fx:.40, fy:.40, dim:.24, mood:'win' },
-  { id:'vercellae', kind:'paint',  name:'Vercellae',   title:'The Battle of Vercellae',                  by:'Giovanni Battista Tiepolo', year:'c. 1727', fx:.45, fy:.45, dim:.22, mood:'win' },
-  { id:'riderless', kind:'paint',  name:'Riderless',   title:'The Start of the Race of the Riderless Horses', by:'Horace Vernet',      year:'1820',    fx:.44, fy:.45, dim:.24, mood:'win' },
   { id:'hunt',      kind:'paint',  name:'The Hunt',    title:'Wolf and Fox Hunt',                        by:'Peter Paul Rubens',       year:'c. 1616', fx:.52, fy:.45, dim:.24, mood:'win' },
   { id:'tiger',     kind:'paint',  name:'Tiger',       title:'Tiger and Cubs',                           by:'Jean-Léon Gérôme',        year:'c. 1884', fx:.60, fy:.55, dim:.08, mood:'win' },
   { id:'horsefair', kind:'paint',  name:'Horse Fair',  title:'The Horse Fair',                           by:'Rosa Bonheur',            year:'1855',    fx:.50, fy:.50, dim:.24, mood:'win' },
