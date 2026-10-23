@@ -2568,9 +2568,9 @@ async function loadPro(force){
     try{
       const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
       if(r && 'pro' in r){
-        const was = window.dcPro.active; window.dcPro.active = !!r.pro && !proTestOff(); window.dcPro.sub = r.sub || window.dcPro.sub;
+        const was = window.dcPro.active, before = window.dcPro.sub ? { ...window.dcPro.sub } : null; window.dcPro.active = !!r.pro && !proTestOff(); window.dcPro.sub = r.sub || window.dcPro.sub;
         renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio();
-        if(force && r.pro && !was) showThanks();
+        if(force && !was && newPaid(before, r)) showThanks();
         else if(force && !r.pro) showToast('Payment not found yet — it can take a minute, reopen the app');
       }
     }catch(e){}
@@ -2591,6 +2591,9 @@ document.getElementById('btnPro').addEventListener('click', ()=>{
    paid -> thank-you popup; back without paying -> a one-time 10% win-back offer (Whop code STAY10, applied server-side) */
 const showOv = id => document.getElementById(id).classList.add('show');
 const hideOv = id => document.getElementById(id).classList.remove('show');
+// a real new payment: a Whop membership (not the offered "gift" PRO) that was not already active before checkout
+const newPaid = (before, r) => !!(r && r.pro && r.sub && r.sub.membership_id && r.sub.plan_id !== 'gift'
+  && !(before && before.membership_id === r.sub.membership_id && PRO_OK.has(before.status)));
 function showThanks(){ closePro(); hideOv('dealOverlay'); showOv('thanksOverlay'); }
 ['dealOverlay','thanksOverlay'].forEach(id => document.getElementById(id).addEventListener('click', e => {
   if(e.target.id === id || e.target.closest('[data-close]')) hideOv(id); }));
@@ -2603,13 +2606,13 @@ function stopCheckoutWatch(){
 }
 function watchCheckout(promo){
   stopCheckoutWatch();
-  const w = { at: Date.now(), promo, busy: false, offered: false };
+  const w = { at: Date.now(), promo, busy: false, offered: false, before: window.dcPro.sub ? { ...window.dcPro.sub } : null };
   const check = async back => {
     if(checkoutWatch !== w || w.busy) return; w.busy = true;
     try{
       const { data: r } = await sb.functions.invoke('whop', { body:{ action:'sync' } });
       if(checkoutWatch !== w) return;
-      if(r && r.pro){
+      if(newPaid(w.before, r)){
         stopCheckoutWatch();
         window.dcPro.sub = r.sub || window.dcPro.sub; window.dcPro.active = !proTestOff();
         renderPro(); window.dispatchEvent(new Event('dc-pro')); loadStudio(); showThanks();
