@@ -743,9 +743,23 @@ let hmPeriod = (()=>{ try{ const v = localStorage.getItem('dc_home_period'); ret
 const usdBig = n => (n<0?'-':'+')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
 const usdShort = n => { const a = Math.abs(n), s = n<0?'-':'+'; return a>=1e6 ? s+'$'+(a/1e6).toFixed(2)+'M' : a>=1e4 ? s+'$'+(a/1e3).toFixed(1)+'K' : s+'$'+a.toFixed(a>=100?0:2); };
 function hmWindow(){ const span = HM_PERIODS[hmPeriod][0]; return trades.filter(t=>span===Infinity || t.timestamp >= Date.now()-span).sort((a,b)=>a.timestamp-b.timestamp); }
+/* no cards yet: a connected wallet means the import is already on, so no "connect a wallet" ask */
+function renderEmptyHome(){
+  const wallets = connectedAccounts.filter(a=>a.handle), btn = document.getElementById('hmConnect');
+  if(wallets.length){
+    document.getElementById('hmEmptyTitle').textContent = 'Your wallet is connected.';
+    document.getElementById('hmEmptyText').textContent = 'Your next closed trade turns into a card by itself, about every 10 minutes. Deleted trades stay in the trash in Account and are not imported again.';
+    btn.textContent = 'MANAGE WALLETS';
+  } else {
+    document.getElementById('hmEmptyTitle').textContent = 'Your first card is one trade away.';
+    document.getElementById('hmEmptyText').textContent = 'Connect the wallet you trade with and every closed trade turns into a card by itself. Or log one by hand.';
+    btn.textContent = 'CONNECT A WALLET';
+  }
+}
 function renderStatsRow(){
   const has = trades.length > 0;
   document.getElementById('hmEmpty').hidden = has;
+  if(!has) renderEmptyHome();
   ['hmPnlBig','hmPnlSub','hmCurve','statsRow'].forEach(id=>document.getElementById(id).hidden = !has);
   document.querySelector('#hmPnl .hm-pnl-head').hidden = !has;
   document.querySelectorAll('#hmPeriods button').forEach(b=>{ const on = b.dataset.p===hmPeriod; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
@@ -1757,7 +1771,7 @@ async function syncNow(manual){
     // full reload only when something changed (this sync or the server cron imported cards): a quiet check otherwise
     let changed = n > 0 || manual;
     if(!changed){ const { count } = await sb.from('trades').select('id', { count:'exact', head:true }).is('deleted_at', null); changed = count != null && count !== trades.length; }
-    if(changed) await reload(); else { connectedAccounts = await store.getAccounts(); renderAccount(); }
+    if(changed) await reload(); else { connectedAccounts = await store.getAccounts(); renderAccount(); if(!trades.length) renderEmptyHome(); }
     if(changed && !n && trades.length > before) setTimeout(buildChartsInBrowser, 200000);
     if(n){ showToast(`${n} new trade card${n>1?'s':''} imported`); setTimeout(buildChartsInBrowser, 200000); }
     else if(manual) showToast(data?.pending ? 'Still catching up on history — more cards soon' : (data?.synced ? 'Up to date' : 'Synced less than a minute ago'));
@@ -2454,7 +2468,7 @@ document.getElementById('btnPubkey').addEventListener('click', async ()=>{
 async function reload(){
   idCounter = 0;
   [trades, deletedTrades] = await Promise.all([store.getTrades(), store.getDeleted()]);
-  connectedAccounts = await store.getAccounts();
+  connectedAccounts = await store.getAccounts(); if(!trades.length) renderEmptyHome();
   goalTarget = await store.getGoal();
   renderAll();
 }
