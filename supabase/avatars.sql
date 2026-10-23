@@ -1,4 +1,4 @@
--- DEGENCARDS — profile picture (own UI only: nav chip + Account; never on cards, leaderboard or share images)
+-- DEGENCARDS — profile picture (nav chip + Account + weekly leaderboard for opted-in users; never on cards or share images)
 -- Applied on the live project as migration `avatars`.
 -- Stored as a small data: URL (client crops/resizes to 256x256 before upload). Users read their own row;
 -- writes only through set_avatar / clear_avatar. Deleted with the account (FK on delete cascade).
@@ -31,3 +31,14 @@ $$;
 
 revoke all on function public.set_avatar(text), public.clear_avatar() from public, anon;
 grant execute on function public.set_avatar(text), public.clear_avatar() to authenticated;
+
+-- leaderboard pictures (opted-in users only), applied on the live project as migration `leaderboard_avatars` (2026-10-23)
+create or replace function public.leaderboard_avatars(p_names text[])
+returns table(username text, data text, updated_at timestamptz)
+language sql stable security definer set search_path = '' as $$
+  select p.username, a.data, a.updated_at
+  from public.profiles p join public.avatars a on a.user_id = p.user_id
+  where p.on_board and p.username = any(p_names[1:60]);
+$$;
+revoke all on function public.leaderboard_avatars(text[]) from public, anon;
+grant execute on function public.leaderboard_avatars(text[]) to authenticated;

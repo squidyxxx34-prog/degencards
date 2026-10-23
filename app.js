@@ -1402,7 +1402,7 @@ function renderQuests(all){
 
 /* ---------- PROFILE: @username (unique, chosen by the user) ---------- */
 let profile = null, profileLoaded = false;
-/* ---------- profile picture: own UI only (nav chip + Account), never on cards / share images ---------- */
+/* ---------- profile picture: nav chip, Account and the weekly leaderboard (if joined); never on cards / share images ---------- */
 let avatarUrl = null;
 const AV_RX = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
 function renderAvatar(){
@@ -1410,6 +1410,7 @@ function renderAvatar(){
     if(avatarUrl){ el.style.setProperty('--av-img', `url("${avatarUrl}")`); el.classList.add('has-img'); }
     else { el.style.removeProperty('--av-img'); el.classList.remove('has-img'); } });
   const b = document.getElementById('accPicBtn'); if(b) b.textContent = avatarUrl ? 'CHANGE' : 'UPLOAD';
+  if(profile && typeof ranks !== 'undefined'){ ranks.pics.set(profile.username, avatarUrl || ''); if(ranks.rows.length && document.getElementById('ranksView').style.display !== 'none') ranks.render(); }
   const r = document.getElementById('accPicRemove'); if(r) r.hidden = !avatarUrl;
 }
 async function loadAvatar(){
@@ -1549,7 +1550,7 @@ document.getElementById('accBoard').addEventListener('change', async e=>{
 
 /* ---------- RANKS: weekly leaderboard (verified on-chain P&L) + level ladder ---------- */
 const ranks = {
-  rows: [], at: 0, failed: false, loading: false,
+  rows: [], at: 0, failed: false, loading: false, pics: new Map(),
   async open(){ this.render(); if(Date.now() - this.at > 60000) await this.load(); },
   async load(){
     if(this.loading) return; this.loading = true;
@@ -1557,7 +1558,17 @@ const ranks = {
       this.rows = (data||[]).map(r=>({ rank:num(r.rank,1,1e6), user:String(r.username||'').replace(/[^a-z0-9_]/g,'').slice(0,20), pnl:num(r.pnl,-1e12,1e12), trades:num(r.trades,0,1e7), wins:num(r.wins,0,1e7), best:num(r.best_roi,-100,1e7), me:!!r.me })).filter(r=>r.user);
       this.failed = false; this.at = Date.now();
     }catch(_){ this.failed = true; }
-    this.loading = false; this.render();
+    this.loading = false; this.render(); this.loadPics();
+  },
+  // profile pictures of the board, fetched after it (data: URLs, checked before use)
+  async loadPics(){
+    const names = this.rows.map(r=>r.user).filter(u=>!this.pics.has(u)).slice(0,60); if(!names.length) return;
+    try{ const { data, error } = await sb.rpc('leaderboard_avatars', { p_names: names }); if(error) throw error;
+      names.forEach(u=>this.pics.set(u, ''));
+      (data||[]).forEach(r=>{ const u = String(r.username||''), d = String(r.data||'');
+        if(names.includes(u) && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+\/=]+$/.test(d) && d.length <= 80000) this.pics.set(u, d); });
+      if((data||[]).length) this.render();
+    }catch(_){}
   },
   render(){
     const now = Date.now(), t0 = new Date(); t0.setUTCHours(0,0,0,0); t0.setUTCDate(t0.getUTCDate() - (t0.getUTCDay()+6)%7);
@@ -1574,7 +1585,7 @@ const ranks = {
     const top = this.rows.filter(r=>r.rank<=3).slice(0,3), rest = this.rows.filter(r=>!top.includes(r));
     const medal = ['gold','silver','bronze'], lead = Math.max(1, ...this.rows.map(r=>Math.abs(r.pnl)));
     const hue = u => { let h = 0; for(const c of u) h = (h*31 + c.charCodeAt(0)) % 360; return h; };
-    const av = (u, cls) => `<div class="${cls}" style="--h:${hue(u)}">${esc(u[0].toUpperCase())}</div>`;
+    const av = (u, cls) => { const pic = this.pics.get(u); return pic ? `<div class="${cls} has-pic" style="--h:${hue(u)}"><img src="${pic}" alt="" decoding="async"></div>` : `<div class="${cls}" style="--h:${hue(u)}">${esc(u[0].toUpperCase())}</div>`; };
     const crown = `<svg class="rk-crown" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8z"/></svg>`;
     document.getElementById('rkPodium').innerHTML = this.failed || !top.length ? '' : `<div class="rk-stage">${top.map((r,i)=>`<div class="rk-pod rk-${medal[i]}${r.me?' me':''}">
         <div class="rk-pod-top">${i===0 ? crown : ''}${av(r.user,'rk-pod-av')}<b>@${esc(r.user)}</b><div class="rk-pod-pnl ${r.pnl>=0?'pos':'neg'}">${usdShort(r.pnl)}</div><span><em>${r.trades} trades · </em>${Math.round(r.wins/r.trades*100)}% wins</span></div>
