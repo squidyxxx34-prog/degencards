@@ -917,18 +917,21 @@ function renderLevel(){
   document.getElementById('lvlTitle').textContent = title;
   document.getElementById('chipLvl').textContent = lvl;
   document.getElementById('avRing').style.setProperty('--xp', pct.toFixed(1)+'%');
+  { const ring = document.getElementById('avRing'), tier = lvlTier(lvl);
+    ring.className = 'av-ring t-' + tier.k; ring.title = `${tier.name} frame · LVL ${lvl}`; }
   document.getElementById('xpFill').style.width = pct.toFixed(1)+"%";
   document.getElementById('xpLabel').textContent = need ? `${cur.toLocaleString('en-US')} / ${need.toLocaleString('en-US')} XP` : 'MAX LEVEL';
   document.getElementById('lvlDetail').innerHTML = `
     <div class="lvl-rows">${parts.map(([l,v])=>`<div><span>${l}</span><b>+${v.toLocaleString('en-US')}</b></div>`).join('')}
       <div class="lvl-total"><span>Total</span><b>${total.toLocaleString('en-US')} XP</b></div></div>
     <div class="lvl-hint">${nt ? `Next title: <b>${nt[1]}</b> at LVL ${nt[0]}` : 'Top title reached.'}
+      ${(()=>{ const nf = LVL_TIERS.find(x=>x[0] > lvl); return `<br>Avatar frame: <b>${lvlTier(lvl).name}</b>${nf ? ` · ${nf[2]} at LVL ${nf[0]}` : ' (top frame)'}`; })()}
       <br>On-chain imports earn more XP than manual entries. Only 25 trades per day count.</div>`;
   // level-up toast (per account)
   try{
     const k = 'dc_lvl_'+(session?.user?.id||'anon'), prev = Number(localStorage.getItem(k)||0);
     const kx = 'dc_xp_'+(session?.user?.id||'anon'), px = Number(localStorage.getItem(kx)||0);
-    if(prev && lvl > prev) celebrateLevel(prev, lvl, total - px);
+    if(prev && lvl > prev){ const g = total - px; celeb.add(done=>celebrateLevel(prev, lvl, g, done)); }
     else if(px && total > px) showToast(`+${(total - px).toLocaleString('en-US')} XP`);
     if(lvl !== prev) localStorage.setItem(k, String(lvl));
     localStorage.setItem(kx, String(total));
@@ -1143,7 +1146,7 @@ function renderGoal(){
     const key = goalFlagKey(goalAchievementKey(goalTarget));
     if(localStorage.getItem(key) !== '1'){
       localStorage.setItem(key, '1');
-      celebrateGoal(goalTarget, totalPnl);
+      celeb.add(done=>celebrateGoal(goalTarget, totalPnl, done));
     }
   }
 }
@@ -1154,7 +1157,114 @@ function goalAchievementKey(target){
   if(target<2000) return "goal_smasher";
   return "goal_legend";
 }
-function celebrateLevel(from, lvl, gained){
+/* ---------- GAMIFICATION LAYER ----------
+   Everything below is measured from the trades themselves (nothing to claim, nothing to fake):
+   - celebrations queue: one popup at a time (card drop, achievements, level up, goal)
+   - card drop: on-chain trades imported since the last visit are revealed one by one, best rarity last
+   - achievement unlocks and quest completions announced as they happen
+   - avatar frame by level tier */
+const LVL_TIERS = [[1,'iron','Iron'],[10,'bronze','Bronze'],[20,'silver','Silver'],[30,'gold','Gold'],[50,'diamond','Diamond'],[80,'mythic','Mythic']];
+function lvlTier(l){ let t = LVL_TIERS[0]; for(const x of LVL_TIERS) if(l >= x[0]) t = x; return { min:t[0], k:t[1], name:t[2] }; }
+const celeb = { q: [], busy: false,
+  add(fn){ this.q.push(fn); this.next(); },
+  next(){
+    if(this.busy || !this.q.length) return;
+    this.busy = true; const fn = this.q.shift(); let fin = false;
+    const done = () => { if(fin) return; fin = true; this.busy = false; setTimeout(()=>this.next(), 280); };
+    try{ fn(done); }catch(e){ done(); }
+  } };
+const gkey = k => 'dc_' + k + '_' + (session?.user?.id || 'anon');
+const gget = k => { try{ const v = JSON.parse(localStorage.getItem(gkey(k)) || 'null'); return Array.isArray(v) ? v : null; }catch(e){ return null; } };
+const gset = (k, v) => { try{ localStorage.setItem(gkey(k), JSON.stringify(v)); }catch(e){} };
+function gPopup(html, done, cls){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay goal-overlay';
+  overlay.innerHTML = `<div class="modal goal-modal ${cls||''}" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
+  let closed = false;
+  const close = ()=>{ if(closed) return; closed = true; overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); if(done) done(); };
+  overlay.addEventListener('click', e=>{ if(e.target===overlay || e.target.closest('[data-g-close]')) close(); });
+  return { overlay, close };
+}
+/* new on-chain cards since the last visit (this browser). First visit: everything counts as seen, no popup. */
+function checkDrops(){
+  if(!session) return;
+  const all = computedTrades(), seen = gget('seen'), ids = all.map(t=>t.id).slice(0, 3000);
+  gset('seen', ids);
+  if(!seen) return;
+  const s = new Set(seen);
+  const fresh = all.filter(t=>!s.has(t.id) && t.source !== 'manual')
+    .sort((a,b)=>RARITY_ORDER.indexOf(a.meta.rarity) - RARITY_ORDER.indexOf(b.meta.rarity) || a.timestamp - b.timestamp);
+  if(fresh.length) celeb.add(done=>cardDrop(fresh, done));
+}
+function cardDrop(fresh, done){
+  const show = fresh.slice(-12), extra = fresh.length - show.length;
+  let i = -1;
+  const p = gPopup(`<div class="drop-head"><div class="goal-unlock-label">CARD DROP</div>
+      <h3>${fresh.length} new card${fresh.length>1?'s':''}</h3><p class="drop-sub">Imported from your wallet since your last visit. Tap to reveal.</p></div>
+    <div class="drop-stage" data-drop-tap><div class="drop-card" id="dropCard"><div class="drop-face drop-back"><span class="drop-logo">${icon('sparkle',34,'var(--purple)')}</span><b>DEGEN<span>CARDS</span></b><em>${show.length} to open</em></div><div class="drop-face drop-front grid" id="dropFront"></div></div></div>
+    <div class="drop-count" id="dropCount"></div>
+    <div class="drop-actions"><button type="button" class="hm-btn" id="dropSkip">SKIP</button><button type="button" class="hm-btn primary" id="dropNext">REVEAL</button></div>`, done, 'drop-modal');
+  const $ = id => p.overlay.querySelector('#'+id);
+  const card = $('dropCard'), front = $('dropFront'), next = $('dropNext'), count = $('dropCount');
+  const summary = () => {
+    const by = {}; fresh.forEach(t=>{ by[t.meta.rarity] = (by[t.meta.rarity]||0) + 1; });
+    const pnl = fresh.reduce((x,t)=>x+t.pnl,0);
+    p.overlay.querySelector('.drop-stage').outerHTML = `<div class="drop-sum">${RARITY_ORDER.slice().reverse().filter(r=>by[r]).map(r=>`<div class="drop-r r-${r}"><b>${by[r]}</b><span>${r.toUpperCase()}</span></div>`).join('')}</div>
+      <div class="drop-pnl ${pnl>=0?'pos':'neg'}">${usdBig(pnl)} <span>across the drop</span></div>`;
+    count.textContent = ''; $('dropSkip').hidden = true; next.textContent = 'ADD TO COLLECTION'; setTimeout(()=>{ next.dataset.gClose = '1'; }, 0);
+  };
+  const reveal = () => {
+    if(next.dataset.gClose || next.textContent === 'ADD TO COLLECTION') return;
+    i++;
+    if(i >= show.length){ summary(); return; }
+    const t = show[i], r = t.meta.rarity, big = RARITY_ORDER.indexOf(r) >= 3;
+    card.classList.remove('flip'); card.className = 'drop-card r-' + r;
+    setTimeout(()=>{
+      front.innerHTML = `<div class="card" data-r="${r}" style="${cardStyle(t.meta)}">${renderCardHTML(t, t.meta)}</div>`;
+      card.classList.add('flip');
+      if(big) setTimeout(spawnConfetti, 260);
+    }, i ? 180 : 0);
+    count.textContent = `${i+1} / ${show.length}${extra > 0 ? ` · +${extra} more in your collection` : ''}`;
+    next.textContent = i + 1 >= show.length ? 'SEE THE DROP' : 'NEXT CARD';
+  };
+  next.addEventListener('click', reveal);
+  p.overlay.querySelector('[data-drop-tap]').addEventListener('click', reveal);
+  $('dropSkip').addEventListener('click', summary);
+}
+/* achievements unlocked since the last visit (this browser) */
+function checkAchievementUnlocks(){
+  if(!session) return;
+  const now = [...unlockedAchievementKeys()], prev = gget('ach');
+  gset('ach', now);
+  if(!prev) return;
+  const fresh = now.filter(k=>!prev.includes(k) && ACH_MAP[k]);
+  if(!fresh.length) return;
+  celeb.add(done=>{
+    setTimeout(spawnConfetti, 150);
+    gPopup(`<div class="goal-trophy-ring">${icon('trophy',40,'var(--gold)')}</div>
+      <h3 style="font-size:22px;">ACHIEVEMENT${fresh.length>1?'S':''} UNLOCKED</h3>
+      <div class="goal-unlock-label">+${(fresh.length*120).toLocaleString('en-US')} XP</div>
+      <div class="ach-unl">${fresh.slice(0,6).map(k=>{ const a = ACH_MAP[k], tier = ACH_TIER[k] || 'bronze';
+        return `<div class="ach-unl-row t-${tier}"><span>${icon(a.icon,20)}</span><div><b>${esc(a.name)}</b><em>${esc(a.desc)}</em></div><i>${tier.toUpperCase()}</i></div>`; }).join('')}
+        ${fresh.length > 6 ? `<p class="lvl-next">+${fresh.length-6} more in Achievements</p>` : ''}</div>
+      <button class="btn-neutral" style="width:100%; padding:13px;" data-g-close>NICE</button>`, done);
+  });
+}
+/* quests completed since the last check: a toast each (daily + weekly, current period only) */
+function checkQuestUnlocks(){
+  if(!session) return;
+  const all = computedTrades(), now = Date.now();
+  const today = all.filter(t=>dayKey(t.timestamp)===dayKey(now)), week = all.filter(t=>t.timestamp >= weekStart(now));
+  const list = [...DAILY_QUESTS.filter(q=>questDone(q,today)).map(q=>['d'+dayKey(now)+':'+q.k, q]),
+                ...WEEKLY_QUESTS.filter(q=>questDone(q,week)).map(q=>['w'+weekStart(now)+':'+q.k, q])];
+  const prev = gget('quests');
+  gset('quests', list.map(x=>x[0]));
+  if(!prev) return;
+  list.filter(([k])=>!prev.includes(k)).forEach(([,q], n)=>setTimeout(()=>showToast(`Quest complete: ${q.name} · +${q.xp} XP`), 600 + n*2600));
+}
+function celebrateLevel(from, lvl, gained, done){
   setTimeout(spawnConfetti, 150);
   const title = levelTitle(lvl), newTitle = levelTitle(from) !== title, nt = nextTitle(lvl);
   const overlay = document.createElement('div');
@@ -1170,11 +1280,11 @@ function celebrateLevel(from, lvl, gained){
   </div>`;
   document.body.appendChild(overlay);
   requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
-  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); };
+  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); if(done) done(); };
   overlay.addEventListener('click', e=>{ if(e.target===overlay || e.target.closest('[data-lvl-close]')) close(); });
   overlay.querySelector('[data-lvl-close]').focus();
 }
-function celebrateGoal(target, totalPnl){
+function celebrateGoal(target, totalPnl, done){
   setTimeout(spawnConfetti, 200);
   const ach = ACH_MAP[goalAchievementKey(target)];
   const overlay = document.createElement('div');
@@ -1191,7 +1301,7 @@ function celebrateGoal(target, totalPnl){
   </div>`;
   document.body.appendChild(overlay);
   requestAnimationFrame(()=> requestAnimationFrame(()=> overlay.classList.add('show')));
-  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); };
+  const close = ()=>{ overlay.classList.remove('show'); setTimeout(()=>overlay.remove(), 400); if(done) done(); };
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
   overlay.querySelector('#btnCloseGoalCelebrate').addEventListener('click', close);
 }
@@ -2529,6 +2639,7 @@ async function reload(){
   [trades, deletedTrades] = await Promise.all([store.getTrades(), store.getDeleted()]);
   connectedAccounts = await store.getAccounts(); if(!trades.length) renderEmptyHome();
   goalTarget = await store.getGoal();
+  try{ checkDrops(); checkAchievementUnlocks(); checkQuestUnlocks(); }catch(e){}
   renderAll();
 }
 
