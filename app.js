@@ -375,8 +375,8 @@ function cleanCandles(raw, iv, marks){
 /* livelier charts: each real candle is split into a few sub-candles whose path goes from its real open to its real
    close through its real high and low (seeded, so cards, detail and videos are identical). Every real OHLC is kept
    exactly: no new high, no new low, same direction. Flat stretches (nobody traded) stay flat. */
-function densify(cs, iv){
-  const k = Math.max(1, Math.min(4, Math.round(80 / Math.max(1, cs.length))));
+function densify(cs, iv, kk){
+  const k = kk || Math.max(1, Math.min(4, Math.round(80 / Math.max(1, cs.length))));
   if(k === 1) return { c: cs, i: iv };
   const out = [], sub = iv / k;
   for(const [ts,o,h,l,c] of cs){
@@ -417,13 +417,17 @@ function regroup(cs, iv){
    Minutes where nobody traded are dropped, the rest merged into ~32 candles drawn side by side (quiet stretches don't
    take room), and B / S placed at their exact moment inside the candle they fall in. */
 const EVEN_N = 56;                                               // ~56 candles on every chart, small cards included
+const EVEN_MIN = 40;                                             // fewer real candles than this: keep the smaller moves too
 function evenCandles(ch){
   const src = ch.c, iv = ch.i;
   if(!src || src.length < 2) return ch;
   const H = Math.max(...src.map(x=>x[2])), L = Math.min(...src.map(x=>x[3])), R = H - L || 1;
-  const flat = x => (x[2] - x[3]) / R < 0.012;                      // under ~1% of the chart's height: reads as a flat line
-  let cs = src.filter(x=>!flat(x));
-  if(cs.length < 2) cs = src.slice();
+  // near-flat candles are dropped, but never at the cost of the action: one big pump / dump squashes every other candle
+  // under 1% of the chart's height, so the threshold steps down until enough real candles are left
+  const live = th => src.filter(x=>(x[2] - x[3]) / R >= th);
+  let cs = null;
+  for(const th of [0.012, 0.005, 0.002, 0.0006, 1e-9]){ const k = live(th); if(k.length >= EVEN_MIN){ cs = k; break; } if(k.length >= 2) cs = k; }
+  if(!cs || cs.length < 2) cs = src.slice();
   if(cs.length > EVEN_N + 8){                                       // merge consecutive candles into ~32
     const out = [], k = cs.length / EVEN_N;
     for(let g = 0; g < EVEN_N; g++){
@@ -439,7 +443,12 @@ function evenCandles(ch){
       if(ts < b || j === cs.length-1 || ts < cs[j+1][0]) return (j + Math.min(1, Math.max(0, (ts - a) / Math.max(1, b - a)))) * T; }
     return cs.length * T;
   };
-  return { ...ch, c: cs.map((x,j)=>[j*T, x[1], x[2], x[3], x[4]]), m: (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]), w: [0, cs.length*T], i: T, iv0: T, even: true };
+  // short or quiet trades: each real candle split into sub-candles (real open / high / low / close kept exactly) so every
+  // chart shows ~EVEN_N candles of action, the same on cards, detail, share cards and replays
+  const ev = cs.map((x,j)=>[j*T, x[1], x[2], x[3], x[4]]);
+  const k = ev.length < EVEN_N ? Math.min(28, Math.ceil(EVEN_N / ev.length)) : 1;
+  const dn = k > 1 ? densify(ev, T, k) : { c: ev, i: T };
+  return { ...ch, c: dn.c, m: (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]), w: [0, cs.length*T], i: dn.i, iv0: T, even: true };
 }
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
