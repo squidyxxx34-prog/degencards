@@ -520,7 +520,7 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
 }
 /* the chart: white candles (down = hollow / faint), Entry and Exit tags. Drawn on a layer, then shadowed once. */
 const ART_LAYER = document.createElement('canvas');
-function artChart(ctx, t, x, y, w, h, p, u){
+function artChart(ctx, t, x, y, w, h, p, u, mini){
   const ch = t.chart && t.chart.v === 2 && t.chart.c && t.chart.c.length ? t.chart : null; if(!ch) return;
   const cs = ch.c, iv = ch.i;
   const x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
@@ -553,6 +553,22 @@ function artChart(ctx, t, x, y, w, h, p, u){
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
+  if(mini){                                                          // poster: a ring on each fill, ENTRY / EXIT in small caps, no pills
+    const k = easeOut(seg(p, 0.62, 0.74)); if(k <= 0) return;
+    ctx.save(); ctx.globalAlpha *= k;
+    const ring = (f, label, up) => { const fx = px(f), fy = py(f);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.2 * u; ctx.setLineDash([3 * u, 4 * u]);
+      ctx.beginPath(); ctx.moveTo(fx, fy + (up ? -12 : 12) * u); ctx.lineTo(fx, fy + (up ? -48 : 48) * u); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(fx, fy, 7 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B10'; ctx.fill(); ctx.lineWidth = 2.6 * u; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+      ctx.font = `700 ${16 * u}px ${MONO}`; try{ ctx.letterSpacing = (3 * u) + 'px'; }catch(e){}
+      ctx.fillStyle = '#FFFFFF'; ctx.textAlign = fx > x + w - 60 * u ? 'right' : fx < x + 60 * u ? 'left' : 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10 * u;
+      ctx.fillText(label, fx, fy + (up ? -58 : 70) * u); ctx.shadowColor = 'transparent'; try{ ctx.letterSpacing = '0px'; }catch(e){} };
+    const room = f => py(f) - y > 80 * u;
+    if(entry && exit && Math.abs(px(entry) - px(exit)) < 60 * u){ ring(exit, 'ENTRY · EXIT', room(exit)); }
+    else { if(entry) ring(entry, 'ENTRY', room(entry)); if(exit) ring(exit, 'EXIT', room(exit)); }
+    ctx.restore(); return;
+  }
   ctx.font = `700 ${22 * u}px ${SANS}`;
   const th = 36 * u, mk = (f, label) => { const fx = px(f), fy = py(f), tw = ctx.measureText(label).width + 26 * u, tx = Math.min(x + w - tw, Math.max(x, fx - tw / 2));
     const roomUp = fy - th - 30 * u > y - 64 * u; return { f, label, fx, fy, tw, tx, above: roomUp }; };
@@ -583,7 +599,132 @@ function artChart(ctx, t, x, y, w, h, p, u){
   });
 }
 const hasArtChart = t => !!(t.chart && t.chart.v === 2 && t.chart.c && t.chart.c.length);
+/* ART, post / square / story: one editorial grid. A double hairline mat frames the artwork; everything sits on the same
+   left and right margins: brand and date on top, the chart, then the plate: ticker + result chip, the big number, four
+   figures in columns, the handle and the artwork's credit. Modern (mono, hairlines, small caps), classy (mat, museum label). */
+function drawArtPoster(ctx, W, H, t, meta, p, opt){
+  const ao = { ...artOpts(), ...(opt.ao || {}) }, story = H / W > 1.5, win = t.pnl >= 0;
+  const k = W / 1080, u = k * (story ? 1.02 : 0.8);                 // story: same width, everything a notch bigger
+  const fa = (a, b) => easeOut(seg(p, a, b));
+  const shadow = (b, a) => { ctx.shadowColor = `rgba(0,0,0,${a == null ? 0.5 : a})`; ctx.shadowBlur = b * u; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = Math.max(1, b * 0.1) * u; };
+  const noShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; };
+  const ls = v => { try{ ctx.letterSpacing = v + 'px'; }catch(e){} };
+  const inv = t.roi ? t.pnl / (t.roi / 100) : 0, money = !opt.hideUsd && inv > 0 && isFinite(inv);
+  const bigRoi = ao.big === 'roi' || opt.hideUsd, mult = t.entryMc > 0 && t.exitMc > 0 ? t.exitMc / t.entryMc : 0;
+  // the result chip already says the % (or the $): the columns carry what is not said elsewhere
+  const cols = !ao.stats ? [] : [
+    ['ENTRY', mcShort(t.entryMc)], ['EXIT', mcShort(t.exitMc)],
+    ...(money ? [['SIZE', '$' + inv.toFixed(2)]] : []),
+    ['MULTIPLE', mult ? '×' + (mult >= 10 ? mult.toFixed(1) : mult.toFixed(2)) : '—'],
+  ];
+  const bigTxt = v => bigRoi ? fmt.pct(t.roi * v) : fmt.usd(t.pnl * v);
+  const chip = bigRoi ? (money ? fmt.usd(t.pnl) : '') : fmt.pct(t.roi);
+  const chartOn = ao.chart && hasArtChart(t), tone = win ? GREEN : RED;
+  // grid
+  const M = 40 * k, L = M + 40 * k, R = W - M - 40 * k, cw = R - L;
+  const topY = M + (story ? 170 : 44) * k, botY = H - M - (story ? 210 : 36) * k;
+  // plate, from the bottom up
+  const footH = 24 * u, statsH = cols.length ? 74 * u : 0;
+  const bigSize = fitFont(ctx, bigTxt(1), 800, SANS, (story ? 170 : 150) * u, cw);
+  const footY = botY;
+  const rule2 = footY - footH - 22 * u;
+  const statsTop = rule2 - 24 * u - statsH;
+  const rule1 = cols.length ? statsTop - 26 * u : rule2;
+  const bigBase = rule1 - 30 * u;
+  const tickY = bigBase - bigSize * 0.76 - 40 * u;
+  const plateTop = tickY - 30 * u;
+  const headY = topY + 14 * u, headRule = headY + 26 * u;
+  const chartTop = headRule + 70 * u, chartBot = plateTop - 64 * u;
+
+  ctx.save();
+  artBackdrop(ctx, W, H, t, ao, p, false);
+  let g = ctx.createLinearGradient(0, 0, 0, headRule + 140 * u); g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createLinearGradient(0, plateTop - 260 * u, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0.86)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createRadialGradient(W / 2, H * 0.42, Math.min(W, H) * 0.4, W / 2, H * 0.45, Math.max(W, H) * 0.75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.4)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if(!opt.video){ ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = grainPattern(ctx); ctx.fillRect(0, 0, W, H); ctx.restore(); }
+
+  // the mat: two hairlines
+  ctx.globalAlpha = fa(0, 0.1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.34)'; ctx.lineWidth = 1.6 * k; ctx.strokeRect(M, M, W - 2 * M, H - 2 * M);
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1 * k; ctx.strokeRect(M + 10 * k, M + 10 * k, W - 2 * M - 20 * k, H - 2 * M - 20 * k);
+
+  // header: brand left, date right, a hairline under
+  const hl = (y, a) => { ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fillRect(L, y, cw, Math.max(1, 1.2 * u)); };
+  ctx.globalAlpha = fa(0.02, 0.12); ctx.textBaseline = 'alphabetic'; shadow(10, 0.6);
+  ctx.textAlign = 'left'; ctx.font = `800 ${22 * u}px ${SANS}`; ls(5 * u); ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, headY);
+  const dW = ctx.measureText('DEGEN').width; ctx.fillStyle = '#C09EFF'; ctx.fillText('CARDS', L + dW, headY);
+  ctx.textAlign = 'right'; ctx.font = `600 ${18 * u}px ${MONO}`; ls(3 * u); ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.fillText(new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase(), R, headY); ls(0);
+  noShadow(); hl(headRule, 0.3);
+
+  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, L, chartTop, cw, chartBot - chartTop, p, u, true);
+
+  // plate: ticker row with the result chip
+  const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = ao.coin && !!(img && img.complete && img.naturalWidth);
+  ctx.globalAlpha = fa(0.04, 0.14); ctx.textBaseline = 'middle';
+  let x = L; const cs = 46 * u;
+  if(hasImg){
+    ctx.save(); shadow(12, 0.5); ctx.beginPath(); ctx.arc(x + cs / 2, tickY, cs / 2, 0, Math.PI * 2); ctx.fillStyle = '#0B0B10'; ctx.fill(); noShadow(); ctx.clip();
+    const r = Math.max(cs / img.naturalWidth, cs / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
+    ctx.drawImage(img, x + (cs - iw) / 2, tickY - ih / 2, iw, ih); ctx.restore();
+    ctx.beginPath(); ctx.arc(x + cs / 2, tickY, cs / 2, 0, Math.PI * 2); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.stroke();
+    x += cs + 16 * u;
+  }
+  shadow(12, 0.6); ctx.textAlign = 'left';
+  const tick = tk(t.ticker); fitFont(ctx, tick, 800, SANS, 38 * u, cw * 0.5); ctx.fillStyle = '#FFFFFF'; ctx.fillText(tick, x, tickY + 2 * u);
+  x += ctx.measureText(tick).width + 18 * u;
+  ctx.font = `600 ${18 * u}px ${MONO}`; ls(2 * u); ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText('HELD ' + fmt.hold(t.holdTime || 0).toUpperCase(), x, tickY + 2 * u); ls(0);
+  noShadow();
+  if(chip){
+    ctx.font = `800 ${22 * u}px ${MONO}`; const pw = ctx.measureText(chip).width + 30 * u, ph = 42 * u;
+    rrect(ctx, R - pw, tickY - ph / 2, pw, ph, ph / 2); ctx.fillStyle = win ? 'rgba(61,255,160,0.16)' : 'rgba(255,92,108,0.18)'; ctx.fill();
+    ctx.lineWidth = 1.4 * u; ctx.strokeStyle = win ? 'rgba(61,255,160,0.55)' : 'rgba(255,92,108,0.6)'; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.fillStyle = tone; ctx.fillText(chip, R - pw / 2, tickY + 1.5 * u);
+  }
+  ctx.textBaseline = 'alphabetic';
+
+  // the big number, left aligned on the grid, count-up and a light sweep
+  const cnt = easeOut(seg(p, 0.06, 0.55)), main = ao.ink === 'result' ? tone : '#FFFFFF';
+  ctx.globalAlpha = fa(0.05, 0.14); ctx.textAlign = 'left'; ctx.font = `800 ${bigSize}px ${SANS}`; ls(-0.025 * bigSize);
+  shadow(36, 0.55); ctx.fillStyle = main; ctx.fillText(bigTxt(cnt), L - bigSize * 0.03, bigBase); noShadow();
+  const sw = seg(p, 0.84, 0.97);
+  if(sw > 0 && sw < 1){ const bw = ctx.measureText(bigTxt(1)).width, sx = L - bw * 0.3 + bw * 1.6 * easeOut(sw);
+    const lg = ctx.createLinearGradient(sx - 110 * u, 0, sx + 110 * u, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.7)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = lg; ctx.fillText(bigTxt(1), L - bigSize * 0.03, bigBase); }
+  ls(0); ctx.globalAlpha = 1;
+
+  // four figures in columns between two hairlines
+  if(cols.length){
+    ctx.globalAlpha = fa(0.38, 0.5); hl(rule1, 0.28);
+    const colW = cw / cols.length;
+    cols.forEach(([l, v], i) => {
+      const a = fa(0.42 + i * 0.05, 0.56 + i * 0.05); ctx.globalAlpha = a;
+      const x0 = L + i * colW + (i ? 22 * u : 0), yy = (1 - a) * 12 * u;
+      if(i){ ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(L + i * colW, statsTop + 4 * u, Math.max(1, 1.2 * u), statsH - 8 * u); }
+      shadow(10, 0.6); ctx.textAlign = 'left';
+      ctx.font = `700 ${15 * u}px ${MONO}`; ls(3 * u); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(l, x0, statsTop + 22 * u + yy); ls(0);
+      fitFont(ctx, v, 700, MONO, 28 * u, colW - 30 * u);
+      ctx.fillStyle = l === 'MULTIPLE' ? tone : '#FFFFFF'; ctx.fillText(v, x0, statsTop + 62 * u + yy); noShadow();
+    });
+    ctx.globalAlpha = fa(0.5, 0.6);
+  } else ctx.globalAlpha = fa(0.4, 0.5);
+  hl(rule2, 0.28);
+
+  // footer: handle or url left, the artwork's credit right, like a museum label
+  ctx.globalAlpha = fa(0.6, 0.74); shadow(10, 0.6);
+  const hn = handle(), a = artPick(t, ao);
+  ctx.textAlign = 'left'; ctx.font = `600 ${18 * u}px ${MONO}`; ls(1.5 * u); ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.fillText((hn ? hn + '  ·  ' : '') + 'degencards.vercel.app', L, footY); ls(0);
+  if(ao.credit && !bgReady() && a){ ctx.textAlign = 'right'; ctx.font = `italic 500 ${17 * u}px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    let cr = a.title + ', ' + a.by + ', ' + a.year; const maxW = cw * 0.5;
+    if(ctx.measureText(cr).width > maxW) cr = a.by + ', ' + a.year;
+    ctx.fillText(cr, R, footY); }
+  noShadow(); ctx.globalAlpha = 1;
+  const intro = fa(0, 0.04); if(!opt.inner && intro < 1){ ctx.fillStyle = `rgba(0,0,0,${1 - intro})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
 function drawArt(ctx, W, H, t, meta, p, opt){
+  if(W <= H * 1.2) return drawArtPoster(ctx, W, H, t, meta, p, opt);   // post, square, story: the editorial grid
   const ao = { ...artOpts(), ...(opt.ao || {}) }, wide = W > H * 1.2, story = H / W > 1.5, win = t.pnl >= 0;
   const u = Math.min(W, H) / 1350, k = W / 1080;
   const fa = (a, b) => easeOut(seg(p, a, b));
