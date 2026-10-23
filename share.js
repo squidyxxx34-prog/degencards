@@ -1,11 +1,11 @@
 /* ============================================================================
    DEGENCARDS — cinematic share
-   Post (4:5, 1080×1350) or Story (9:16, 1080×1920), still PNG or 6 s animated
+   Post (4:5, 1080×1350), Square (1:1, 1080×1080) or Story (9:16, 1080×1920), still PNG or 6 s animated
    video (count-up PnL, candles drawn live, B / S drop, light sweep).
    Everything is drawn on a <canvas>: no external request, works offline.
    ============================================================================ */
 (function(){
-const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, story:{ w:1080, h:1920, label:'STORY 9:16' }, wide:{ w:1600, h:900, label:'WIDE 16:9' } };
+const FORMATS = { post:{ w:1080, h:1350, label:'POST 4:5' }, square:{ w:1080, h:1080, label:'SQUARE 1:1' }, story:{ w:1080, h:1920, label:'STORY 9:16' }, wide:{ w:1600, h:900, label:'WIDE 16:9' } };
 const RARITY_HEX = { common:'#ADADB8', uncommon:'#3DFFA0', rare:'#6EC0FF', epic:'#C09EFF', legendary:'#FFD35C', mythic:'#FF5ADC' };
 const GREEN = '#3DFFA0', RED = '#FF5C6C', CANDLE_UP = '#18C964', CANDLE_DN = '#FF3B4E';
 const SANS = "'Outfit', system-ui, sans-serif", MONO = "'JetBrains Mono', ui-monospace, monospace";
