@@ -1409,7 +1409,7 @@ function renderAvatar(){
   ['avInitial','accAvatar'].forEach(id=>{ const el = document.getElementById(id); if(!el) return;
     if(avatarUrl){ el.style.setProperty('--av-img', `url("${avatarUrl}")`); el.classList.add('has-img'); }
     else { el.style.removeProperty('--av-img'); el.classList.remove('has-img'); } });
-  const b = document.getElementById('accPicBtn'); if(b) b.textContent = avatarUrl ? 'CHANGE' : 'UPLOAD';
+  const b = document.getElementById('accPicBtn'); if(b) b.textContent = avatarUrl ? 'CHANGE' : 'CHOOSE';
   try{ if(profile){ ranks.pics.set(profile.username, avatarUrl || ''); if(ranks.rows.length && document.getElementById('ranksView').style.display !== 'none') ranks.render(); } }catch(_){}
   const r = document.getElementById('accPicRemove'); if(r) r.hidden = !avatarUrl;
 }
@@ -1442,6 +1442,41 @@ async function makeAvatarData(file){
   }
   throw new Error('size');
 }
+/* preset avatars (avatars.js): drawn as SVG, rasterized to the same 256x256 image an upload makes */
+async function makeAvatarFromSvg(svg){
+  const img = await new Promise((res,rej)=>{ const im = new Image(); im.onload = ()=>res(im); im.onerror = rej; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, S, S);
+  for(const q of [0.9, 0.8, 0.7]){
+    let d = c.toDataURL('image/webp', q);
+    if(!d.startsWith('data:image/webp')) d = c.toDataURL('image/png');
+    if(d.length <= 78000 && AV_RX.test(d)) return d;
+  }
+  throw new Error('size');
+}
+function openAvatarPicker(){
+  if(!session) return;
+  const list = window.DC_AVATARS || [];
+  document.getElementById('avGrid').innerHTML = list.map(a=>`<button type="button" class="av-opt" data-av="${a.id}" aria-label="${esc(a.name)}">${a.svg()}<span>${esc(a.name)}</span></button>`).join('');
+  document.getElementById('avNote').textContent = '';
+  document.getElementById('avOverlay').classList.add('show');
+}
+function closeAvatarPicker(){ document.getElementById('avOverlay').classList.remove('show'); }
+document.getElementById('avOverlay').addEventListener('click', async e=>{
+  if(e.target.id === 'avOverlay' || e.target.closest('[data-close]')){ closeAvatarPicker(); return; }
+  const b = e.target.closest('[data-av]'); if(!b || !session) return;
+  const a = (window.DC_AVATARS || []).find(x=>x.id === b.dataset.av); if(!a) return;
+  const grid = document.getElementById('avGrid'), note = document.getElementById('avNote');
+  grid.classList.add('busy'); b.classList.add('on'); note.textContent = 'Saving…';
+  try{
+    const d = await makeAvatarFromSvg(a.svg());
+    const { data, error } = await sb.rpc('set_avatar', { p_data: d });
+    if(error || data !== true) throw error || new Error('rejected');
+    avatarUrl = d; renderAvatar(); closeAvatarPicker(); showToast('Avatar updated');
+  }catch(_){ note.textContent = 'Could not save this avatar — try again'; b.classList.remove('on'); }
+  finally{ grid.classList.remove('busy'); }
+});
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeAvatarPicker(); });
 async function uploadAvatar(file){
   if(!file || !session) return;
   if(file.size > 20*1024*1024){ showToast('Image too large (20 MB max)'); return; }
@@ -1461,8 +1496,9 @@ async function removeAvatar(){
 }
 (()=>{ const inp = document.getElementById('accPicInput'); if(!inp) return;
   const pick = ()=>{ inp.value = ''; inp.click(); };
-  document.getElementById('accPicBtn').addEventListener('click', pick);
-  document.getElementById('accAvatar').addEventListener('click', pick);
+  document.getElementById('accPicBtn').addEventListener('click', openAvatarPicker);
+  document.getElementById('accAvatar').addEventListener('click', openAvatarPicker);
+  document.getElementById('avUpload').addEventListener('click', ()=>{ closeAvatarPicker(); pick(); });
   document.getElementById('accPicRemove').addEventListener('click', removeAvatar);
   inp.addEventListener('change', ()=>uploadAvatar(inp.files && inp.files[0]));
 })();

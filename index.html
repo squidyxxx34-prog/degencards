@@ -368,8 +368,8 @@
           <button type="button" class="btn-connect" data-claim id="accUserBtn">PICK A NAME</button>
         </div>
         <div class="provider-row">
-          <div><div class="provider-name">Profile picture</div><div class="provider-sub acc-wrap" id="accPicSub">Shown in your top bar, here and next to your name on the weekly leaderboard. Never on your cards.</div></div>
-          <div class="acc-pic-btns"><button type="button" class="btn-connect" id="accPicRemove" hidden>REMOVE</button><button type="button" class="btn-connect" id="accPicBtn">UPLOAD</button></div>
+          <div><div class="provider-name">Avatar</div><div class="provider-sub acc-wrap" id="accPicSub">Pick one of ours or upload a photo. Shown in your top bar, here and next to your name on the weekly leaderboard. Never on your cards.</div></div>
+          <div class="acc-pic-btns"><button type="button" class="btn-connect" id="accPicRemove" hidden>REMOVE</button><button type="button" class="btn-connect" id="accPicBtn">CHOOSE</button></div>
           <input type="file" id="accPicInput" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,image/*" hidden>
         </div>
         <div class="provider-row" id="accBoardRow" hidden>
@@ -559,6 +559,16 @@
   </div>
 </div>
 
+<div class="overlay" id="avOverlay">
+  <div class="modal av-modal" role="dialog" aria-modal="true" aria-labelledby="avTitle">
+    <button class="closebtn" data-close>×</button>
+    <h3 id="avTitle">Choose your avatar</h3>
+    <div class="av-grid" id="avGrid"></div>
+    <button type="button" class="av-upload" id="avUpload">UPLOAD YOUR OWN PHOTO</button>
+    <div class="authnote" id="avNote"></div>
+  </div>
+</div>
+
 <div class="overlay" id="pwOverlay">
   <div class="modal" style="max-width:380px;">
     <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;">SET A NEW PASSWORD</h3>
@@ -570,6 +580,7 @@
   </div>
 </div>
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
+<script src="/avatars.js" defer></script>
 <script src="/app.js" defer></script>
 <script src="/share.js" defer></script>
 <script src="/replay.js" defer></script>
