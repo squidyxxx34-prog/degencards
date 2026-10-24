@@ -383,18 +383,18 @@ function densify(cs, iv, kk){
     if(h === l){ for(let j=0;j<k;j++) out.push([ts + j*sub, o, h, l, c]); continue; }
     let seed = (Math.floor(ts/1000) * 2654435761) >>> 0;
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    // path of k+1 points: open, ..., close; the real high and low are each hit once (low first on a green candle)
-    const pts = [o]; for(let j=1;j<k;j++) pts.push(l + (h-l) * (0.2 + 0.6*rnd())); pts.push(c);
-    const iH = 1 + Math.floor(rnd() * Math.max(1, k-1)), iL = k > 2 ? 1 + ((iH + Math.floor(rnd()*(k-2))) % (k-1)) : iH;
-    const up = c >= o;
-    if(k > 2 && iL !== iH){ pts[up ? Math.min(iL,iH) : Math.max(iL,iH)] = l; pts[up ? Math.max(iL,iH) : Math.min(iL,iH)] = h; }
-    const hiAt = k > 2 && iL !== iH ? -1 : Math.floor(rnd()*k), loAt = k > 2 && iL !== iH ? -1 : (hiAt + 1 + Math.floor(rnd()*(k-1))) % k;
+    const R = h - l, clampV = v => Math.min(h, Math.max(l, v));
+    // bodies walk from the real open to the real close with some noise (colours alternate like a live market);
+    // the real high and low land as the wicks of the sub-candles nearest to them: OHLC kept exactly, no tall bars
+    const pts = [o]; for(let j=1;j<k;j++) pts.push(clampV(o + (c - o) * (j / k) + R * 0.18 * (rnd() * 2 - 1))); pts.push(c);
+    const sc = [];
     for(let j=0;j<k;j++){
-      const a = pts[j], b = pts[j+1], top = Math.max(a,b), bot = Math.min(a,b), span = (h-l) * 0.08;
-      let hh = Math.min(h, top + span*rnd()), ll = Math.max(l, bot - span*rnd());
-      if(j === hiAt) hh = h; if(j === loAt) ll = l;                 // k = 2: the real wicks land on a sub-candle
-      out.push([ts + j*sub, a, hh, ll, b]);
+      const a = pts[j], b = pts[j+1], top = Math.max(a,b), bot = Math.min(a,b), body = Math.max(top - bot, R * 0.02);
+      sc.push([ts + j*sub, a, Math.min(h, top + body * (0.15 + 0.6 * rnd()) + R * 0.02 * rnd()), Math.max(l, bot - body * (0.15 + 0.6 * rnd()) - R * 0.02 * rnd()), b]);
     }
+    let iH = 0, iL = 0; sc.forEach((x, n) => { if(x[2] > sc[iH][2]) iH = n; if(x[3] < sc[iL][3]) iL = n; });
+    sc[iH][2] = h; sc[iL][3] = l;
+    out.push(...sc);
   }
   return { c: out, i: sub };
 }

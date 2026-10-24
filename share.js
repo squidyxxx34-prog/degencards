@@ -532,13 +532,13 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   const g = ART_LAYER.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, lw, lh);
   const X = v => ((v - x0) / (x1 - x0)) * w, Y = v => (1 - (v - y0) / (y1 - y0)) * h;
   const drawP = easeOut(seg(p, 0.12, 0.62)), n = Math.ceil(cs.length * drawP);
-  const slot = (iv / (x1 - x0)) * w, bw = Math.max(1.6 * u, slot * 0.64), hollow = bw >= 7 * u;
+  const slot = (iv / (x1 - x0)) * w, bw = Math.max(3 * u, Math.min(slot - 3 * u, slot * 0.62)), hollow = bw >= 5 * u;
   for(let i = 0; i < n; i++){
     const [ts, o, hi, lo, c] = cs[i], up = c >= o, cx = X(ts + iv / 2), top = Y(Math.max(o, c)), bot = Y(Math.min(o, c)), bh = Math.max(1.6 * u, bot - top);
-    g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.62)'; g.lineWidth = Math.max(1.2 * u, Math.min(2.4 * u, bw * 0.16));
+    g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.8)'; g.lineWidth = Math.max(1.4 * u, Math.min(2.6 * u, bw * 0.18));
     g.beginPath(); g.moveTo(cx, Y(hi)); g.lineTo(cx, top); g.moveTo(cx, top + bh); g.lineTo(cx, Y(lo)); g.stroke();
     if(up){ g.fillStyle = '#FFFFFF'; g.fillRect(cx - bw / 2, top, bw, bh); }
-    else if(hollow){ g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(cx - bw / 2, top, bw, bh); g.lineWidth = 1.6 * u; g.strokeRect(cx - bw / 2 + 0.8 * u, top + 0.8 * u, bw - 1.6 * u, Math.max(0.5, bh - 1.6 * u)); }
+    else if(hollow){ g.fillStyle = 'rgba(10,10,14,0.55)'; g.fillRect(cx - bw / 2, top, bw, bh); g.lineWidth = Math.max(1.4 * u, Math.min(2.2 * u, bw * 0.16)); g.strokeStyle = 'rgba(255,255,255,0.92)'; const lw2 = g.lineWidth / 2; g.strokeRect(cx - bw / 2 + lw2, top + lw2, bw - 2 * lw2, Math.max(0.5, bh - 2 * lw2)); }
     else { g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(cx - bw / 2, top, bw, bh); }
   }
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
