@@ -1122,7 +1122,7 @@ function renderCustomize(){
 }
 const isReplay = () => state.style === 'replay' && window.dcReplay && window.dcReplay.available(state.t);
 const WIDE_OK = s => s === 'simple' || s === 'art';
-const curFmt = () => !WIDE_OK(state.style) && state.fmt === 'wide' ? 'post' : state.fmt;
+const curFmt = () => state.fmt === 'wide' && WIDE_OK(state.style) ? 'wide' : 'square';   // square first and by default; 4:5 and 9:16 retired
 function captionFor(t, opt){
   const res = opt.hideUsd ? fmt.pct(t.roi) : `${fmt.usd(t.pnl)} (${fmt.pct(t.roi)})`;
   return `${tk(t.ticker)} ${res} in ${fmt.hold(t.holdTime)} ${t.pnl >= 0 ? '🟢' : '🔴'}\nMy trades, as collectible cards → degencards.vercel.app #DEGENCARDS`;
@@ -1141,7 +1141,7 @@ async function deliver(blob, name, caption){
 }
 
 /* ---------- share sheet ---------- */
-let state = { t:null, meta:null, fmt:'post', style:(()=>{ try{ const v = localStorage.getItem('dc_share_style'); return ['art','simple','replay'].includes(v) ? v : 'art'; }catch(e){ return 'art'; } })(), hideUsd:false, anim:0, busy:false, sound:false, pac:null, quality: (()=>{ try{ return localStorage.getItem('dc_video_q') || '4k'; }catch(e){ return '4k'; } })() };
+let state = { t:null, meta:null, fmt:'square', style:(()=>{ try{ const v = localStorage.getItem('dc_share_style'); return ['art','simple','replay'].includes(v) ? v : 'art'; }catch(e){ return 'art'; } })(), hideUsd:false, anim:0, busy:false, sound:false, pac:null, quality: (()=>{ try{ return localStorage.getItem('dc_video_q') || '4k'; }catch(e){ return '4k'; } })() };
 let lastExport = '';
 function sheet(){ return document.getElementById('shareOverlay'); }
 function preview(){

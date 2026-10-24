@@ -4,7 +4,7 @@
 
 ## What it does
 - Auto-import of Solana trades from a public wallet address: Pump.fun, Axiom, Photon, BullX, GMGN, Fomo, Phantom, Solflare, Backpack. Read-only, cannot move funds.
-- PnL cards with the real candle chart: story 9:16 and post 4:5, ready for X, TikTok, Instagram and Telegram.
+- PnL cards with the real candle chart: square 1:1 and wide 16:9, ready for X, TikTok, Instagram and Telegram.
 - Animated cards and trade replay videos (the trade rebuilt candle by candle, with live PnL).
 - Collection: every trade gets a rarity (common to mythic), a grade and achievements.
 - Weekly leaderboard ranked on real on-chain profit, with usernames.
