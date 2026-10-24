@@ -582,9 +582,18 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
       if(above){ const bottom = Math.min(T.fy - off - tl, topOf(a, b) - gap); return { above, by: bottom - th, tip: bottom + tl, over: Math.max(0, minY - (bottom - th)) }; }
       const top = Math.max(T.fy + off + tl, botOf(a, b) + gap); return { above, by: top, tip: top - tl, over: Math.max(0, top + th - maxY) };
     };
-    const pick = (T, pref) => { const A = place(T, pref), B = place(T, !pref); Object.assign(T, A.over <= B.over || A.over === 0 ? A : B); };
-    if(tags.length === 2){ const hiFirst = tags[0].f.v >= tags[1].f.v; pick(tags[0], hiFirst); pick(tags[1], !hiFirst); }
-    else tags.forEach(T => pick(T, true));
+    // each bubble takes the side where it sits closest to its fill (both may end up on the same side); out of room costs a lot
+    const cost = (T, P) => P.over * 10 + Math.abs(P.tip - T.fy);
+    const opts = tags.map((T, i) => { const pref = tags.length === 2 ? (T.f.v >= tags[1 - i].f.v) : true; const A = place(T, pref), B = place(T, !pref);
+      return cost(T, A) <= cost(T, B) + 6 * u ? [A, B] : [B, A]; });
+    const boxOf = (T, P) => ({ l: T.bx, r: T.bx + T.w, t: P.by, b: P.by + th });
+    const hit = (a, b) => a.l < b.r + 10 * u && b.l < a.r + 10 * u && a.t < b.b + 8 * u && b.t < a.b + 8 * u;
+    let best = null;                                                    // two bubbles: best combination that doesn't overlap
+    if(tags.length === 2){ for(const a of [0, 1]) for(const b of [0, 1]){ const A = opts[0][a], B = opts[1][b];
+        const c = cost(tags[0], A) + cost(tags[1], B) + (hit(boxOf(tags[0], A), boxOf(tags[1], B)) ? 1e6 : 0);
+        if(!best || c < best.c) best = { c, A, B }; }
+      Object.assign(tags[0], best.A); Object.assign(tags[1], best.B); }
+    else tags.forEach((T, i) => Object.assign(T, opts[i][0]));
     tags.forEach(T => { if(T.over > 0){ if(T.above){ T.by += T.over; } else { T.by -= T.over; } T.tip = T.above ? T.by + th + tl : T.by - tl; } });
     if(tags.length === 2 && tags[0].above === tags[1].above){          // same side and touching: side by side
       const [A, B] = tags, l = A.bx <= B.bx ? A : B, rr = l === A ? B : A;
