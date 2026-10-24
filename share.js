@@ -415,21 +415,21 @@ const ART = [
   { id:'shipwreck', kind:'paint',  name:'Shipwreck',   title:'A Shipwreck in a Storm',                   by:'Jean Pillement',          year:'1782',    fx:.44, fy:.45, dim:.18, mood:'loss' },
   { id:'sodom',     kind:'paint',  name:'Sodom',       title:'The Burning of Sodom',                     by:'Camille Corot',           year:'1857',    fx:.34, fy:.45, dim:.08, mood:'loss' },
 ];
-const AO_KEY = 'dc_art_opts';
-const AO_DEF = { pick:'auto', big:'pnl', tone:'natural', ink:'white', chart:true, stats:true, coin:true, credit:true };
+const AO_KEY = 'dc_art_opts2', AO_KEY_OLD = 'dc_art_opts';      // v2: the card is classic by default, extras are opt-in
+const AO_DEF = { pick:'auto', big:'pnl', tone:'natural', ink:'white', chart:true, stats:false, coin:true, date:false, credit:false };
 const AO_GROUPS = [
   ['big',  'Big number', [['pnl','PnL $'],['roi','ROI %']]],
   ['tone', 'Tone',       [['natural','Natural'],['noir','Noir'],['marble','Marble'],['gold','Gold'],['dark','Dark']]],
   ['ink',  'Number',     [['white','White'],['result','Green / red']]],
 ];
-const AO_SHOW = [['chart','Chart'],['stats','Stats'],['coin','Coin logo'],['credit','Artwork credit']];
+const AO_SHOW = [['chart','Chart'],['coin','Coin logo'],['stats','Trade details'],['date','Date'],['credit','Artwork credit']];
 const AO_PRO = { tone:['marble','gold','dark'] };
 const artById = id => ART.find(a => a.id === id);
 const artLocked = a => proLocked() && !a.free;
-let AO_SAVED = (() => { let v = {}; try{ v = JSON.parse(localStorage.getItem(AO_KEY) || '{}') || {}; }catch(e){} const o = { ...AO_DEF };
+let AO_SAVED = (() => { let v = {}, old = false; try{ const raw = localStorage.getItem(AO_KEY); old = raw == null; v = JSON.parse(raw || localStorage.getItem(AO_KEY_OLD) || '{}') || {}; }catch(e){} const o = { ...AO_DEF };
   if(v.pick === 'auto' || artById(v.pick)) o.pick = v.pick;
   for(const [k, , opts] of AO_GROUPS) if(opts.some(x => x[0] === v[k])) o[k] = v[k];
-  for(const [k] of AO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k];
+  if(!old) for(const [k] of AO_SHOW) if(typeof v[k] === 'boolean') o[k] = v[k];       // the old show switches are not carried over: classic first
   return o; })();
 function artOpts(){                                                   // free: PRO-only choices fall back to the default
   const o = { ...AO_SAVED };
@@ -637,10 +637,10 @@ function drawArtPoster(ctx, W, H, t, meta, p, opt){
   const topY = (story ? 210 : 74) * k, botY = H - (story ? 240 : 60) * k;
   // from the bottom up
   const figRowH = 66 * u, figGap = 20 * u, figsH = nrow ? nrow * figRowH + (nrow - 1) * figGap : 0;
-  const bigSize = fitFont(ctx, bigTxt(1), 800, SANS, (story ? 170 : 150) * u, cw);
+  const bigSize = fitFont(ctx, bigTxt(1), 800, SANS, (story ? 170 : 150) * u * (figs.length ? 1 : 1.15), cw);
   const footY = botY;
   const figsTop = footY - 52 * u - figsH;
-  const bigBase = (nrow ? figsTop - 40 * u : footY - 60 * u);
+  const bigBase = (nrow ? figsTop - 40 * u : footY - 64 * u);
   const tickY = bigBase - bigSize * 0.76 - 36 * u;
   const plateTop = tickY - 30 * u;
   const headY = topY;
@@ -657,9 +657,9 @@ function drawArtPoster(ctx, W, H, t, meta, p, opt){
   ctx.globalAlpha = fa(0.02, 0.12); ctx.textBaseline = 'alphabetic'; shadow(10, 0.6);
   ctx.textAlign = 'left'; ctx.font = `800 ${22 * u}px ${SANS}`; ls(5 * u); ctx.fillStyle = '#FFFFFF'; ctx.fillText('DEGEN', L, headY);
   const dW = ctx.measureText('DEGEN').width; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText('CARDS', L + dW, headY);
-  ctx.textAlign = 'right'; ctx.font = `600 ${18 * u}px ${MONO}`; ls(3 * u); ctx.fillStyle = 'rgba(255,255,255,0.78)';
-  ctx.fillText(new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase(), R, headY); ls(0);
-  noShadow();
+  if(ao.date){ ctx.textAlign = 'right'; ctx.font = `600 ${18 * u}px ${MONO}`; ls(3 * u); ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.fillText(new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase(), R, headY); }
+  ls(0); noShadow();
 
   if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, L, chartTop, cw, chartBot - chartTop, p, u, true);
 
@@ -773,12 +773,12 @@ function drawArt(ctx, W, H, t, meta, p, opt){
 
   // header: coin + ticker + date · hold, centered as one group
   const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = ao.coin && !!(img && img.complete && img.naturalWidth);
-  const tick = tk(t.ticker), sub = new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric' }).toUpperCase() + '  ·  ' + fmt.hold(t.holdTime || 0).toUpperCase();
+  const tick = tk(t.ticker), sub = ao.date ? new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric' }).toUpperCase() + '  ·  ' + fmt.hold(t.holdTime || 0).toUpperCase() : '';
   ctx.globalAlpha = fa(0.02, 0.12); ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   const cs = 50 * u, gap1 = 16 * u, gap2 = 20 * u;
   fitFont(ctx, tick, 800, SANS, 40 * u, W * 0.5); const tF = ctx.font, tW = ctx.measureText(tick).width;
   ctx.font = `600 ${21 * u}px ${MONO}`; const sW = ctx.measureText(sub).width;
-  const gw = (hasImg ? cs + gap1 : 0) + tW + gap2 + sW; let hx = cx - gw / 2;
+  const gw = (hasImg ? cs + gap1 : 0) + tW + (sub ? gap2 + sW : 0); let hx = cx - gw / 2;
   if(hasImg){
     ctx.save(); shadow(14, 0.5); ctx.beginPath(); ctx.arc(hx + cs / 2, hy, cs / 2, 0, Math.PI * 2); ctx.fillStyle = '#0B0B10'; ctx.fill(); noShadow(); ctx.clip();
     const r = Math.max(cs / img.naturalWidth, cs / img.naturalHeight), iw = img.naturalWidth * r, ih = img.naturalHeight * r;
