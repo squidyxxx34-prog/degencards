@@ -522,7 +522,13 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
 const ART_LAYER = document.createElement('canvas');
 function artChart(ctx, t, x, y, w, h, p, u, mini){
   const ch = t.chart && t.chart.v === 2 && t.chart.c && t.chart.c.length ? t.chart : null; if(!ch) return;
-  const cs = ch.c, iv = ch.i;
+  let cs = ch.c, iv = ch.i;
+  // wide candles on the artwork: consecutive candles merged (real OHLC) until each one gets ~30 units of width
+  const target = Math.max(22, Math.floor(w / (30 * u)));
+  if(cs.length > target){ const gN = Math.ceil(cs.length / target), mg = [];
+    for(let i = 0; i < cs.length; i += gN){ const b = cs.slice(i, i + gN); let hi = -Infinity, lo = Infinity; for(const c of b){ if(c[2] > hi) hi = c[2]; if(c[3] < lo) lo = c[3]; }
+      mg.push([b[0][0], b[0][1], hi, lo, b[b.length - 1][4]]); }
+    cs = mg; iv = iv * gN; }
   const x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
   let y0 = Infinity, y1 = -Infinity; for(const c of cs){ if(c[3] < y0) y0 = c[3]; if(c[2] > y1) y1 = c[2]; }
   if(!(y1 - y0 > 1e-12)){ y0 *= 0.95; y1 = y1 * 1.05 + 1e-9; }
@@ -532,13 +538,13 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   const g = ART_LAYER.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, lw, lh);
   const X = v => ((v - x0) / (x1 - x0)) * w, Y = v => (1 - (v - y0) / (y1 - y0)) * h;
   const drawP = easeOut(seg(p, 0.12, 0.62)), n = Math.ceil(cs.length * drawP);
-  const slot = (iv / (x1 - x0)) * w, bw = Math.max(3 * u, Math.min(slot - 3 * u, slot * 0.62)), hollow = bw >= 5 * u;
+  const slot = (iv / (x1 - x0)) * w, bw = Math.max(3 * u, Math.min(slot - 5 * u, slot * 0.66)), hollow = bw >= 5 * u;
   for(let i = 0; i < n; i++){
     const [ts, o, hi, lo, c] = cs[i], up = c >= o, cx = X(ts + iv / 2), top = Y(Math.max(o, c)), bot = Y(Math.min(o, c)), bh = Math.max(1.6 * u, bot - top);
-    g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.8)'; g.lineWidth = Math.max(1.4 * u, Math.min(2.6 * u, bw * 0.18));
+    g.strokeStyle = up ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.85)'; g.lineWidth = Math.max(1.6 * u, Math.min(3 * u, bw * 0.14));
     g.beginPath(); g.moveTo(cx, Y(hi)); g.lineTo(cx, top); g.moveTo(cx, top + bh); g.lineTo(cx, Y(lo)); g.stroke();
     if(up){ g.fillStyle = '#FFFFFF'; g.fillRect(cx - bw / 2, top, bw, bh); }
-    else if(hollow){ g.fillStyle = 'rgba(10,10,14,0.55)'; g.fillRect(cx - bw / 2, top, bw, bh); g.lineWidth = Math.max(1.4 * u, Math.min(2.2 * u, bw * 0.16)); g.strokeStyle = 'rgba(255,255,255,0.92)'; const lw2 = g.lineWidth / 2; g.strokeRect(cx - bw / 2 + lw2, top + lw2, bw - 2 * lw2, Math.max(0.5, bh - 2 * lw2)); }
+    else if(hollow){ g.fillStyle = 'rgba(10,10,14,0.55)'; g.fillRect(cx - bw / 2, top, bw, bh); g.lineWidth = Math.max(1.6 * u, Math.min(2.8 * u, bw * 0.12)); g.strokeStyle = 'rgba(255,255,255,0.95)'; const lw2 = g.lineWidth / 2; g.strokeRect(cx - bw / 2 + lw2, top + lw2, bw - 2 * lw2, Math.max(0.5, bh - 2 * lw2)); }
     else { g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(cx - bw / 2, top, bw, bh); }
   }
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
@@ -553,29 +559,40 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
-  if(mini){                                                          // poster: BUY / SELL tags in a row above the chart, drop lines, clear dots
+  if(mini){                                                          // BUY / SELL right at their fill: tag just clear of the candles, short stem
     const k = easeOut(seg(p, 0.62, 0.74)); if(k <= 0) return;
     const nb = buys.length, ns = sells.length;
     const tags = []; if(entry) tags.push({ f:entry, label: 'BUY' + (nb > 1 ? ' ×' + nb : '') }); if(exit) tags.push({ f:exit, label: 'SELL' + (ns > 1 ? ' ×' + ns : '') });
-    const th = 42 * u, gap = 14 * u, rowY = y - th - 30 * u;
+    const th = 50 * u, gapV = 22 * u, gapH = 12 * u;
     ctx.save(); ctx.globalAlpha *= k;
-    ctx.font = `800 ${20 * u}px ${SANS}`; try{ ctx.letterSpacing = (2.5 * u) + 'px'; }catch(e){}
-    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 34 * u; T.cx = px(T.f); });
-    if(tags.length === 2){ const [A, B] = tags, need = (A.w + B.w) / 2 + gap;
-      if(B.cx - A.cx < need){ const mid = (A.cx + B.cx) / 2; A.cx = mid - need / 2; B.cx = mid + need / 2; } }
-    const lo = x + tags.reduce((m, T, i) => i ? m : T.w / 2, 0), hi = x + w - (tags.length ? tags[tags.length - 1].w / 2 : 0);
-    if(tags.length === 2){ const sh = Math.max(0, lo - tags[0].cx) - Math.max(0, tags[1].cx - hi); tags.forEach(T => T.cx += sh); }
-    else tags.forEach(T => { T.cx = Math.min(x + w - T.w / 2, Math.max(x + T.w / 2, T.cx)); });
+    ctx.font = `800 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){}
+    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); T.cx = Math.min(x + w - T.w / 2, Math.max(x + T.w / 2, T.fx)); });
+    // the candles under a tag: it sits just above their highs (or just below their lows)
+    const span = (cx0, half) => { let hi = -Infinity, lo = Infinity;
+      for(const c of cs){ const xc = x + X(c[0] + iv / 2); if(Math.abs(xc - cx0) <= half){ if(c[2] > hi) hi = c[2]; if(c[3] < lo) lo = c[3]; } }
+      return [hi, lo]; };
+    const placeT = T => { const [hi, lo] = span(T.cx, T.w / 2 + 6 * u);
+      if(T.above){ T.ty = Math.min(T.fy, isFinite(hi) ? y + Y(hi) : T.fy) - gapV - th; T.ty = Math.max(y - th - 40 * u, T.ty); }
+      else { T.ty = Math.max(T.fy, isFinite(lo) ? y + Y(lo) : T.fy) + gapV; } };
+    if(tags.length === 2){ const [A, B] = tags; const aHigh = A.f.v >= B.f.v; A.above = aHigh; B.above = !aHigh; }
+    else tags.forEach(T => { T.above = true; });
+    tags.forEach(T => { placeT(T); if(!T.above && T.ty + th > y + h + 50 * u){ T.above = true; placeT(T); } });
+    if(tags.length === 2 && tags[0].above === tags[1].above){                // same side and touching: side by side
+      const [A, B] = tags, need = (A.w + B.w) / 2 + gapH;
+      if(Math.abs(B.cx - A.cx) < need){ const mid = (A.cx + B.cx) / 2, l = A.cx <= B.cx ? A : B, r = l === A ? B : A;
+        l.cx = Math.max(x + l.w / 2, mid - need / 2); r.cx = Math.min(x + w - r.w / 2, l.cx + need); l.cx = Math.min(l.cx, r.cx - need);
+        const ty = T => T.above ? Math.min(A.ty, B.ty) : Math.max(A.ty, B.ty); const t0 = ty(A); A.ty = t0; B.ty = t0; } }
     tags.forEach(T => {
-      const fx = px(T.f), fy = py(T.f);
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 8 * u;
-      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 5 * u]);
-      ctx.beginPath(); ctx.moveTo(T.cx, rowY + th); ctx.lineTo(fx, fy - 12 * u); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 4 * u;
-      rrect(ctx, T.cx - T.w / 2, rowY, T.w, th, th / 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
-      ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(T.label, T.cx, rowY + th / 2 + 1.5 * u);
-      ctx.beginPath(); ctx.arc(fx, fy, 12 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill();
-      ctx.beginPath(); ctx.arc(fx, fy, 6.5 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      const { fx, fy, cx: tx, ty } = T, edge = T.above ? ty + th : ty;
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2.6 * u;
+      ctx.beginPath(); ctx.moveTo(tx, edge); ctx.lineTo(fx, fy + (T.above ? -12 : 12) * u); ctx.stroke(); ctx.restore();
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 20 * u; ctx.shadowOffsetY = 4 * u;
+      rrect(ctx, tx - T.w / 2, ty, T.w, th, th / 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(T.label, tx, ty + th / 2 + 1.5 * u);
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10 * u;
+      ctx.beginPath(); ctx.arc(fx, fy, 12 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
+      ctx.beginPath(); ctx.arc(fx, fy, 6 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill();
     });
     try{ ctx.letterSpacing = '0px'; }catch(e){} ctx.textBaseline = 'alphabetic';
     ctx.restore(); return;
@@ -790,7 +807,7 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   ctx.font = `600 ${21 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(sub, hx, hy + 2 * u);
   noShadow(); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
 
-  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u);
+  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u, true);
 
   // big result, count-up, light sweep at the end
   const cnt = easeOut(seg(p, 0.06, 0.55)), main = ao.ink === 'result' ? (win ? GREEN : RED) : '#FFFFFF';
