@@ -554,57 +554,44 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   const entry = buys[0], exit = sells[sells.length - 1];
   const px = f => x + Math.min(w, Math.max(0, X(f.ts))), py = f => y + Math.min(h, Math.max(0, Y(f.v)));
   const kd = easeOut(seg(p, 0.6, 0.7));
-  // the trade itself, behind the candles: a soft band from the buy to the sell, edged by the two price levels
-  if(mini && entry && exit && kd > 0){
-    const xa = Math.min(px(entry), px(exit)), xb = Math.max(px(entry), px(exit)), ya = Math.min(py(entry), py(exit)), yb = Math.max(py(entry), py(exit));
-    const ext = 10 * u, zx = xa - ext, zw = Math.max(2 * ext, xb - xa + 2 * ext);
-    ctx.save(); ctx.globalAlpha *= kd;
-    ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(zx, ya, zw, Math.max(2 * u, yb - ya));
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.6 * u; ctx.setLineDash([6 * u, 5 * u]);
-    ctx.beginPath(); ctx.moveTo(zx, py(entry)); ctx.lineTo(zx + zw, py(entry)); ctx.moveTo(zx, py(exit)); ctx.lineTo(zx + zw, py(exit)); ctx.stroke();
-    ctx.setLineDash([]); ctx.restore();
-  }
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
   ctx.drawImage(ART_LAYER, x, y); ctx.restore();
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
-  if(mini){                                                          // BUY / SELL right at their fill: tag just clear of the candles, short stem
-    const k = easeOut(seg(p, 0.62, 0.74)); if(k <= 0) return;
-    const nb = buys.length, ns = sells.length;
-    const tags = []; if(entry) tags.push({ f:entry, label: 'BUY' + (nb > 1 ? ' ×' + nb : '') }); if(exit) tags.push({ f:exit, label: 'SELL' + (ns > 1 ? ' ×' + ns : '') });
-    const th = 50 * u, gapV = 30 * u, gapH = 12 * u;
-    ctx.save(); ctx.globalAlpha *= k;
-    ctx.font = `800 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){}
-    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); T.cx = Math.min(x + w - T.w / 2, Math.max(x + T.w / 2, T.fx)); });
-    // the candles under a tag: it sits just above their highs (or just below their lows)
-    const span = (cx0, half) => { let hi = -Infinity, lo = Infinity;
-      for(const c of cs){ const xc = x + X(c[0] + iv / 2); if(Math.abs(xc - cx0) <= half){ if(c[2] > hi) hi = c[2]; if(c[3] < lo) lo = c[3]; } }
-      return [hi, lo]; };
-    const placeT = T => { const [hi, lo] = span(T.cx, T.w / 2 + 6 * u);
-      if(T.above){ T.ty = Math.min(T.fy, isFinite(hi) ? y + Y(hi) : T.fy) - gapV - th; T.ty = Math.max(y - th - 40 * u, T.ty); }
-      else { T.ty = Math.max(T.fy, isFinite(lo) ? y + Y(lo) : T.fy) + gapV; } };
-    if(tags.length === 2){ const [A, B] = tags; const aHigh = A.f.v >= B.f.v; A.above = aHigh; B.above = !aHigh; }
+  if(mini){                                                          // speech bubbles: the tail's tip sits exactly on the fill
+    const k = easeOutBack(seg(p, 0.62, 0.76)); if(k <= 0) return;
+    const tags = []; if(entry) tags.push({ f:entry, label:'BUY', light:true }); if(exit) tags.push({ f:exit, label:'SELL', light:false });
+    const th = 48 * u, r = 12 * u, tw = 22 * u, tl = 12 * u, off = 3 * u;
+    ctx.save(); ctx.globalAlpha *= clamp01(k);
+    ctx.font = `800 ${24 * u}px ${SANS}`; try{ ctx.letterSpacing = (1.5 * u) + "px"; }catch(e){}
+    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); });
+    if(tags.length === 2){ const hiFirst = tags[0].f.v >= tags[1].f.v; tags[0].above = hiFirst; tags[1].above = !hiFirst; }
     else tags.forEach(T => { T.above = true; });
-    tags.forEach(T => { placeT(T); if(!T.above && T.ty + th > y + h + 50 * u){ T.above = true; placeT(T); } });
-    if(tags.length === 2 && tags[0].above === tags[1].above){                // same side and touching: side by side
-      const [A, B] = tags, need = (A.w + B.w) / 2 + gapH;
-      if(Math.abs(B.cx - A.cx) < need){ const mid = (A.cx + B.cx) / 2, l = A.cx <= B.cx ? A : B, r = l === A ? B : A;
-        l.cx = Math.max(x + l.w / 2, mid - need / 2); r.cx = Math.min(x + w - r.w / 2, l.cx + need); l.cx = Math.min(l.cx, r.cx - need);
-        const ty = T => T.above ? Math.min(A.ty, B.ty) : Math.max(A.ty, B.ty); const t0 = ty(A); A.ty = t0; B.ty = t0; } }
+    tags.forEach(T => {                                               // keep inside the picture: flip when there is no room
+      if(T.above && T.fy - off - tl - th < y - th - 30 * u) T.above = false;
+      else if(!T.above && T.fy + off + tl + th > y + h + th + 30 * u) T.above = true; });
     tags.forEach(T => {
-      const { fx, fy, cx: tx, ty } = T, edge = T.above ? ty + th : ty;
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
-      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2.6 * u;
-      ctx.beginPath(); ctx.moveTo(tx, edge); ctx.lineTo(fx, fy + (T.above ? -18 : 18) * u); ctx.stroke(); ctx.restore();
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 20 * u; ctx.shadowOffsetY = 4 * u;
-      rrect(ctx, tx - T.w / 2, ty, T.w, th, th / 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
-      ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(T.label, tx, ty + th / 2 + 1.5 * u);
-      // the exact fill: a target (dark halo, white ring, white centre) that can't be mistaken for a candle
-      ctx.beginPath(); ctx.arc(fx, fy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
-      ctx.beginPath(); ctx.arc(fx, fy, 14 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill(); ctx.lineWidth = 4 * u; ctx.strokeStyle = '#FFFFFF'; ctx.stroke(); ctx.restore();
-      ctx.beginPath(); ctx.arc(fx, fy, 5.5 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      const { fx, fy, w: bw } = T, s0 = k, up = T.above;
+      const bx = Math.min(x + w - bw, Math.max(x, fx - bw / 2)), by = up ? fy - off - tl - th : fy + off + tl;
+      const tx = Math.min(bx + bw - r - tw / 2, Math.max(bx + r + tw / 2, fx));
+      ctx.save(); ctx.translate(fx, fy); ctx.scale(s0, s0); ctx.translate(-fx, -fy);
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 16 * u; ctx.shadowOffsetY = 3 * u;
+      ctx.beginPath();                                                  // bubble + tail as one shape
+      if(up){
+        ctx.moveTo(bx + r, by); ctx.lineTo(bx + bw - r, by); ctx.arcTo(bx + bw, by, bx + bw, by + r, r); ctx.lineTo(bx + bw, by + th - r); ctx.arcTo(bx + bw, by + th, bx + bw - r, by + th, r);
+        ctx.lineTo(tx + tw / 2, by + th); ctx.lineTo(fx, fy - off); ctx.lineTo(tx - tw / 2, by + th);
+        ctx.lineTo(bx + r, by + th); ctx.arcTo(bx, by + th, bx, by + th - r, r); ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
+      } else {
+        ctx.moveTo(bx + r, by); ctx.lineTo(tx - tw / 2, by); ctx.lineTo(fx, fy + off); ctx.lineTo(tx + tw / 2, by);
+        ctx.lineTo(bx + bw - r, by); ctx.arcTo(bx + bw, by, bx + bw, by + r, r); ctx.lineTo(bx + bw, by + th - r); ctx.arcTo(bx + bw, by + th, bx + bw - r, by + th, r);
+        ctx.lineTo(bx + r, by + th); ctx.arcTo(bx, by + th, bx, by + th - r, r); ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
+      }
+      ctx.closePath(); ctx.fillStyle = T.light ? 'rgba(250,250,247,0.97)' : 'rgba(64,64,70,0.94)'; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = T.light ? '#0B0B0E' : '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(T.label, bx + bw / 2, by + th / 2 + 1.5 * u);
+      ctx.restore();
     });
     try{ ctx.letterSpacing = '0px'; }catch(e){} ctx.textBaseline = 'alphabetic';
     ctx.restore(); return;
