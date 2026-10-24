@@ -529,6 +529,13 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
     for(let i = 0; i < cs.length; i += gN){ const b = cs.slice(i, i + gN); let hi = -Infinity, lo = Infinity; for(const c of b){ if(c[2] > hi) hi = c[2]; if(c[3] < lo) lo = c[3]; }
       mg.push([b[0][0], b[0][1], hi, lo, b[b.length - 1][4]]); }
     cs = mg; iv = iv * gN; }
+  // short wicks: a wick never runs longer than ~0.6 of its body (at least 2.5% of the range); a fill on a candle stays inside it
+  { let bh = -Infinity, bl = Infinity; for(const c of cs){ bh = Math.max(bh, c[1], c[4]); bl = Math.min(bl, c[1], c[4]); }
+    const R0 = Math.max(1e-12, bh - bl), fl = (ch.m || []).filter(m => m[2] > 0);
+    cs = cs.map(c => { const top = Math.max(c[1], c[4]), bot = Math.min(c[1], c[4]), cap = Math.max((top - bot) * 0.6, R0 * 0.025);
+      let hi = Math.min(c[2], top + cap), lo = Math.max(c[3], bot - cap);
+      for(const m of fl) if(m[0] >= c[0] && m[0] < c[0] + iv){ hi = Math.max(hi, Math.min(c[2], m[2])); lo = Math.min(lo, Math.max(c[3], m[2])); }
+      return [c[0], c[1], hi, lo, c[4]]; }); }
   const x0 = ch.w ? ch.w[0] : cs[0][0], x1 = ch.w ? ch.w[1] : cs[cs.length-1][0] + iv;
   let y0 = Infinity, y1 = -Infinity; for(const c of cs){ if(c[3] < y0) y0 = c[3]; if(c[2] > y1) y1 = c[2]; }
   if(!(y1 - y0 > 1e-12)){ y0 *= 0.95; y1 = y1 * 1.05 + 1e-9; }
@@ -559,38 +566,54 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
-  if(mini){                                                          // speech bubbles: the tail's tip sits exactly on the fill
+  if(mini){                                                          // speech bubbles, never over the candles: the tail points at the fill
     const k = easeOutBack(seg(p, 0.62, 0.76)); if(k <= 0) return;
     const tags = []; if(entry) tags.push({ f:entry, label:'BUY', light:true }); if(exit) tags.push({ f:exit, label:'SELL', light:false });
-    const th = 48 * u, r = 12 * u, tw = 22 * u, tl = 12 * u, off = 3 * u;
+    const th = 48 * u, r = 12 * u, tw = 22 * u, tl = 12 * u, off = 4 * u, gap = 8 * u;
+    const cand = cs.map(c => ({ xc: x + X(c[0] + iv / 2), t: y + Y(c[2]), b: y + Y(c[3]) })), halfC = bw / 2 + 3 * u;
+    const topOf = (a, b) => { let m = Infinity; for(const c of cand) if(c.xc + halfC >= a && c.xc - halfC <= b) m = Math.min(m, c.t); return m; };
+    const botOf = (a, b) => { let m = -Infinity; for(const c of cand) if(c.xc + halfC >= a && c.xc - halfC <= b) m = Math.max(m, c.b); return m; };
+    const minY = y - th - tl - 40 * u, maxY = y + h + 44 * u;          // room above / below the chart
     ctx.save(); ctx.globalAlpha *= clamp01(k);
     ctx.font = `800 ${24 * u}px ${SANS}`; try{ ctx.letterSpacing = (1.5 * u) + "px"; }catch(e){}
-    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); });
-    if(tags.length === 2){ const hiFirst = tags[0].f.v >= tags[1].f.v; tags[0].above = hiFirst; tags[1].above = !hiFirst; }
-    else tags.forEach(T => { T.above = true; });
-    tags.forEach(T => {                                               // keep inside the picture: flip when there is no room
-      if(T.above && T.fy - off - tl - th < y - th - 30 * u) T.above = false;
-      else if(!T.above && T.fy + off + tl + th > y + h + th + 30 * u) T.above = true; });
+    tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); T.bx = Math.min(x + w - T.w, Math.max(x, T.fx - T.w / 2)); });
+    const place = (T, above) => {                                     // bubble clear of every candle under it, as close to the fill as possible
+      const a = T.bx - 4 * u, b = T.bx + T.w + 4 * u;
+      if(above){ const bottom = Math.min(T.fy - off - tl, topOf(a, b) - gap); return { above, by: bottom - th, tip: bottom + tl, over: Math.max(0, minY - (bottom - th)) }; }
+      const top = Math.max(T.fy + off + tl, botOf(a, b) + gap); return { above, by: top, tip: top - tl, over: Math.max(0, top + th - maxY) };
+    };
+    const pick = (T, pref) => { const A = place(T, pref), B = place(T, !pref); Object.assign(T, A.over <= B.over || A.over === 0 ? A : B); };
+    if(tags.length === 2){ const hiFirst = tags[0].f.v >= tags[1].f.v; pick(tags[0], hiFirst); pick(tags[1], !hiFirst); }
+    else tags.forEach(T => pick(T, true));
+    tags.forEach(T => { if(T.over > 0){ if(T.above){ T.by += T.over; } else { T.by -= T.over; } T.tip = T.above ? T.by + th + tl : T.by - tl; } });
+    if(tags.length === 2 && tags[0].above === tags[1].above){          // same side and touching: side by side
+      const [A, B] = tags, l = A.bx <= B.bx ? A : B, rr = l === A ? B : A;
+      if(l.bx + l.w + 12 * u > rr.bx && Math.abs(l.by - rr.by) < th + 8 * u){ rr.bx = Math.min(x + w - rr.w, l.bx + l.w + 12 * u); if(rr.bx < l.bx + l.w + 12 * u) l.bx = Math.max(x, rr.bx - l.w - 12 * u); } }
     tags.forEach(T => {
-      const { fx, fy, w: bw } = T, s0 = k, up = T.above;
-      const bx = Math.min(x + w - bw, Math.max(x, fx - bw / 2)), by = up ? fy - off - tl - th : fy + off + tl;
-      const tx = Math.min(bx + bw - r - tw / 2, Math.max(bx + r + tw / 2, fx));
-      ctx.save(); ctx.translate(fx, fy); ctx.scale(s0, s0); ctx.translate(-fx, -fy);
+      const { fx, fy, bx, by, above } = T, Wb = T.w, tipY = T.tip, near = above ? tipY >= fy - off - 1 : tipY <= fy + off + 1;
+      const tx = Math.min(bx + Wb - r - tw / 2, Math.max(bx + r + tw / 2, fx)), tipX = Math.min(bx + Wb - r, Math.max(bx + r, fx));
+      ctx.save(); ctx.translate(tipX, tipY); ctx.scale(k, k); ctx.translate(-tipX, -tipY);
+      if(!near){                                                      // candles in the way: a thin stem down to a dot on the fill
+        ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 6 * u;
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(fx, fy + (above ? -7 : 7) * u); ctx.stroke();
+        ctx.beginPath(); ctx.arc(fx, fy, 7 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
+        ctx.beginPath(); ctx.arc(fx, fy, 3.2 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill();
+      }
       ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 16 * u; ctx.shadowOffsetY = 3 * u;
       ctx.beginPath();                                                  // bubble + tail as one shape
-      if(up){
-        ctx.moveTo(bx + r, by); ctx.lineTo(bx + bw - r, by); ctx.arcTo(bx + bw, by, bx + bw, by + r, r); ctx.lineTo(bx + bw, by + th - r); ctx.arcTo(bx + bw, by + th, bx + bw - r, by + th, r);
-        ctx.lineTo(tx + tw / 2, by + th); ctx.lineTo(fx, fy - off); ctx.lineTo(tx - tw / 2, by + th);
+      if(above){
+        ctx.moveTo(bx + r, by); ctx.lineTo(bx + Wb - r, by); ctx.arcTo(bx + Wb, by, bx + Wb, by + r, r); ctx.lineTo(bx + Wb, by + th - r); ctx.arcTo(bx + Wb, by + th, bx + Wb - r, by + th, r);
+        ctx.lineTo(tx + tw / 2, by + th); ctx.lineTo(near ? fx : tipX, near ? fy - off : tipY); ctx.lineTo(tx - tw / 2, by + th);
         ctx.lineTo(bx + r, by + th); ctx.arcTo(bx, by + th, bx, by + th - r, r); ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
       } else {
-        ctx.moveTo(bx + r, by); ctx.lineTo(tx - tw / 2, by); ctx.lineTo(fx, fy + off); ctx.lineTo(tx + tw / 2, by);
-        ctx.lineTo(bx + bw - r, by); ctx.arcTo(bx + bw, by, bx + bw, by + r, r); ctx.lineTo(bx + bw, by + th - r); ctx.arcTo(bx + bw, by + th, bx + bw - r, by + th, r);
+        ctx.moveTo(bx + r, by); ctx.lineTo(tx - tw / 2, by); ctx.lineTo(near ? fx : tipX, near ? fy + off : tipY); ctx.lineTo(tx + tw / 2, by);
+        ctx.lineTo(bx + Wb - r, by); ctx.arcTo(bx + Wb, by, bx + Wb, by + r, r); ctx.lineTo(bx + Wb, by + th - r); ctx.arcTo(bx + Wb, by + th, bx + Wb - r, by + th, r);
         ctx.lineTo(bx + r, by + th); ctx.arcTo(bx, by + th, bx, by + th - r, r); ctx.lineTo(bx, by + r); ctx.arcTo(bx, by, bx + r, by, r);
       }
       ctx.closePath(); ctx.fillStyle = T.light ? 'rgba(250,250,247,0.97)' : 'rgba(64,64,70,0.94)'; ctx.fill();
       ctx.shadowColor = 'transparent';
       ctx.fillStyle = T.light ? '#0B0B0E' : '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(T.label, bx + bw / 2, by + th / 2 + 1.5 * u);
+      ctx.fillText(T.label, bx + Wb / 2, by + th / 2 + 1.5 * u);
       ctx.restore();
     });
     try{ ctx.letterSpacing = '0px'; }catch(e){} ctx.textBaseline = 'alphabetic';
