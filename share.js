@@ -547,8 +547,6 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
     else if(hollow){ g.fillStyle = 'rgba(10,10,14,0.55)'; g.fillRect(cx - bw / 2, top, bw, bh); g.lineWidth = Math.max(1.6 * u, Math.min(2.8 * u, bw * 0.12)); g.strokeStyle = 'rgba(255,255,255,0.95)'; const lw2 = g.lineWidth / 2; g.strokeRect(cx - bw / 2 + lw2, top + lw2, bw - 2 * lw2, Math.max(0.5, bh - 2 * lw2)); }
     else { g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(cx - bw / 2, top, bw, bh); }
   }
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
-  ctx.drawImage(ART_LAYER, x, y); ctx.restore();
   // fills: first buy = Entry, last sell = Exit, the others as small dots
   const at = ts => { const c = cs.find(c => ts < c[0] + iv) || cs[cs.length-1]; return (c[2] + c[3]) / 2; };
   const fills = (ch.m || []).map(m => ({ ts:m[0], k:m[1], v:m[2] > 0 ? m[2] : at(m[0]) })).sort((a, b) => a.ts - b.ts);
@@ -556,6 +554,18 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   const entry = buys[0], exit = sells[sells.length - 1];
   const px = f => x + Math.min(w, Math.max(0, X(f.ts))), py = f => y + Math.min(h, Math.max(0, Y(f.v)));
   const kd = easeOut(seg(p, 0.6, 0.7));
+  // the trade itself, behind the candles: a soft band from the buy to the sell, edged by the two price levels
+  if(mini && entry && exit && kd > 0){
+    const xa = Math.min(px(entry), px(exit)), xb = Math.max(px(entry), px(exit)), ya = Math.min(py(entry), py(exit)), yb = Math.max(py(entry), py(exit));
+    const ext = 10 * u, zx = xa - ext, zw = Math.max(2 * ext, xb - xa + 2 * ext);
+    ctx.save(); ctx.globalAlpha *= kd;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(zx, ya, zw, Math.max(2 * u, yb - ya));
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.6 * u; ctx.setLineDash([6 * u, 5 * u]);
+    ctx.beginPath(); ctx.moveTo(zx, py(entry)); ctx.lineTo(zx + zw, py(entry)); ctx.moveTo(zx, py(exit)); ctx.lineTo(zx + zw, py(exit)); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+  }
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
+  ctx.drawImage(ART_LAYER, x, y); ctx.restore();
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     for(const f of fills) if(f !== entry && f !== exit){ ctx.beginPath(); ctx.arc(px(f), py(f), 4 * u, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore(); }
@@ -563,7 +573,7 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
     const k = easeOut(seg(p, 0.62, 0.74)); if(k <= 0) return;
     const nb = buys.length, ns = sells.length;
     const tags = []; if(entry) tags.push({ f:entry, label: 'BUY' + (nb > 1 ? ' ×' + nb : '') }); if(exit) tags.push({ f:exit, label: 'SELL' + (ns > 1 ? ' ×' + ns : '') });
-    const th = 50 * u, gapV = 22 * u, gapH = 12 * u;
+    const th = 50 * u, gapV = 30 * u, gapH = 12 * u;
     ctx.save(); ctx.globalAlpha *= k;
     ctx.font = `800 ${25 * u}px ${SANS}`; try{ ctx.letterSpacing = (2 * u) + 'px'; }catch(e){}
     tags.forEach(T => { T.w = ctx.measureText(T.label).width + 40 * u; T.fx = px(T.f); T.fy = py(T.f); T.cx = Math.min(x + w - T.w / 2, Math.max(x + T.w / 2, T.fx)); });
@@ -586,13 +596,15 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
       const { fx, fy, cx: tx, ty } = T, edge = T.above ? ty + th : ty;
       ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
       ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2.6 * u;
-      ctx.beginPath(); ctx.moveTo(tx, edge); ctx.lineTo(fx, fy + (T.above ? -12 : 12) * u); ctx.stroke(); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(tx, edge); ctx.lineTo(fx, fy + (T.above ? -18 : 18) * u); ctx.stroke(); ctx.restore();
       ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 20 * u; ctx.shadowOffsetY = 4 * u;
       rrect(ctx, tx - T.w / 2, ty, T.w, th, th / 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
       ctx.fillStyle = '#0B0B0E'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(T.label, tx, ty + th / 2 + 1.5 * u);
-      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10 * u;
-      ctx.beginPath(); ctx.arc(fx, fy, 12 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
-      ctx.beginPath(); ctx.arc(fx, fy, 6 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill();
+      // the exact fill: a target (dark halo, white ring, white centre) that can't be mistaken for a candle
+      ctx.beginPath(); ctx.arc(fx, fy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fill();
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
+      ctx.beginPath(); ctx.arc(fx, fy, 14 * u, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill(); ctx.lineWidth = 4 * u; ctx.strokeStyle = '#FFFFFF'; ctx.stroke(); ctx.restore();
+      ctx.beginPath(); ctx.arc(fx, fy, 5.5 * u, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill();
     });
     try{ ctx.letterSpacing = '0px'; }catch(e){} ctx.textBaseline = 'alphabetic';
     ctx.restore(); return;
