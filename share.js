@@ -892,11 +892,15 @@ async function fontsReady(){
   try{ await Promise.all([document.fonts.load(`900 40px Outfit`), document.fonts.load(`800 40px 'JetBrains Mono'`), document.fonts.load(`600 20px 'JetBrains Mono'`)]); }catch(e){}
 }
 const drawFor = style => style === 'simple' ? drawSimple : drawArt;
-function renderStill(t, meta, fmtKey, opt){
-  const F = FORMATS[fmtKey], c = document.createElement('canvas'); c.width = F.w; c.height = F.h;
-  drawFor(opt.style)(c.getContext('2d'), F.w, F.h, t, meta, 1, opt);
+function renderStill(t, meta, fmtKey, opt, scale){
+  // every layout is proportional to the canvas width, so a bigger canvas is a sharper image (not an upscale)
+  const F = FORMATS[fmtKey], k = scale || 1, W = Math.round(F.w * k), H = Math.round(F.h * k), c = document.createElement('canvas'); c.width = W; c.height = H;
+  drawFor(opt.style)(c.getContext('2d'), W, H, t, meta, 1, opt);
   return c;
 }
+/* still images: 4K-class PNG (square 3240 px, wide 3840 × 2160) with the 4K quality, else 1080 */
+const stillScale = fmtKey => (proLocked() ? '1080' : state.quality) === '4k' ? (fmtKey === 'wide' ? 2.4 : 3) : 1;
+const stillMode = () => STATIC && !isReplay();
 function videoMime(){
   if(typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
   // H.264 + AAC first: what TikTok / Instagram / X re-encode best
@@ -1186,22 +1190,28 @@ function syncButtons(){
   document.getElementById('shareHideUsd').checked = state.hideUsd;
   { const nr = document.getElementById('shareNameRow'); if(nr){ const n = window.dcUser && window.dcUser.username; nr.hidden = !n; if(n){ document.getElementById('shareNameTxt').textContent = 'Show @' + n; document.getElementById('shareName').checked = SHOW_NAME; } } }
   document.querySelectorAll('[data-share-q]').forEach(b => { const on = b.dataset.shareQ === (proLocked() ? '1080' : state.quality); b.classList.toggle('locked', b.dataset.shareQ !== '1080' && proLocked()); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
-  const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null);
-  v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : '');
+  const v = document.getElementById('shareVideo'), mime = videoMime() || (('VideoEncoder' in window) ? 'video/mp4' : null), still = stillMode();
+  const hd = (proLocked() ? '1080' : state.quality) === '4k';
+  if(still){ v.hidden = false; v.textContent = hd ? 'SAVE IMAGE (PNG 4K)' : 'SAVE IMAGE (PNG)'; }     // static: the main button is the image
+  else { v.hidden = !mime; v.textContent = (state.style === 'replay' ? 'SHARE REPLAY VIDEO' : 'SHARE VIDEO') + (mime && mime.includes('mp4') ? ' (MP4)' : ''); }
+  document.getElementById('shareImage').hidden = still;
+  const ql = document.getElementById('shareQLabel'); if(ql) ql.textContent = still ? 'Image' : 'Video';
+  document.querySelectorAll('[data-share-q]').forEach(b => { b.textContent = b.dataset.shareQ === '4k' ? (still ? '4K · ultra HD' : '4K · 60 fps') : (still ? '1080p' : '1080p · 60 fps (faster)'); });
 }
 async function doStill(){
   if(state.busy) return; state.busy = true;
+  const vb = document.getElementById('shareVideo'), vLabel = vb.textContent; if(stillMode()) vb.textContent = 'RENDERING\u2026';
   try{
     await fontsReady(); await loadCoinImage(state.t.image); if(state.style === 'art') await artReady(state.t);
     let c;
     if(isReplay()){ const R = window.dcReplay; c = document.createElement('canvas'); c.width = R.W; c.height = R.H; const ro = { ...replayOpts(), hideUsd: state.hideUsd }; R.draw(c.getContext('2d'), R.W, R.H, state.t, state.meta, R.duration(ro), ro); }
-    else c = renderStill(state.t, state.meta, curFmt(), state);
+    else c = renderStill(state.t, state.meta, curFmt(), state, stillScale(curFmt()));
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     if(!blob) throw new Error('png');
     const r = await deliver(blob, `degencards-${safeName()}-${isReplay() ? 'replay' : (state.style === 'simple' || state.style === 'art' ? state.style + '-' : '') + curFmt()}.png`, captionFor(state.t, state));
     if(r === 'downloaded') showToast('Image saved · caption copied');
   }catch(e){ showToast("Couldn't build the image"); }
-  finally{ state.busy = false; }
+  finally{ state.busy = false; if(stillMode()) vb.textContent = vLabel; }
 }
 async function doVideo(){
   if(state.busy) return; state.busy = true;
@@ -1351,7 +1361,7 @@ function init(){
   document.getElementById('shareBgBlur').addEventListener('click', () => { BG.blur = !BG.blur; syncBg(); bgPersist(); });
   bgLoadSaved().then(async v => { if(!v || !v.blob || BG.kind) return; if(typeof v.dim === 'number') BG.dim = Math.max(0, Math.min(0.85, v.dim)); if(typeof v.pos === 'number') BG.pos = Math.max(0, Math.min(1, v.pos)); BG.blur = v.blur === true; if(await bgUse(v.blob)){ if(BG.kind === 'video') BG.el.pause(); syncBg(); } });
   document.getElementById('shareImage').addEventListener('click', doStill);
-  document.getElementById('shareVideo').addEventListener('click', doVideo);
+  document.getElementById('shareVideo').addEventListener('click', () => stillMode() ? doStill() : doVideo());   // static = PNG, animated = MP4
   document.getElementById('shareCaption').addEventListener('click', async () => {
     try{ await navigator.clipboard.writeText(captionFor(state.t, state)); showToast('Caption copied'); }catch(e){ showToast("Couldn't copy"); }
   });
