@@ -450,6 +450,31 @@ function evenCandles(ch){
   const dn = k > 1 ? densify(ev, T, k) : { c: ev, i: T };
   return { ...ch, c: dn.c, m: (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]), w: [0, cs.length*T], i: dn.i, iv0: T, even: true };
 }
+/* a chart must agree with the trade: with almost no real candles, or when its buy -> sell move contradicts the trade's own
+   return (e.g. only the wallet's own two swaps were found), it is replaced by an honest chart of the fills themselves:
+   one candle per move between consecutive fills, nothing invented. Never while the real candles are still loading. */
+const VETTED = new WeakMap();
+function fillsChart(t){
+  const end = t.timestamp, start = end - (t.holdTime||0)*1000;
+  const L = (t.legs && t.legs.length ? t.legs : [[start,'b',t.entryMc],[end,'s',t.exitMc]]).map(l=>[+l[0], l[1], +l[2]])
+    .filter(l=>Number.isFinite(l[0]) && l[2] > 0 && (l[1]==='b' || l[1]==='s')).sort((a,b)=>a[0]-b[0]);
+  if(L.length < 2) return null;
+  const T = 1000, cs = [];
+  for(let i = 0; i < L.length - 1; i++){ const o = L[i][2], c = L[i+1][2], hi = Math.max(o, c), lo = Math.min(o, c), wk = (hi - lo) * 0.06 || hi * 0.004; cs.push([i*T, o, hi + wk, lo - wk, c]); }
+  const n = cs.length, m = L.map((l,i)=>[i === L.length - 1 ? n*T - 1 : i*T + 1, l[1], l[2]]);
+  const pad = n < 4 ? T * 1.5 : 0;                                  // a lone candle sits in the middle, not across the whole chart
+  return { v:2, c:cs, m, m0:m, w:[-pad, n*T + pad], i:T, iv0:T, even:true, src:'fills', q:0, fine:true, coarse:false, sparse:true, n, nr:n, fills:true };
+}
+function vetChart(t){
+  const ch = t.chart; if(!ch || ch.v !== 2 || ch.fills || pendingFine(t)) return ch;
+  const hit = VETTED.get(ch); if(hit && hit.roi === t.roi && hit.legs === t.legs) return hit.c;
+  const mk = (ch.m0 || ch.m || []).filter(m=>m[2] > 0), b = mk.find(m=>m[1]==='b'), sl = mk.filter(m=>m[1]==='s'), s = sl[sl.length - 1];
+  const rr = (t.roi||0) / 100, move = b && s ? s[2] / b[2] - 1 : null;
+  const bad = (ch.nr != null && ch.nr < 2) || (move != null && Math.abs(move - rr) > Math.max(0.08, Math.abs(rr) * 0.5));
+  const out = bad ? (fillsChart(t) || ch) : ch;
+  VETTED.set(ch, { roi: t.roi, legs: t.legs, c: out });
+  return out;
+}
 function parseChart(c){
   if(!c || typeof c!=='object') return null;
   const okN = v => Number.isFinite(v) && v >= 0 && v < 1e15;
@@ -460,7 +485,7 @@ function parseChart(c){
     const iv0 = okN(+c.i) && +c.i>0 ? +c.i : 60000;
     if(c.fine && cs.length >= 2){                                    // candles of real consecutive swaps: drawn as they are
       const fc = cs.slice().sort((a,b)=>a[0]-b[0]);
-      return evenCandles({ v:2, c:fc, m, m0:m, w, iv0, i: iv0, src: c.src==='pump' ? 'pump' : 'chain', q: 2, fine: true, coarse: false, redo: !!c.redo, n: fc.length });
+      return evenCandles({ v:2, c:fc, m, m0:m, w, iv0, i: iv0, src: c.src==='pump' ? 'pump' : 'chain', q: 2, fine: true, coarse: false, redo: !!c.redo, n: fc.length, nr: fc.filter(x=>x[2] > x[3]).length });
     }
     if(c.src === 'gt' && cs.length && m.some(x=>x[2] > 0)){             // GeckoTerminal prices in its own supply (fdv/price): when every fill
       const r = m.filter(x=>x[2] > 0).map(x=>{ const k = cs.find(y=>x[0] < y[0] + iv0) || cs[cs.length-1]; return x[2] / ((k[2]+k[3])/2); }).sort((p,q)=>p-q);
@@ -479,10 +504,10 @@ function parseChart(c){
         const tc = p.slice(1).map((q,i)=>[i*T, p[i][1], Math.max(p[i][1], q[1]), Math.min(p[i][1], q[1]), q[1]]);
         const map = ts => { if(ts <= p[0][0]) return 0; for(let k=1;k<p.length;k++) if(ts <= p[k][0]){ const a = p[k-1][0], b = p[k][0]; return ((k-1) + (b>a ? (ts-a)/(b-a) : 1)) * T; } return (p.length-1)*T; };
         const tm = m.map(x=>[map(x[0]), x[1], x[2]]), td = { c: tc, i: T };
-        return evenCandles({ v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: tc.length });
+        return evenCandles({ v:2, c:td.c, m:tm, m0:m, w:[0, (p.length-1)*T], iv0:T, i:td.i, sparse:true, tick:true, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: tc.length, nr: tc.length });
       }
     }
-    return cl.length ? evenCandles({ v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: cl.length }) : null;
+    return cl.length ? evenCandles({ v:2, c:dn.c, m, m0:m, w, iv0, i: dn.i, sparse, pts: cl.real, src: c.src==='pump' ? 'pump' : c.src==='chain' ? 'chain' : 'gt', q: c.q === 3 ? 3 : c.q === 2 ? 2 : c.q === 1 ? 1 : 0, coarse: !!c.coarse, fine: !!c.fine, redo: !!c.redo, n: cl.length, nr: cl.length - (cl.fillers||0) }) : null;
   }
   const p = Array.isArray(c.p) ? c.p.filter(x=>Array.isArray(x) && okN(+x[0]) && okN(+x[1])).map(x=>[+x[0], +x[1]]).slice(0,400) : [];
   return (p.length || m.length) ? { p, m, w } : null;
@@ -542,7 +567,7 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   const bs = marks.filter(m=>m[1]==='b'), ss = marks.filter(m=>m[1]==='s');
   if(!bs.length || !ss.length) return { svg:'', html:'' };
   const tb = Math.min(...bs.map(m=>m[0])), te = Math.max(...ss.map(m=>m[0]));
-  const en = t.entryMc > 0 ? t.entryMc : bs[0][2], ex = t.exitMc > 0 ? t.exitMc : ss[ss.length-1][2];
+  const en = bs[0][2] > 0 ? bs[0][2] : t.entryMc, ex = ss[ss.length-1][2] > 0 ? ss[ss.length-1][2] : t.exitMc;   // same scale as the candles
   if(!(en > 0) || !(ex > 0) || te <= tb) return { svg:'', html:'' };
   const win = ex >= en, col = win ? '#18c964' : '#ff3b4e';
   const clampP = v => Math.min(100, Math.max(0, v));
@@ -564,6 +589,7 @@ function centredWindow(ch){
 }
 function miniChart(t, big){
   const h = big ? 170 : 66;
+  if(t.chart) t.chart = vetChart(t);
   const ch = t.chart;
   if(ch && ch.v === 2 && !pendingFine(t)){
     let win = big ? null : centredWindow(ch);                          // small cards: BUY and SELL framed around the middle...
@@ -2013,7 +2039,7 @@ function renderRecover(){
     act(store.purge.bind(store), [...binSel], `${n} trade${n>1?'s':''} permanently deleted`);
   });
 }
-function renderAll(){ renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
+function renderAll(){ trades.forEach(t=>{ if(t.chart) t.chart = vetChart(t); }); renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
 
 /* ---------- auto-import (server side) ----------
    The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
@@ -2522,7 +2548,7 @@ function openDetail(id, refresh){
                : [[opened,'b',t.entryMc],[t.timestamp,'s',t.exitMc]]).sort((a,b)=>a[0]-b[0]);
   const f0 = fills.length ? fills[0][0] : opened;
   const st = chartState(t);
-  const note = st === 'ready' ? `Market cap · ${t.chart.src==='pump'?'pump.fun trades':t.chart.src==='chain'?'on-chain swaps':'GeckoTerminal'}`
+  const note = st === 'ready' ? (t.chart.fills ? 'Too few market trades for real candles: your own fills, in order.' : `Market cap · ${t.chart.src==='pump'?'pump.fun trades':t.chart.src==='chain'?'on-chain swaps':'GeckoTerminal'}`)
     : st === 'loading' ? 'Loading the real candles…'
     : st === 'manual' ? 'Manual trade: entry and exit only, no market data.'
     : 'No market data found for this coin. Showing entry and exit only.';
