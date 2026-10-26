@@ -354,3 +354,7 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - `densify` : les sous-bougies sont plus vivantes (bruit 0,32 R, mèches plus longues), l'OHLC réel reste exact. La sous-bougie sous B ou S se ferme (ou s'ouvre) au prix exact du fill : les points sont posés sur les bougies.
 - Zone du trade : une colonne douce sur toute la hauteur pendant le hold, plus une ligne pointillée entre le point B et le point S. Elle remplace la bande horizontale entrée → sortie, qui tombait sous les bougies quand le prix bougeait pendant le hold.
 - GeckoTerminal : recalage d'échelle aussi quand tous les fills sont hors de leur bougie du même côté avec un écart régulier (avant : seulement au-delà de 23 à 30 %).
+
+## Cartes ART : zone de hold + points exacts (2026-10-26)
+- Nouvelle option « Hold zone » dans Show (`hold`, désactivée par défaut, gratuite) : une colonne blanche légère derrière les bougies, du premier BUY au dernier SELL. Bords pointillés, fondue en haut et en bas, elle apparaît après les bougies dans la vidéo. Blanc uniquement, pas de cadre.
+- BUY / SELL : un point blanc à cœur sombre est posé sur la position exacte du fill (temps + market cap), et la pointe de la bulle s'arrête dessus. Avant, il n'y avait un point que quand la bulle était éloignée.

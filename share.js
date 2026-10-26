@@ -416,13 +416,13 @@ const ART = [
   { id:'sodom',     kind:'paint',  name:'Sodom',       title:'The Burning of Sodom',                     by:'Camille Corot',           year:'1857',    fx:.34, fy:.45, dim:.08, mood:'loss' },
 ];
 const AO_KEY = 'dc_art_opts2', AO_KEY_OLD = 'dc_art_opts';      // v2: the card is classic by default, extras are opt-in
-const AO_DEF = { pick:'auto', big:'pnl', tone:'natural', ink:'white', chart:true, stats:false, coin:true, date:false, credit:false };
+const AO_DEF = { pick:'auto', big:'pnl', tone:'natural', ink:'white', chart:true, hold:false, stats:false, coin:true, date:false, credit:false };
 const AO_GROUPS = [
   ['big',  'Big number', [['pnl','PnL $'],['roi','ROI %']]],
   ['tone', 'Tone',       [['natural','Natural'],['noir','Noir'],['marble','Marble'],['gold','Gold'],['dark','Dark']]],
   ['ink',  'Number',     [['white','White'],['result','Green / red']]],
 ];
-const AO_SHOW = [['chart','Chart'],['coin','Coin logo'],['stats','Trade details'],['date','Date'],['credit','Artwork credit']];
+const AO_SHOW = [['chart','Chart'],['hold','Hold zone'],['coin','Coin logo'],['stats','Trade details'],['date','Date'],['credit','Artwork credit']];
 const AO_PRO = { tone:['marble','gold','dark'] };
 const artById = id => ART.find(a => a.id === id);
 const artLocked = a => proLocked() && !a.free;
@@ -520,7 +520,7 @@ function artBackdrop(ctx, W, H, t, ao, p, blur){
 }
 /* the chart: white candles (down = hollow / faint), Entry and Exit tags. Drawn on a layer, then shadowed once. */
 const ART_LAYER = document.createElement('canvas');
-function artChart(ctx, t, x, y, w, h, p, u, mini){
+function artChart(ctx, t, x, y, w, h, p, u, mini, hold){
   const ch = t.chart && t.chart.v === 2 && t.chart.c && t.chart.c.length ? t.chart : null; if(!ch) return;
   let cs = ch.c, iv = ch.i;
   // wide candles on the artwork: consecutive candles merged (real OHLC) until each one gets ~30 units of width
@@ -561,6 +561,16 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   const entry = buys[0], exit = sells[sells.length - 1];
   const px = f => x + Math.min(w, Math.max(0, X(f.ts))), py = f => y + Math.min(h, Math.max(0, Y(f.v)));
   const kd = easeOut(seg(p, 0.6, 0.7));
+  // option: the hold (first BUY to last SELL) as a light white column behind the candles, soft at both ends
+  if(hold && entry && exit && exit.ts > entry.ts){ const hk = easeOut(seg(p, 0.5, 0.66));
+    if(hk > 0){ let xb = px(entry), xe = px(exit); if(xe - xb < 8 * u){ const mid = (xb + xe) / 2; xb = mid - 4 * u; xe = mid + 4 * u; }
+      const yt = y - 18 * u, yb = y + h + 18 * u, gr = ctx.createLinearGradient(0, yt, 0, yb);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.18, 'rgba(255,255,255,0.13)'); gr.addColorStop(0.82, 'rgba(255,255,255,0.13)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      const ge = ctx.createLinearGradient(0, yt, 0, yb);
+      ge.addColorStop(0, 'rgba(255,255,255,0)'); ge.addColorStop(0.18, 'rgba(255,255,255,0.5)'); ge.addColorStop(0.82, 'rgba(255,255,255,0.5)'); ge.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save(); ctx.globalAlpha *= hk; ctx.fillStyle = gr; ctx.fillRect(xb, yt, xe - xb, yb - yt);
+      ctx.strokeStyle = ge; ctx.lineWidth = 1.5 * u; ctx.setLineDash([5 * u, 5 * u]); ctx.beginPath(); ctx.moveTo(xb, yt); ctx.lineTo(xb, yb); ctx.moveTo(xe, yt); ctx.lineTo(xe, yb); ctx.stroke();
+      ctx.restore(); } }
   ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 3 * u;
   ctx.drawImage(ART_LAYER, x, y); ctx.restore();
   if(kd > 0){ ctx.save(); ctx.globalAlpha *= kd; ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -569,7 +579,7 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
   if(mini){                                                          // speech bubbles, never over the candles: the tail points at the fill
     const k = easeOutBack(seg(p, 0.62, 0.76)); if(k <= 0) return;
     const tags = []; if(entry) tags.push({ f:entry, label:'BUY', light:true }); if(exit) tags.push({ f:exit, label:'SELL', light:false });
-    const th = 48 * u, r = 12 * u, tw = 22 * u, tl = 12 * u, off = 4 * u, gap = 8 * u;
+    const th = 48 * u, r = 12 * u, tw = 22 * u, tl = 12 * u, off = 11 * u, gap = 8 * u;
     const cand = cs.map(c => ({ xc: x + X(c[0] + iv / 2), t: y + Y(c[2]), b: y + Y(c[3]) })), halfC = bw / 2 + 3 * u;
     const topOf = (a, b) => { let m = Infinity; for(const c of cand) if(c.xc + halfC >= a && c.xc - halfC <= b) m = Math.min(m, c.t); return m; };
     const botOf = (a, b) => { let m = -Infinity; for(const c of cand) if(c.xc + halfC >= a && c.xc - halfC <= b) m = Math.max(m, c.b); return m; };
@@ -625,6 +635,10 @@ function artChart(ctx, t, x, y, w, h, p, u, mini){
       ctx.fillText(T.label, bx + Wb / 2, by + th / 2 + 1.5 * u);
       ctx.restore();
     });
+    // the exact fill: a white point with a dark core, on top of its candle (the bubble's tail stops right at it)
+    tags.forEach(T => { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * u;
+      ctx.beginPath(); ctx.arc(T.fx, T.fy, 9 * u * k, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.restore();
+      ctx.beginPath(); ctx.arc(T.fx, T.fy, 4 * u * k, 0, Math.PI * 2); ctx.fillStyle = '#0B0B0E'; ctx.fill(); });
     try{ ctx.letterSpacing = '0px'; }catch(e){} ctx.textBaseline = 'alphabetic';
     ctx.restore(); return;
   }
@@ -709,7 +723,7 @@ function drawArtPoster(ctx, W, H, t, meta, p, opt){
     ctx.fillText(new Date(t.timestamp).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }).toUpperCase(), R, headY); }
   ls(0); noShadow();
 
-  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, L, chartTop, cw, chartBot - chartTop, p, u, true);
+  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, L, chartTop, cw, chartBot - chartTop, p, u, true, ao.hold);
 
   // ticker (+ coin)
   const img = t.image ? IMG_CACHE.get(t.image) : null, hasImg = ao.coin && !!(img && img.complete && img.naturalWidth);
@@ -838,7 +852,7 @@ function drawArt(ctx, W, H, t, meta, p, opt){
   ctx.font = `600 ${21 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.fillText(sub, hx, hy + 2 * u);
   noShadow(); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
 
-  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u, true);
+  if(chartOn && chartBot - chartTop > 120 * u) artChart(ctx, t, cx - colW / 2, chartTop, colW, chartBot - chartTop, p, u, true, ao.hold);
 
   // big result, count-up, light sweep at the end
   const cnt = easeOut(seg(p, 0.06, 0.55)), main = ao.ink === 'result' ? (win ? GREEN : RED) : '#FFFFFF';
