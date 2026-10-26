@@ -347,3 +347,10 @@ Le propriétaire a rejeté la direction « museum black / ivory / gilt » (commi
 Thème, logo (étoile violette + DEGEN**CARDS**), icônes, OG, landing et polices remis à l'état de 330dfed :
 fond sombre, texte blanc, gris, accent violet #C09EFF, coins arrondis, Outfit + JetBrains Mono.
 Conservé de la période annulée : retrait des œuvres avec nudité dans le style ART (share.js + /art).
+
+## Graphe de la page détail, style bougies (2026-10-26)
+- Plus d'aire en dégradé, de ligne de prix ni de ligne « dernier prix » : uniquement des bougies sur une grille légère (cartes et détail).
+- Détail : hauteur 220 px, 72 bougies maximum, corps à 64 % du pas, donc un espace entre les bougies et des mèches visibles.
+- `densify` : les sous-bougies sont plus vivantes (bruit 0,32 R, mèches plus longues), l'OHLC réel reste exact. La sous-bougie sous B ou S se ferme (ou s'ouvre) au prix exact du fill : les points sont posés sur les bougies.
+- Zone du trade : une colonne douce sur toute la hauteur pendant le hold, plus une ligne pointillée entre le point B et le point S. Elle remplace la bande horizontale entrée → sortie, qui tombait sous les bougies quand le prix bougeait pendant le hold.
+- GeckoTerminal : recalage d'échelle aussi quand tous les fills sont hors de leur bougie du même côté avec un écart régulier (avant : seulement au-delà de 23 à 30 %).

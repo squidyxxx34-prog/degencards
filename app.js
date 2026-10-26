@@ -375,7 +375,7 @@ function cleanCandles(raw, iv, marks){
 /* livelier charts: each real candle is split into a few sub-candles whose path goes from its real open to its real
    close through its real high and low (seeded, so cards, detail and videos are identical). Every real OHLC is kept
    exactly: no new high, no new low, same direction. Flat stretches (nobody traded) stay flat. */
-function densify(cs, iv, kk){
+function densify(cs, iv, kk, anchors){
   const k = kk || Math.max(1, Math.min(4, Math.round(80 / Math.max(1, cs.length))));
   if(k === 1) return { c: cs, i: iv };
   const out = [], sub = iv / k;
@@ -386,11 +386,14 @@ function densify(cs, iv, kk){
     const R = h - l, clampV = v => Math.min(h, Math.max(l, v));
     // bodies walk from the real open to the real close with some noise (colours alternate like a live market);
     // the real high and low land as the wicks of the sub-candles nearest to them: OHLC kept exactly, no tall bars
-    const pts = [o]; for(let j=1;j<k;j++) pts.push(clampV(o + (c - o) * (j / k) + R * 0.18 * (rnd() * 2 - 1))); pts.push(c);
+    const pts = [o]; for(let j=1;j<k;j++) pts.push(clampV(o + (c - o) * (j / k) + R * 0.32 * (rnd() * 2 - 1))); pts.push(c);
+    // the wallet's own fill inside this candle: the sub-candle under the B / S marker closes (or opens) at the exact fill price
+    for(const [at, v] of (anchors||[])){ if(!(v > 0) || at < ts || at >= ts + iv) continue;
+      const sI = Math.min(k-1, Math.floor((at - ts) / sub)); pts[sI < k-1 ? sI+1 : sI] = clampV(v); }
     const sc = [];
     for(let j=0;j<k;j++){
       const a = pts[j], b = pts[j+1], top = Math.max(a,b), bot = Math.min(a,b), body = Math.max(top - bot, R * 0.02);
-      sc.push([ts + j*sub, a, Math.min(h, top + body * (0.15 + 0.6 * rnd()) + R * 0.02 * rnd()), Math.max(l, bot - body * (0.15 + 0.6 * rnd()) - R * 0.02 * rnd()), b]);
+      sc.push([ts + j*sub, a, Math.min(h, top + body * (0.2 + 0.8 * rnd()) + R * 0.05 * rnd()), Math.max(l, bot - body * (0.2 + 0.8 * rnd()) - R * 0.05 * rnd()), b]);
     }
     let iH = 0, iL = 0; sc.forEach((x, n) => { if(x[2] > sc[iH][2]) iH = n; if(x[3] < sc[iL][3]) iL = n; });
     sc[iH][2] = h; sc[iL][3] = l;
@@ -447,8 +450,9 @@ function evenCandles(ch){
   // chart shows ~EVEN_N candles of action, the same on cards, detail, share cards and replays
   const ev = cs.map((x,j)=>[j*T, x[1], x[2], x[3], x[4]]);
   const k = ev.length < EVEN_N ? Math.min(28, Math.ceil(EVEN_N / ev.length)) : 1;
-  const dn = k > 1 ? densify(ev, T, k) : { c: ev, i: T };
-  return { ...ch, c: dn.c, m: (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]), w: [0, cs.length*T], i: dn.i, iv0: T, even: true };
+  const mm = (ch.tick ? ch.m : (ch.m0 || ch.m)).map(x=>[pos(x[0]), x[1], x[2]]);
+  const dn = k > 1 ? densify(ev, T, k, mm.map(x=>[x[0], x[2]])) : { c: ev, i: T };
+  return { ...ch, c: dn.c, m: mm, w: [0, cs.length*T], i: dn.i, iv0: T, even: true };
 }
 /* a chart must agree with the trade: with almost no real candles, or when its buy -> sell move contradicts the trade's own
    return (e.g. only the wallet's own two swaps were found), it is replaced by an honest chart of the fills themselves:
@@ -490,7 +494,11 @@ function parseChart(c){
     if(c.src === 'gt' && cs.length && m.some(x=>x[2] > 0)){             // GeckoTerminal prices in its own supply (fdv/price): when every fill
       const r = m.filter(x=>x[2] > 0).map(x=>{ const k = cs.find(y=>x[0] < y[0] + iv0) || cs[cs.length-1]; return x[2] / ((k[2]+k[3])/2); }).sort((p,q)=>p-q);
       const med = r[r.length>>1];                                      // sits off the candles the same way, rescale them to the on-chain market cap
-      if(r.every(v=>v < 0.77) || r.every(v=>v > 1.3)) cs.forEach(y=>{ for(let j=1;j<5;j++) y[j] *= med; });
+      // a consistent offset (every fill off the same way, by about the same factor) is a supply mismatch, not slippage:
+      // the candles are rescaled so B / S and the trade band sit on them
+      const fm = m.filter(x=>x[2] > 0), kOf = x => cs.find(y=>x[0] < y[0] + iv0) || cs[cs.length-1];
+      const below = fm.every(x=>x[2] < kOf(x)[3]*0.98), above = fm.every(x=>x[2] > kOf(x)[2]*1.02), tight = r[r.length-1] / r[0] < 1.25;
+      if(r.every(v=>v < 0.77) || r.every(v=>v > 1.3) || ((below || above) && tight)) cs.forEach(y=>{ for(let j=1;j<5;j++) y[j] *= med; });
     }
     const cl = cleanCandles(cs, iv0, m), dn = regroup(cl, iv0);
     // the candles miss the wallet's own fills (data started late / wrong pool) or are mostly empty: drawn as a price line through
@@ -520,7 +528,7 @@ function markersHtml(marks, X, Y, big){
     // fills stacked on the same x (several buys before the first candle, clamped to the edge) collapse into one point
     .reduce((acc, m) => { const o = acc.find(q => q.kind === m.kind && Math.abs(q.x - m.x) < 0.6);
       if(!o){ acc.push({ ...m, w: 1 }); return acc; } o.w++; if(m.kind === 'b' ? m.y > o.y : m.y < o.y) o.y = m.y; return acc; }, []);
-  const W = big ? 330 : 140, H = big ? 170 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
+  const W = big ? 330 : 140, H = big ? 220 : 66, mkPx = big ? 20 : 16;  // typical chart size on a phone, in px
   const pct = px => px / W * 100;
   // fills of the same side close together in time: one marker with a count (S x9), one round, one straight drop line
   const gap = pct(mkPx * 1.6);
@@ -561,7 +569,7 @@ function mergeCandles(cs, iv, max){
   }
   return [out, iv*k];
 }
-/* entry -> exit band over the hold (first BUY to last SELL): fill + dashed entry / exit levels;
+/* the hold (first BUY to last SELL): soft column + dashed buy -> sell line;
    big chart: price tags on the right edge, the ROI in the band, and the peak reached while holding when it was well above the exit */
 function tradeZone(t, cs, iv, marks, X, Y, big){
   const bs = marks.filter(m=>m[1]==='b'), ss = marks.filter(m=>m[1]==='s');
@@ -571,9 +579,12 @@ function tradeZone(t, cs, iv, marks, X, Y, big){
   if(!(en > 0) || !(ex > 0) || te <= tb) return { svg:'', html:'' };
   const win = ex >= en, col = win ? '#18c964' : '#ff3b4e';
   const clampP = v => Math.min(100, Math.max(0, v));
-  const xb = clampP(X(tb)), xe = clampP(X(te)), ye = clampP(Y(en)), yx = clampP(Y(ex)), y0 = Math.min(ye, yx), h = Math.max(0.6, Math.abs(ye - yx));
-  const lv = (y, op) => `<line x1="${xb.toFixed(2)}" x2="${xe.toFixed(2)}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" stroke="${col}" stroke-opacity="${op}" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
-  const svg = `<rect x="${xb.toFixed(2)}" y="${y0.toFixed(2)}" width="${(xe-xb).toFixed(2)}" height="${h.toFixed(2)}" fill="${col}" fill-opacity="${big ? .13 : .1}"/>` + lv(ye, .55) + lv(yx, .9);
+  const xb = clampP(X(tb)), xe = clampP(X(te)), ye = clampP(Y(en)), yx = clampP(Y(ex));
+  // the hold as a soft column over the whole chart height (always sits on the candles), and a dashed line from the
+  // buy point to the sell point: the move of the trade itself
+  const w = Math.max(0.8, xe - xb), x = Math.min(xb, 100 - w);
+  const svg = `<rect x="${x.toFixed(2)}" y="${(CH_TOP - 2).toFixed(2)}" width="${w.toFixed(2)}" height="${(102 - CH_TOP).toFixed(2)}" fill="${col}" fill-opacity="${big ? .075 : .07}"/>` +
+    `<line x1="${xb.toFixed(2)}" x2="${xe.toFixed(2)}" y1="${ye.toFixed(2)}" y2="${yx.toFixed(2)}" stroke="${col}" stroke-opacity=".75" stroke-width="1.2" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`;
   return { svg, html:'' };                                         // no text on the chart: the figures are right above it
 }
 /* window of a small card chart: the whole context is kept; only the extra on the longer side is trimmed so the trade
@@ -588,14 +599,14 @@ function centredWindow(ch){
   return (pl < L || pr < R) ? [tb - pl, te + pr] : null;
 }
 function miniChart(t, big){
-  const h = big ? 170 : 66;
+  const h = big ? 220 : 66;
   if(t.chart) t.chart = vetChart(t);
   const ch = t.chart;
   if(ch && ch.v === 2 && !pendingFine(t)){
     let win = big ? null : centredWindow(ch);                          // small cards: BUY and SELL framed around the middle...
     let raw = win ? ch.c.filter(c => c[0] + ch.i > win[0] && c[0] < win[1]) : ch.c;
     if(win && raw.length < Math.min(48, ch.c.length)){ win = null; raw = ch.c; }   // ...but never at the cost of the candles: ~50 everywhere
-    const [cs, iv] = mergeCandles(raw.length >= 4 ? raw : ch.c, ch.i, big ? 140 : 64);
+    const [cs, iv] = mergeCandles(raw.length >= 4 ? raw : ch.c, ch.i, big ? 72 : 64);
     let x0 = Math.min(ch.w ? ch.w[0] : Infinity, cs[0][0]), x1 = Math.max(ch.w ? ch.w[1] : 0, cs[cs.length-1][0] + iv);
     if(win){ x0 = Math.max(win[0], cs[0][0]); x1 = Math.min(win[1], cs[cs.length-1][0] + iv); }
     if(x1 <= x0) x1 = x0 + iv;
@@ -604,8 +615,8 @@ function miniChart(t, big){
     if(y1 - y0 < 1e-9){ y0 *= 0.95; y1 = y1*1.05 + 1; }
     const pad = (y1-y0)*0.14; y0 -= pad; y1 += pad;
     const X = v => ((v-x0)/(x1-x0))*100, Y = v => CH_TOP + (1-(v-y0)/(y1-y0))*(100-CH_TOP);
-    const bw = Math.max(0.5, (iv/(x1-x0))*100*0.9);                   // candles side by side, like a trading chart
-    const minB = big ? 2.6 : 4;                                       // a candle always reads as a candle, never as a flat line
+    const bw = Math.max(0.5, (iv/(x1-x0))*100*(big ? 0.64 : 0.9));    // big chart: bodies with a gap and visible wicks, like a trading terminal
+    const minB = big ? 1.6 : 4;                                       // a candle always reads as a candle, never as a flat line
     const body = cs.map(([ts,o,hi,lo,c])=>{
       const up = c >= o, col = up ? '#18c964' : '#ff3b4e', cx = X(ts + iv/2);
       const top = Y(Math.max(o,c)), bot = Y(Math.min(o,c));
@@ -617,16 +628,9 @@ function miniChart(t, big){
     // the trade itself: a band from entry to exit level over the hold, so a x2 reads as a x2 even when a wick squashes the scale
     const zone = tradeZone(t, cs, iv, marks, X, Y, big);
     const labels = big ? `<span class="ch-lbl top" style="top:${CH_TOP}%">${fmtMcShort(y1-pad)}</span><span class="ch-lbl bot">${fmtMcShort(Math.max(0,y0+pad))}</span>` : '';
-    // modern look: faint grid, a glowing area under the price, last-price line
-    const up = cs[cs.length-1][4] >= cs[0][1], tone = up ? '#18c964' : '#ff3b4e', gid = 'g' + Math.random().toString(36).slice(2,8);
-    const lp = cs.map(c=>[c[0]+iv/2, c[4]]);
-    const line = lp.map(p=>`${X(p[0]).toFixed(2)},${Y(p[1]).toFixed(2)}`).join(' ');
-    const area = `<polygon points="${X(lp[0][0]).toFixed(2)},100 ${line} ${X(lp[lp.length-1][0]).toFixed(2)},100" fill="url(#${gid})"/>`;
+    // trading look: candles only on a faint grid (no area, no price line)
     const grid = [0.25,0.5,0.75].map(f=>{ const y = (CH_TOP + f*(100-CH_TOP)).toFixed(2); return `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }).join('');
-    const lastY = Y(lp[lp.length-1][1]).toFixed(2);
-    const deco = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tone}" stop-opacity=".22"/><stop offset="1" stop-color="${tone}" stop-opacity="0"/></linearGradient></defs>${grid}${area}${zone.svg}
-      <polyline points="${line}" fill="none" stroke="${tone}" stroke-opacity=".35" stroke-width="1" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-      <line x1="0" x2="100" y1="${lastY}" y2="${lastY}" stroke="${tone}" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>`;
+    const deco = grid + zone.svg;
     return `<div class="chartbox modern ${big?'big':''}" style="height:${h}px">
       <svg class="cs" viewBox="0 0 100 100" preserveAspectRatio="none">${deco}${body}</svg>${markersHtml(marks, X, Y, big)}${labels}${zone.html}</div>`;
   }
