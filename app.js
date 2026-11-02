@@ -1897,7 +1897,7 @@ document.getElementById('ranksView').addEventListener('click', async e=>{
   }
 });
 
-const VIEW_TITLES = { home:'Home', collection:'Collection', history:'History', achievements:'Achievements', stats:'Stats', ranks:'Ranks', account:'Account' };
+const VIEW_TITLES = { home:'Home', collection:'Collection', history:'History', journal:'Journal', achievements:'Achievements', stats:'Stats', ranks:'Ranks', account:'Account' };
 /* narrow screens: the tab row scrolls sideways; keep the current tab visible and fade the edge that has more */
 function navEdges(){ const n = document.getElementById('nav'); if(!n) return; const max = n.scrollWidth - n.clientWidth;
   n.classList.toggle('more-l', n.scrollLeft > 2); n.classList.toggle('more-r', max > 2 && n.scrollLeft < max - 2); }
@@ -1915,11 +1915,12 @@ function goToView(v){
   const chip = document.getElementById('profileChip'); chip.classList.toggle('active', v==='account'); v==='account' ? chip.setAttribute('aria-current','page') : chip.removeAttribute('aria-current');
   document.title = (VIEW_TITLES[v] ? VIEW_TITLES[v] + ' · ' : '') + 'DEGENCARDS';
   navKeepInView();
-  ['home','collection','history','achievements','stats','ranks','account'].forEach(k=>{
+  ['home','collection','history','journal','achievements','stats','ranks','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
   if(v==='ranks') ranks.open();
   if(v==='achievements') achEnter();
+  if(v==='journal' && window.dcJournal) window.dcJournal.render();
 }
 
 let histFilter = 'all', histQuery = '';
@@ -2043,7 +2044,7 @@ function renderRecover(){
     act(store.purge.bind(store), [...binSel], `${n} trade${n>1?'s':''} permanently deleted`);
   });
 }
-function renderAll(){ trades.forEach(t=>{ if(t.chart) t.chart = vetChart(t); }); renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); }
+function renderAll(){ trades.forEach(t=>{ if(t.chart) t.chart = vetChart(t); }); renderStatsRow(); renderLevel(); renderGrid(); renderHome(); renderHistory(); renderAchievements(); renderStatsView(); renderAccount(); renderRecover(); if(window.dcJournal) window.dcJournal.render(); }
 
 /* ---------- auto-import (server side) ----------
    The Supabase Edge Function `sync-trades` reads each connected wallet's on-chain
@@ -2338,7 +2339,8 @@ async function buildChartsInBrowser(){
    pump.fun coins -> the server builds them in batches of 10 (second candles); other coins -> the browser queue. */
 function refreshCharts(ids){
   ids.forEach(id=>{ const t = trades.find(x=>x.id===id); if(!t) return;
-    document.querySelectorAll(`.card[data-id="${id}"] .mini`).forEach(el=>{ el.innerHTML = miniChart(t); }); });
+    document.querySelectorAll(`.card[data-id="${id}"] .mini, .jr-row[data-id="${id}"] .mini`).forEach(el=>{ el.innerHTML = miniChart(t); }); });
+  if(window.dcJournal) window.dcJournal.chartUpdated(ids);
 }
 const onScreen = new Set();
 const chartObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
@@ -2596,6 +2598,7 @@ function openDetail(id, refresh){
       </section>
 
       <section class="dt-side">
+        <div id="dtJournal" class="dt-jr"></div>
         <h3 class="dt-h">Trade</h3>
         <div class="dt-rows">
           ${size!=null ? row('Size in', '$'+size.toFixed(2)) : ''}
@@ -2627,6 +2630,7 @@ function openDetail(id, refresh){
       <button type="button" class="hbtn danger" id="dtDelete">DELETE</button>
     </div>
   </article>`;
+  if(window.dcJournal) window.dcJournal.detail(t);
   document.getElementById('btnShare').addEventListener('click', ()=>shareCard(t, meta));
   document.getElementById('dtCopy')?.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(t.mint); showToast('Address copied'); }catch(e){ showToast("Couldn't copy"); } });
   document.getElementById('dtDelete').addEventListener('click', async ()=>{
@@ -2766,6 +2770,7 @@ async function reload(){
   [trades, deletedTrades] = await Promise.all([store.getTrades(), store.getDeleted()]);
   connectedAccounts = await store.getAccounts(); if(!trades.length) renderEmptyHome();
   goalTarget = await store.getGoal();
+  if(window.dcJournal) await window.dcJournal.load();
   try{ checkDrops(); checkAchievementUnlocks(); checkQuestUnlocks(); }catch(e){}
   renderAll();
 }

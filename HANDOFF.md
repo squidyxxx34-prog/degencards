@@ -358,3 +358,13 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 ## Cartes ART : zone de hold + points exacts (2026-10-26)
 - Nouvelle option « Hold zone » dans Show (`hold`, désactivée par défaut, gratuite) : une colonne blanche légère derrière les bougies, du premier BUY au dernier SELL. Bords pointillés, fondue en haut et en bas, elle apparaît après les bougies dans la vidéo. Blanc uniquement, pas de cadre.
 - BUY / SELL : un point blanc à cœur sombre est posé sur la position exacte du fill (temps + market cap), et la pointe de la bulle s'arrête dessus. Avant, il n'y avait un point que quand la bulle était éloignée.
+
+## Journal (2026-11-02)
+- Onglet « Journal » (entre History et Achievements), `journal.js` chargé après `app.js` (utilise ses globales). Table `public.journal_entries` (une ligne par trade, PK `trade_id` → trades.id on delete cascade ; RLS : propres lignes, insert/update vérifient que le trade appartient à l'utilisateur ; checks de longueur, note ≤ 2000).
+- Page : période Today / 7D / 30D / All (mémorisée `dc_journal_p`), PnL net + barres par heure / jour / semaine, trades groupés par jour avec leur VRAI mini graphe (miniChart, chargé comme les cartes via chartObserver ; `refreshCharts` met aussi à jour `.jr-row .mini`), tags ou « + Add a note ».
+- Patterns (descriptif, sans conseil) : trades ouverts ≤ 15 min après une perte, par heure d'ouverture, par durée de hold, et par setup / mood / mistake dès 3 trades journalés.
+- Éditeur (`#journalOverlay`) : grand graphe réel (miniChart big avec colonne de hold), setups (multi), mood, plan suivi (yes / partly / no), mistakes, note. Tout vide = l'entrée est supprimée. Bloc « Journal » en haut de la colonne droite du détail du trade.
+
+## Liquid Glass (2026-11-02)
+- Couche en fin de `styles.css` : lumière ambiante fixe (`body::before`, violet + vert), surfaces translucides (`--surf`/`--surf2` en rgba), flou + liseré clair + ombre profonde sur les panneaux (hm-panel, acc-block, st-tile, sg, modales…), pas de flou sur les cartes (trop nombreuses). Header et onglets en pilule de verre, boutons / chips / segments en pilules, overlays avec scrim flouté, toast et bouton + NEW TRADE en verre.
+- Repli opaque si le navigateur ne sait pas flouter, ou avec `prefers-reduced-transparency` / `prefers-contrast: more`. Grilles à filet 1px (`.stats`, `.st-month`) : cellules sombres sur fond clair.

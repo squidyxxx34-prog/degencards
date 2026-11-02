@@ -181,6 +181,7 @@
       <button type="button" class="active" data-v="home" aria-current="page">Home</button>
       <button type="button" data-v="collection">Collection</button>
       <button type="button" data-v="history">History</button>
+      <button type="button" data-v="journal">Journal</button>
       <button type="button" data-v="achievements">Achievements</button>
       <button type="button" data-v="stats">Stats</button>
       <button type="button" data-v="ranks">Ranks</button>
@@ -313,6 +314,8 @@
       </table>
     </div>
   </div>
+
+  <div id="journalView" style="display:none;"></div>
 
   <div id="achievementsView" style="display:none;">
     <section class="aw-hero" id="awHero"></section>
@@ -467,6 +470,13 @@
 </div>
 
 <!-- DETAIL MODAL -->
+<div class="overlay" id="journalOverlay">
+  <div class="modal detail-modal jr-modal" role="dialog" aria-modal="true" aria-label="Journal entry">
+    <button class="closebtn" data-close aria-label="Close">×</button>
+    <div id="journalBody"></div>
+  </div>
+</div>
+
 <div class="overlay" id="detailOverlay">
   <div class="modal detail-modal" role="dialog" aria-modal="true" aria-label="Trade details">
     <button class="closebtn" data-close>×</button>
@@ -586,6 +596,7 @@
 <script src="https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off" async defer></script>
 <script src="/avatars.js" defer></script>
 <script src="/app.js" defer></script>
+<script src="/journal.js" defer></script>
 <script src="/share.js" defer></script>
 <script src="/replay.js" defer></script>
 <script src="/guide.js" defer></script>
