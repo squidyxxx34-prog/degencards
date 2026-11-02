@@ -368,3 +368,9 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 ## Liquid Glass (2026-11-02)
 - Couche en fin de `styles.css` : lumière ambiante fixe (`body::before`, violet + vert), surfaces translucides (`--surf`/`--surf2` en rgba), flou + liseré clair + ombre profonde sur les panneaux (hm-panel, acc-block, st-tile, sg, modales…), pas de flou sur les cartes (trop nombreuses). Header et onglets en pilule de verre, boutons / chips / segments en pilules, overlays avec scrim flouté, toast et bouton + NEW TRADE en verre.
 - Repli opaque si le navigateur ne sait pas flouter, ou avec `prefers-reduced-transparency` / `prefers-contrast: more`. Grilles à filet 1px (`.stats`, `.st-month`) : cellules sombres sur fond clair.
+
+## Journal en mode « desk » dense (2026-11-02, après retour de Maxence : plus packé, façon LiquidJournal)
+- Haut : 6 KPI en verre (Net P&L avec W/L, Win rate, Profit factor, Avg win / loss + ratio, Best trade + worst, Journaled + barre).
+- Calendrier du mois où chaque jour est une barre (P&L, nb trades, % win) + colonne Week ; navigation ‹ › (`calOff`). Mobile : 7 colonnes, sans Week.
+- Desk score 0-100 (moyenne de spokes : win rate vs 60 %, profit factor vs 2, ratio taille gain/perte vs 2, jours verts, plan suivi si journalé) avec le spoke le plus faible. Purement descriptif.
+- Trades en tableau compact (coin, in → out, hold, P&L + ROI, vrai mini graphe 44 px sans les étiquettes B/S du haut, tags) groupés par jour ; colonne droite collante : After a loss, Days that moved P&L, heure, hold, setup / mood / mistake.
