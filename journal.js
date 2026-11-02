@@ -124,7 +124,7 @@ function score(list){
     ['Win / loss size', Math.min(100, size / 2 * 100), size.toFixed(2) + '×'],
     ['Green days', 100 * [...days.values()].filter(v => v > 0).length / days.size, [...days.values()].filter(v => v > 0).length + ' / ' + days.size],
   ];
-  if(plans.length) sp.push(['Plan followed', 100 * plans.reduce((a, b) => a + b, 0) / plans.length, plans.length + ' journaled']);
+  if(plans.length) sp.push(['Plan followed', 100 * plans.reduce((a, b) => a + b, 0) / plans.length, Math.round(100 * plans.reduce((a, b) => a + b, 0) / plans.length) + '%']);
   return { v: Math.round(sp.reduce((a, s) => a + s[1], 0) / sp.length), spokes: sp, weak: sp.reduce((a, s) => s[1] < a[1] ? s : a) };
 }
 function calendar(all){
@@ -176,7 +176,7 @@ function render(){
       ${kpi('Net P&amp;L', list.length ? money(net) : '$0.00', net >= 0 ? 'pos' : 'neg', `${w.length} W · ${l.length} L`)}
       ${kpi('Win rate', list.length ? Math.round(100 * w.length / list.length) + '%' : '—', '', `${list.length} trades`)}
       ${kpi('Profit factor', pf == null ? (gw > 0 ? '∞' : '—') : pf.toFixed(2), pf != null && pf >= 1 ? 'pos' : pf != null ? 'neg' : '', 'gross win / gross loss')}
-      ${kpi('Avg win · loss', w.length || l.length ? `<span class="pos">${w.length ? short(gw / w.length) : '—'}</span> <span class="jr-kpi-sep">/</span> <span class="neg">${l.length ? short(-gl / l.length) : '—'}</span>` : '—', '', w.length && l.length ? `size ratio ${((gw / w.length) / (gl / l.length)).toFixed(2)}×` : 'per trade')}
+      ${kpi('Avg win', w.length ? short(gw / w.length) : '—', 'pos', l.length ? `avg loss <span class="neg">${short(-gl / l.length)}</span>${w.length ? ` · ${((gw / w.length) / (gl / l.length)).toFixed(2)}×` : ''}` : 'per winning trade')}
       ${kpi('Best trade', best ? short(best.pnl) : '—', best && best.pnl >= 0 ? 'pos' : 'neg', best ? `${esc(tk(best.ticker))} · worst <span class="neg">${short(worst.pnl)}</span>` : '')}
       ${kpi('Journaled', `${done}<span class="jr-kpi-sep">/${list.length}</span>`, '', `<span class="jr-kpi-prog"><i style="width:${list.length ? (100 * done / list.length).toFixed(0) : 0}%"></i></span>`)}
     </div>
@@ -191,7 +191,10 @@ function render(){
       </section>
       <section class="hm-panel jr-strip">
       <div class="jr-strip-h"><span class="hm-label">P&amp;L PER ${period === '1d' ? 'HOUR' : period === 'all' ? 'WEEK' : 'DAY'}</span><span class="jr-muted">${pLabel === 'Today' ? 'today' : pLabel === 'All' ? 'all time' : 'last ' + pLabel.replace('D', ' days')}</span></div>
-      <div class="jr-bars ${bs.length > 14 ? 'dense' : ''}" role="img" aria-label="P&amp;L per ${period === '1d' ? 'hour' : period === 'all' ? 'week' : 'day'}">${bs.map(b => `<div class="jr-bar" title="${esc(b.label)} · ${b.n} trades · ${money(b.v)}"><div class="jr-bar-col">${b.n ? `<i class="${b.v >= 0 ? 'up' : 'dn'}" style="height:${Math.max(5, Math.abs(b.v) / bmax * 50).toFixed(1)}%"></i>` : ''}</div>${bs.length <= 14 ? `<span class="jr-bar-v ${b.v >= 0 ? 'pos' : 'neg'}">${b.n ? short(b.v) : '·'}</span><span class="jr-bar-l">${esc(b.label)}</span>` : ''}</div>`).join('')}</div>
+      <div class="jr-bars ${bs.length > 7 ? 'dense' : ''}" role="img" aria-label="P&amp;L per ${period === '1d' ? 'hour' : period === 'all' ? 'week' : 'day'}">${bs.map((b, i) => { const step = Math.ceil(bs.length / 4), lab = bs.length <= 7 || i % step === 0;
+        return `<div class="jr-bar" title="${esc(b.label)} · ${b.n} trades · ${money(b.v)}"><div class="jr-bar-col">${b.n ? `<i class="${b.v >= 0 ? 'up' : 'dn'}" style="height:${Math.max(5, Math.abs(b.v) / bmax * 50).toFixed(1)}%"></i>` : ''}</div>${bs.length <= 7 ? `<span class="jr-bar-v ${b.v >= 0 ? 'pos' : 'neg'}">${b.n ? short(b.v) : '·'}</span>` : ''}<span class="jr-bar-l">${lab ? esc(b.label) : '&nbsp;'}</span></div>`; }).join('')}</div>
+      ${bs.length > 7 ? (() => { const nz = bs.filter(b => b.n), hi = nz.length ? nz.reduce((a, b) => b.v > a.v ? b : a) : null, lo = nz.length ? nz.reduce((a, b) => b.v < a.v ? b : a) : null;
+        return hi ? `<div class="jr-bars-sum"><span>Best <b class="${hi.v >= 0 ? 'pos' : 'neg'}">${short(hi.v)}</b> ${esc(hi.label)}</span><span>Worst <b class="${lo.v >= 0 ? 'pos' : 'neg'}">${short(lo.v)}</b> ${esc(lo.label)}</span></div>` : ''; })() : ''}
     </section>
       </div>
     </div>
