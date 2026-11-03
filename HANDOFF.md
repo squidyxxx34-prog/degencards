@@ -374,3 +374,6 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - Calendrier du mois où chaque jour est une barre (P&L, nb trades, % win) + colonne Week ; navigation ‹ › (`calOff`). Mobile : 7 colonnes, sans Week.
 - Desk score 0-100 (moyenne de spokes : win rate vs 60 %, profit factor vs 2, ratio taille gain/perte vs 2, jours verts, plan suivi si journalé) avec le spoke le plus faible. Purement descriptif.
 - Trades en tableau compact (coin, in → out, hold, P&L + ROI, vrai mini graphe 44 px sans les étiquettes B/S du haut, tags) groupés par jour ; colonne droite collante : After a loss, Days that moved P&L, heure, hold, setup / mood / mistake.
+
+## Liquid Glass v2 (2026-11-03, « + de liquid glass »)
+- Couche finale de `styles.css` : lumière ambiante plus riche (violet, indigo, vert), surfaces plus claires en haut, liseré spéculaire + lueur interne + base sombre (`--lg-rim`) et grande ombre (`--lg-drop`) sur tous les panneaux, KPI, cartes ; flou 30 px + saturation 200 %. Pilules brillantes (`--lg-pill`, actif `--lg-pill-on`) pour onglets, chips, boutons, segments ; modales plus translucides (flou 44 px). Pas de pseudo-éléments ajoutés. Replis opaques conservés.
