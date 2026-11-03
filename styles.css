@@ -1790,3 +1790,77 @@ nav button.active{background:var(--lg-pill-on); box-shadow:inset 0 1px 0 rgba(25
   :root{--surf:#141419; --surf2:#1D1D25; --glass-strong:#17161F; --lg-pill:#1D1D25; --lg-pill-on:#2C2C36;}
   .modal{background:#17161F;}
 }
+
+/* ============================================================================
+   LIQUID MOTION (2026-11-03): the light behind the glass drifts, the tab lens slides, glass catches the pointer,
+   cards tilt, pages rise in, bars and dials grow. All off with prefers-reduced-motion. (JS: motion.js)
+   ============================================================================ */
+body::before{inset:-14%; will-change:transform; animation:lgDrift 46s ease-in-out infinite alternate;}
+@keyframes lgDrift{
+  0%{transform:translate3d(0,0,0) scale(1) rotate(0deg);}
+  33%{transform:translate3d(3.5%,2.5%,0) scale(1.06) rotate(4deg);}
+  66%{transform:translate3d(-3%,4%,0) scale(1.03) rotate(-3deg);}
+  100%{transform:translate3d(2%,-3%,0) scale(1.08) rotate(2deg);}}
+
+/* the current tab: one glass lens that slides and stretches between tabs */
+nav{position:relative;}
+nav.has-pill button{position:relative; z-index:1; background:none !important; box-shadow:none !important;}
+.nav-pill{position:absolute; left:0; top:4px; width:0; border-radius:999px; pointer-events:none; opacity:0; z-index:0;
+  background:var(--lg-pill-on); box-shadow:inset 0 1px 0 rgba(255,255,255,.6), inset 0 -1px 0 rgba(255,255,255,.08), inset 0 10px 16px -10px rgba(255,255,255,.35), 0 8px 18px -10px rgba(0,0,0,.9);
+  transition:transform .42s cubic-bezier(.34,1.45,.5,1), width .42s cubic-bezier(.34,1.45,.5,1), opacity .2s;}
+.nav-pill.no-anim{transition:none;}
+
+/* light that follows the pointer on glass */
+.hm-panel,.acc-block,.st-tile,.jr-kpi,.sg,.levelbar,.hm-sync,.aw-next,.jr-row,.authbox,#landing .lp-feat > div,#landing .lp-steps li,#landing figure{position:relative;}
+.card::after,.hm-panel::after,.acc-block::after,.st-tile::after,.jr-kpi::after,.sg::after,.levelbar::after,.goal-card::after,.hm-sync::after,.aw-next::after,.jr-row::after,.authbox::after,
+#landing .lp-feat > div::after,#landing .lp-steps li::after,#landing figure::after{
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0; transition:opacity .35s;
+  background:radial-gradient(320px circle at var(--mx,50%) var(--my,0%), rgba(255,255,255,.13), rgba(255,255,255,.04) 40%, transparent 70%);}
+.lg-lit::after{opacity:1;}
+.card::after{z-index:2; background:radial-gradient(260px circle at var(--mx,50%) var(--my,0%), rgba(255,255,255,.2), rgba(255,255,255,.05) 38%, transparent 66%);}
+@media(hover:hover){
+  .card{transition:transform .45s cubic-bezier(.34,1.45,.5,1), box-shadow .3s;}
+  .card:hover{transform:translateY(-5px) perspective(900px) rotateX(var(--rx,1.5deg)) rotateY(var(--ry,-1.5deg));}
+  .hm-panel,.acc-block,.st-tile,.jr-kpi,.sg,.aw-next{transition:transform .45s cubic-bezier(.34,1.45,.5,1), box-shadow .3s, border-color .3s;}
+  .jr-kpi:hover,.st-tile:hover,.aw-next:hover{transform:translateY(-3px);}
+  .chip:hover,.hm-btn:hover,.hbtn:hover,.btn-connect:hover,.jr-chip:hover{transform:translateY(-1px);}
+}
+
+/* pages rise in, piece by piece */
+@keyframes lgIn{from{opacity:0; transform:translateY(14px) scale(.985);} to{opacity:1; transform:none;}}
+.lg-enter > *,.lg-enter .jr-kpis > *,.lg-enter .jr-row2 > *,.lg-enter .jr-rcol > *,.lg-enter .jr-side > *,.lg-enter .grid > .card{animation:lgIn .7s cubic-bezier(.2,.9,.25,1.08) both;}
+.lg-enter > *:nth-child(2){animation-delay:.05s} .lg-enter > *:nth-child(3){animation-delay:.1s} .lg-enter > *:nth-child(4){animation-delay:.15s}
+.lg-enter > *:nth-child(5){animation-delay:.2s} .lg-enter > *:nth-child(6){animation-delay:.25s} .lg-enter > *:nth-child(n+7){animation-delay:.3s}
+.lg-enter .jr-kpis > *:nth-child(1){animation-delay:.06s} .lg-enter .jr-kpis > *:nth-child(2){animation-delay:.1s} .lg-enter .jr-kpis > *:nth-child(3){animation-delay:.14s}
+.lg-enter .jr-kpis > *:nth-child(4){animation-delay:.18s} .lg-enter .jr-kpis > *:nth-child(5){animation-delay:.22s} .lg-enter .jr-kpis > *:nth-child(6){animation-delay:.26s}
+.lg-enter .grid > .card:nth-child(2){animation-delay:.05s} .lg-enter .grid > .card:nth-child(3){animation-delay:.1s} .lg-enter .grid > .card:nth-child(4){animation-delay:.15s}
+.lg-enter .grid > .card:nth-child(5){animation-delay:.2s} .lg-enter .grid > .card:nth-child(6){animation-delay:.25s} .lg-enter .grid > .card:nth-child(n+7){animation-delay:.3s}
+
+/* bars, gauges and dials grow in */
+@keyframes lgGrowY{from{scale:1 0;}} @keyframes lgGrowX{from{scale:0 1;}} @keyframes lgDial{from{stroke-dasharray:0 300;}} @keyframes lgPop{from{scale:.4; opacity:0;}}
+.jr-bar-col i,.jr-cd-bar i{animation:lgGrowY .8s cubic-bezier(.2,.9,.25,1.15) both;}
+.jr-bar-col i.up,.jr-cd-bar i{transform-origin:50% 100%;} .jr-bar-col i.dn{transform-origin:50% 0;}
+.jr-bar:nth-child(2n) i{animation-delay:.05s} .jr-bar:nth-child(3n) i{animation-delay:.1s}
+.jr-g-track i,.jr-spoke em,.jr-kpi-prog i,.jr-prog i{animation:lgGrowX .9s cubic-bezier(.2,.9,.25,1.1) both;}
+.jr-g-track i.up,.jr-spoke em,.jr-kpi-prog i,.jr-prog i{transform-origin:0 50%;} .jr-g-track i.dn{transform-origin:100% 50%;}
+.jr-dial circle + circle{animation:lgDial 1.2s cubic-bezier(.2,.9,.25,1) both;}
+.jr-dots i{animation:lgPop .5s cubic-bezier(.34,1.56,.64,1) both;}
+.jr-dots i:nth-child(2n){animation-delay:.04s} .jr-dots i:nth-child(3n){animation-delay:.08s} .jr-dots i:nth-child(4n){animation-delay:.12s}
+
+/* sheets: rise with a spring */
+.modal{transform:translateY(22px) scale(.95); opacity:.6; transition:transform .5s cubic-bezier(.34,1.45,.5,1), opacity .25s;}
+.overlay.show .modal{transform:none; opacity:1;}
+.goal-modal{opacity:0;}
+/* the + NEW TRADE button floats */
+@keyframes lgFloat{0%,100%{translate:0 0;} 50%{translate:0 -3px;}}
+.fab-new{animation:lgFloat 4.5s ease-in-out infinite;}
+/* the live dot breathes in glass */
+.hm-live{box-shadow:0 0 0 0 rgba(61,255,160,.5);}
+
+@media(prefers-reduced-motion:reduce){
+  body::before,.fab-new,.lg-enter > *,.lg-enter .jr-kpis > *,.lg-enter .jr-row2 > *,.lg-enter .jr-rcol > *,.lg-enter .jr-side > *,.lg-enter .grid > .card,
+  .jr-bar-col i,.jr-cd-bar i,.jr-g-track i,.jr-spoke em,.jr-kpi-prog i,.jr-prog i,.jr-dial circle + circle,.jr-dots i{animation:none !important;}
+  .nav-pill,.modal,.card{transition:none !important;}
+  .card::after,.hm-panel::after,.acc-block::after,.st-tile::after,.jr-kpi::after,.sg::after,.levelbar::after,.goal-card::after,.hm-sync::after,.aw-next::after,.jr-row::after,.authbox::after{display:none;}
+}
+.goal-overlay .goal-modal{transform:translateY(100%);} .goal-overlay.show .goal-modal{transform:translateY(0);}

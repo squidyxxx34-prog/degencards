@@ -377,3 +377,7 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 
 ## Liquid Glass v2 (2026-11-03, « + de liquid glass »)
 - Couche finale de `styles.css` : lumière ambiante plus riche (violet, indigo, vert), surfaces plus claires en haut, liseré spéculaire + lueur interne + base sombre (`--lg-rim`) et grande ombre (`--lg-drop`) sur tous les panneaux, KPI, cartes ; flou 30 px + saturation 200 %. Pilules brillantes (`--lg-pill`, actif `--lg-pill-on`) pour onglets, chips, boutons, segments ; modales plus translucides (flou 44 px). Pas de pseudo-éléments ajoutés. Replis opaques conservés.
+
+## Liquid motion (2026-11-03)
+- `motion.js` (chargé après journal.js) : lentille de verre `.nav-pill` qui glisse et s'étire entre les onglets ; reflet qui suit la souris sur les surfaces de verre (`--mx`/`--my`, classe `lg-lit`, `::after`) et inclinaison 3D des cartes (`--rx`/`--ry`) ; classe `lg-enter` posée sur une vue quand elle s'ouvre (apparition en cascade).
+- CSS « LIQUID MOTION » : lumière ambiante qui dérive lentement (`body::before`, 46 s), barres / jauges / cadran du journal qui poussent, modales qui montent avec un ressort, bouton + NEW TRADE qui flotte. Tout est coupé avec prefers-reduced-motion ; reflet et inclinaison seulement à la souris.
