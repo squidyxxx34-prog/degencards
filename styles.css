@@ -1864,3 +1864,19 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
   .card::after,.hm-panel::after,.acc-block::after,.st-tile::after,.jr-kpi::after,.sg::after,.levelbar::after,.goal-card::after,.hm-sync::after,.aw-next::after,.jr-row::after,.authbox::after{display:none;}
 }
 .goal-overlay .goal-modal{transform:translateY(100%);} .goal-overlay.show .goal-modal{transform:translateY(0);}
+
+/* journal: full dollars with cents in the side lists, compact $ in the calendar */
+.jr-g{grid-template-columns:minmax(0,1.2fr) minmax(36px,.8fr) auto 42px;}
+.jr-g b{min-width:78px;}
+.jr-kpi-v{font-size:19px;}
+.jr-cd b{font-size:11px; letter-spacing:-.04em;}
+.jr-cd.wk b{font-size:11px;}
+@media(max-width:640px){ .jr-cd b{font-size:8.5px; letter-spacing:-.05em; padding-right:6px;} }
+/* bar values with cents: alternate on two lines so neighbours never touch */
+.jr-bar-v{display:flex; justify-content:center; height:26px; white-space:nowrap; overflow:visible;}
+.jr-bar:nth-child(odd) .jr-bar-v{align-items:flex-start;} .jr-bar:nth-child(even) .jr-bar-v{align-items:flex-end;}
+.jr-rcol .jr-bar-v{font-size:9px;}
+
+.jr-cmp{display:none;}
+@media(max-width:1180px){ .jr-cd .jr-full{display:none;} .jr-cd .jr-cmp{display:inline;} }
+.jr-cal-g{grid-template-columns:repeat(8,minmax(0,1fr));} @media(max-width:640px){ .jr-cal-g{grid-template-columns:repeat(7,minmax(0,1fr));} } .jr-cd b{padding-right:8px;}

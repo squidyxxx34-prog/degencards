@@ -22,7 +22,9 @@ let limit = PAGE, editing = null, draft = null, saving = false;
 const pick = (v, list) => list.includes(v) ? v : null;
 const picks = (a, list) => Array.isArray(a) ? [...new Set(a.filter(x => list.includes(x)))] : [];
 const money = v => (v < 0 ? '−$' : '+$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const short = v => { const a = Math.abs(v), s = v < 0 ? '−' : '+'; return a >= 1e6 ? s + (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? s + (a / 1e3).toFixed(a >= 1e4 ? 1 : 2) + 'K' : s + a.toFixed(0); };
+// compact $ with 2 decimals for tight spots: +$302.40 · +$1.71K · −$29.92K · +$1.23M
+const short = v => { const a = Math.abs(v), sg = v < 0 ? '−$' : '+$';
+  return a >= 1e6 ? sg + (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? sg + (a / 1e3).toFixed(2) + 'K' : sg + a.toFixed(2); };
 const has = e => !!(e && (e.setups.length || e.mood || e.plan || e.mistakes.length || e.note));
 const opened = t => t.timestamp - (t.holdTime || 0) * 1000;
 
@@ -91,7 +93,7 @@ function barRows(gs){
   return gs.map(g => `<div class="jr-g">
       <span class="jr-g-l">${esc(g.label)}</span>
       <span class="jr-g-track" aria-hidden="true"><i class="${g.v >= 0 ? 'up' : 'dn'}" style="width:${Math.max(1.5, Math.abs(g.v) / max * 50).toFixed(1)}%"></i></span>
-      <b class="${g.v >= 0 ? 'pos' : 'neg'}">${short(g.v)}</b>
+      <b class="${g.v >= 0 ? 'pos' : 'neg'}">${money(g.v)}</b>
       <span class="jr-g-meta">${g.n} · ${Math.round(100 * g.wins / g.n)}%</span></div>`).join('');
 }
 function tagChips(e){
@@ -145,8 +147,8 @@ function calendar(all){
     <div class="jr-cal-g">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Week'].map(d => `<span class="jr-cal-dn${d === 'Week' ? ' wk' : ''}">${d}</span>`).join('')}
       ${weeks.map((wk, wi) => { const wv = wk.reduce((a, d) => a + (d && byDay.get(d) ? byDay.get(d).v : 0), 0), wn = wk.reduce((a, d) => a + (d && byDay.get(d) ? byDay.get(d).n : 0), 0);
         return wk.map(d => { if(!d) return '<span class="jr-cd out"></span>'; const c = byDay.get(d);
-          return `<span class="jr-cd${c ? (c.v >= 0 ? ' up' : ' dn') : ''}${isToday(d) ? ' today' : ''}" title="${c ? `${c.n} trades · ${money(c.v)}` : 'No trade'}"><i class="jr-cd-n">${d}</i>${c ? `<span class="jr-cd-bar"><i style="height:${Math.max(8, Math.abs(c.v) / max * 100).toFixed(0)}%"></i></span><b>${short(c.v)}</b><em>${c.n} tr · ${Math.round(100 * c.w / c.n)}%</em>` : ''}</span>`; }).join('')
-          + `<span class="jr-cd wk"><i class="jr-cd-n">W${wi + 1}</i>${wn ? `<b class="${wv >= 0 ? 'pos' : 'neg'}">${short(wv)}</b><em>${wn} tr</em>` : ''}</span>`; }).join('')}</div>
+          return `<span class="jr-cd${c ? (c.v >= 0 ? ' up' : ' dn') : ''}${isToday(d) ? ' today' : ''}" title="${c ? `${c.n} trades · ${money(c.v)}` : 'No trade'}"><i class="jr-cd-n">${d}</i>${c ? `<span class="jr-cd-bar"><i style="height:${Math.max(8, Math.abs(c.v) / max * 100).toFixed(0)}%"></i></span><b><span class="jr-full">${money(c.v)}</span><span class="jr-cmp">${short(c.v)}</span></b><em>${c.n} tr · ${Math.round(100 * c.w / c.n)}%</em>` : ''}</span>`; }).join('')
+          + `<span class="jr-cd wk"><i class="jr-cd-n">W${wi + 1}</i>${wn ? `<b class="${wv >= 0 ? 'pos' : 'neg'}"><span class="jr-full">${money(wv)}</span><span class="jr-cmp">${short(wv)}</span></b><em>${wn} tr</em>` : ''}</span>`; }).join('')}</div>
   </section>`;
 }
 function render(){
@@ -176,8 +178,8 @@ function render(){
       ${kpi('Net P&amp;L', list.length ? money(net) : '$0.00', net >= 0 ? 'pos' : 'neg', `${w.length} W · ${l.length} L`)}
       ${kpi('Win rate', list.length ? Math.round(100 * w.length / list.length) + '%' : '—', '', `${list.length} trades`)}
       ${kpi('Profit factor', pf == null ? (gw > 0 ? '∞' : '—') : pf.toFixed(2), pf != null && pf >= 1 ? 'pos' : pf != null ? 'neg' : '', 'gross win / gross loss')}
-      ${kpi('Avg win', w.length ? short(gw / w.length) : '—', 'pos', l.length ? `avg loss <span class="neg">${short(-gl / l.length)}</span>${w.length ? ` · ${((gw / w.length) / (gl / l.length)).toFixed(2)}×` : ''}` : 'per winning trade')}
-      ${kpi('Best trade', best ? short(best.pnl) : '—', best && best.pnl >= 0 ? 'pos' : 'neg', best ? `${esc(tk(best.ticker))} · worst <span class="neg">${short(worst.pnl)}</span>` : '')}
+      ${kpi('Avg win', w.length ? money(gw / w.length) : '—', 'pos', l.length ? `avg loss <span class="neg">${money(-gl / l.length)}</span>${w.length ? ` · ${((gw / w.length) / (gl / l.length)).toFixed(2)}×` : ''}` : 'per winning trade')}
+      ${kpi('Best trade', best ? money(best.pnl) : '—', best && best.pnl >= 0 ? 'pos' : 'neg', best ? `${esc(tk(best.ticker))} · worst <span class="neg">${money(worst.pnl)}</span>` : '')}
       ${kpi('Journaled', `${done}<span class="jr-kpi-sep">/${list.length}</span>`, '', `<span class="jr-kpi-prog"><i style="width:${list.length ? (100 * done / list.length).toFixed(0) : 0}%"></i></span>`)}
     </div>
     <div class="jr-row2">
@@ -211,7 +213,7 @@ function render(){
         ${P.after ? `<section class="hm-panel jr-pat jr-after"><span class="jr-k">AFTER A LOSS</span><p>${P.after.n} trades opened ≤ 15 min after a losing trade</p>
           <div class="jr-after-v"><b class="${P.after.v >= 0 ? 'pos' : 'neg'}">${money(P.after.v)}</b><span>${P.after.wins} / ${P.after.n} green</span></div>
           <div class="jr-dots" aria-hidden="true">${Array.from({ length: Math.min(P.after.n, 24) }, (_, i) => `<i class="${i < Math.round(P.after.wins * Math.min(P.after.n, 24) / P.after.n) ? 'up' : 'dn'}"></i>`).join('')}</div></section>` : ''}
-        ${movers.length ? `<section class="hm-panel jr-pat"><h3>Days that moved P&amp;L</h3>${movers.map(d => `<div class="jr-g"><span class="jr-g-l">${new Date(d.ts).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span><span class="jr-g-track" aria-hidden="true"><i class="${d.v >= 0 ? 'up' : 'dn'}" style="width:${Math.max(1.5, Math.abs(d.v) / mmax * 50).toFixed(1)}%"></i></span><b class="${d.v >= 0 ? 'pos' : 'neg'}">${short(d.v)}</b><span class="jr-g-meta">${d.n} tr</span></div>`).join('')}</section>` : ''}
+        ${movers.length ? `<section class="hm-panel jr-pat"><h3>Days that moved P&amp;L</h3>${movers.map(d => `<div class="jr-g"><span class="jr-g-l">${new Date(d.ts).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span><span class="jr-g-track" aria-hidden="true"><i class="${d.v >= 0 ? 'up' : 'dn'}" style="width:${Math.max(1.5, Math.abs(d.v) / mmax * 50).toFixed(1)}%"></i></span><b class="${d.v >= 0 ? 'pos' : 'neg'}">${money(d.v)}</b><span class="jr-g-meta">${d.n} tr</span></div>`).join('')}</section>` : ''}
         <section class="hm-panel jr-pat"><h3>By time of day</h3>${barRows(P.tod)}</section>
         <section class="hm-panel jr-pat"><h3>By hold time</h3>${barRows(P.hold)}</section>
         ${tagGroups.length ? tagGroups.map(([k, gs]) => `<section class="hm-panel jr-pat"><h3>By ${k.toLowerCase()}</h3>${barRows(gs.slice(0, 6))}</section>`).join('')
