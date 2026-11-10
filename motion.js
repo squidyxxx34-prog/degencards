@@ -30,7 +30,8 @@ function navPill(){
     last = { x, w };
     if(instant || still()) requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.remove('no-anim')));
   };
-  new MutationObserver(() => place(false)).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  // the lens is a child of the rail: its own class changes must never re-run place() (with reduced motion that looped until the tab froze)
+  new MutationObserver(ms => { if(ms.some(m => m.target !== pill)) place(false); }).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
   window.addEventListener('resize', () => place(true));
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => place(true));
   const app = document.getElementById('app');

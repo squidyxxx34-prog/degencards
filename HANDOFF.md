@@ -381,3 +381,12 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 ## Liquid motion (2026-11-03)
 - `motion.js` (chargé après journal.js) : lentille de verre `.nav-pill` qui glisse et s'étire entre les onglets ; reflet qui suit la souris sur les surfaces de verre (`--mx`/`--my`, classe `lg-lit`, `::after`) et inclinaison 3D des cartes (`--rx`/`--ry`) ; classe `lg-enter` posée sur une vue quand elle s'ouvre (apparition en cascade).
 - CSS « LIQUID MOTION » : lumière ambiante qui dérive lentement (`body::before`, 46 s), barres / jauges / cadran du journal qui poussent, modales qui montent avec un ressort, bouton + NEW TRADE qui flotte. Tout est coupé avec prefers-reduced-motion ; reflet et inclinaison seulement à la souris.
+
+## Liquid Blue (2026-11-10) : Home et Journal uniquement
+- Thème repris d'une maquette « Liquid glass interface » fournie par Maxence : fond bleu nuit avec grands pétales bleus, verre dépoli bleu à liseré clair, tuiles de verre imbriquées, pastilles à contour (l'active en blanc plein), une seule police sans (chiffres compris, tabulaires), accents blanc / pervenche à la place du violet et de l'or. Vert / rouge du PnL gardés.
+- Portée : tout est scopé à `#homeView` / `#journalView` (bloc « LIQUID BLUE » en fin de styles.css). Les autres pages, les feuilles (détail, éditeur du journal), la landing et les cartes de trade (`#homeView .card` remet ses variables) gardent leur look.
+- Fond : calque `.lq-bg` (1er enfant de `#app`), image `/lp/liquid-blue.webp` (20 Ko, générée), affiché quand `#app[data-theme="blue"]` ; `goToView` pose `data-theme` (blue pour home / journal, vide sinon), fondu de 0,6 s entre les deux ambiances. L'en-tête prend une teinte marine sur ces deux pages.
+- Variables locales : `--mono` = police sans, `--purple` = pervenche, `--lq-fill` / `--lq-tile` / `--lq-edge` / `--lq-bar`. Replis : sans backdrop-filter ou transparence réduite = surfaces marine pleines, fond uni ; reduced motion = fond fixe.
+- Au passage : calendrier du Journal sur téléphone, le montant du jour n'est plus coupé (« +$1… ») ; colonnes des listes latérales alignées.
+- Correctif motion.js : avec « réduire les animations », la lentille des onglets relançait son propre observateur en boucle jusqu'à figer l'onglet (l'observateur ignore maintenant les changements de classe de la lentille).
+- Banc de test visuel (hors repo) : Playwright + faux `vendor/supabase.js` (session + 64 trades factices), captures Home / Journal en 1440 et 390 px, avec et sans reduced motion.

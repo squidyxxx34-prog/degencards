@@ -1880,3 +1880,130 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 .jr-cmp{display:none;}
 @media(max-width:1180px){ .jr-cd .jr-full{display:none;} .jr-cd .jr-cmp{display:inline;} }
 .jr-cal-g{grid-template-columns:repeat(8,minmax(0,1fr));} @media(max-width:640px){ .jr-cal-g{grid-template-columns:repeat(7,minmax(0,1fr));} } .jr-cd b{padding-right:8px;}
+
+/* ============================================================================
+   LIQUID BLUE (2026-11-10): Home and Journal only.
+   Deep navy with big folded blue petals behind; frosted blue glass with a thin bright edge; nested glass tiles;
+   outlined pills, the current one solid white; one sans typeface, figures included; white / periwinkle accents.
+   Everything is scoped to #homeView / #journalView (+ the backdrop layer shown while one of them is open):
+   the other pages, the trade cards, the sheets and the landing keep their own look. (JS: goToView sets #app[data-theme])
+   ============================================================================ */
+.lq-bg{position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; background:#05061C; opacity:0; visibility:hidden; transition:opacity .6s ease, visibility 0s .6s;}
+#app[data-theme="blue"] .lq-bg{opacity:1; visibility:visible; transition:opacity .6s ease;}
+.lq-bg::before{content:""; position:absolute; inset:-9%; background:#070928 url(/lp/liquid-blue.webp) 50% 50% / cover no-repeat; will-change:transform; animation:lqDrift 64s ease-in-out infinite alternate;}
+.lq-bg::after{content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(4,5,26,.5) 0%, rgba(4,5,26,.26) 34%, rgba(4,5,26,.5) 100%);}
+@keyframes lqDrift{
+  0%{transform:translate3d(0,0,0) scale(1) rotate(0deg);}
+  50%{transform:translate3d(-2.5%,2%,0) scale(1.05) rotate(1.6deg);}
+  100%{transform:translate3d(2.5%,-2%,0) scale(1.08) rotate(-1.4deg);}}
+#app[data-theme="blue"] header{background:linear-gradient(180deg, rgba(9,12,58,.56), rgba(7,9,44,.34)); box-shadow:inset 0 -1px 0 rgba(255,255,255,.12), 0 10px 30px -20px rgba(2,3,30,.9);}
+#app[data-theme="blue"] footer{color:#B7C1EC;}
+
+:is(#homeView,#journalView){
+  --tx2:#BCC6F0; --purple:#AFC2FF; --red:#FF8090; --border:rgba(255,255,255,.26);
+  --surf:rgba(150,170,255,.10); --surf2:rgba(190,204,255,.17); --mono:var(--font);
+  --lq-fill:linear-gradient(155deg, rgba(150,170,255,.24) 0%, rgba(58,74,200,.20) 44%, rgba(16,22,104,.34) 100%);
+  --lq-tile:rgba(255,255,255,.075); --lq-edge:rgba(255,255,255,.34); --lq-edge2:rgba(255,255,255,.2);
+  --lq-rim:inset 0 1px 0 rgba(255,255,255,.4), inset 0 26px 36px -30px rgba(255,255,255,.2), inset 0 -30px 40px -34px rgba(2,3,40,.6);
+  --lq-drop:0 30px 64px -38px rgba(2,3,30,.95);
+  --lq-blur:blur(28px) saturate(165%);
+  --lq-bar:linear-gradient(90deg, #FFFFFF, #9DB4FF);
+  font-feature-settings:"tnum";
+}
+/* the trade cards stay the same object as in the Collection */
+#homeView .card{--tx2:#ADADB8; --purple:#C09EFF; --border:rgba(255,255,255,.16); --surf:rgba(255,255,255,.065); --surf2:rgba(255,255,255,.12); --mono:'JetBrains Mono', monospace; font-feature-settings:normal;}
+
+/* glass */
+:is(#homeView,#journalView) :is(.hm-panel,.levelbar,.lvl-detail,.goal-card,.hm-sync,.hm-claim,.hm-best,.jr-kpi){
+  background:var(--lq-fill); border:1px solid var(--lq-edge); box-shadow:var(--lq-rim), var(--lq-drop);
+  -webkit-backdrop-filter:var(--lq-blur); backdrop-filter:var(--lq-blur);}
+#homeView :is(.hm-panel,.goal-card,.hm-best,.hm-claim){border-radius:30px;}
+#homeView :is(.levelbar,.lvl-detail,.hm-sync){border-radius:26px;}
+#journalView .jr-kpi{border-radius:22px;}
+#journalView .hm-panel{border-radius:26px;}
+#homeView .goal-card::before{background:radial-gradient(circle, rgba(175,194,255,.3), transparent 70%);}
+
+/* type: one sans, lighter figures */
+:is(#homeView,#journalView) :is(.hm-title,.jr-title){font-weight:700; letter-spacing:-.04em;}
+#homeView .hm-dot{color:#8FA6FF;}
+:is(#homeView,#journalView) .hm-kicker{font-weight:600; letter-spacing:.16em; color:var(--tx2);}
+:is(#homeView,#journalView) :is(.hm-label,.goal-label,.jr-kpi-l,.jr-thead,.ins-h,.jr-cal-dn){font-weight:600; letter-spacing:.13em; color:#D6DEFF;}
+#homeView .hm-label.gold{color:#fff;}
+:is(#homeView,#journalView) :is(.hm-pnl-big,.hm-best-pnl,.ins-rv-pnl,.goal-amounts,.jr-kpi-v,.jr-after-v b,.jr-cal-sum b,.hm-streak-main b,.hm-stats .v,.jr-dial b,.q-head b){font-weight:600; letter-spacing:-.03em;}
+#homeView .hm-pnl-big{letter-spacing:-.045em;}
+#homeView .sectionhead h2{font-weight:600; letter-spacing:.02em;}
+#homeView .hm-link{color:#CBD6FF;}
+
+/* pills: outlined, the current one solid white */
+:is(#homeView,#journalView) .hm-periods{background:none; border:0; box-shadow:none; padding:0; gap:6px;}
+:is(#homeView,#journalView) .hm-periods button{min-height:34px; padding:0 14px; border-radius:999px; border:1px solid rgba(255,255,255,.42); background:rgba(255,255,255,.05); color:#E8EDFF; font-weight:600; box-shadow:none; transition:background .2s, color .2s, border-color .2s, transform .2s var(--spring);}
+:is(#homeView,#journalView) .hm-periods button:hover{border-color:#fff;}
+:is(#homeView,#journalView) .hm-periods button.on{background:#fff; border-color:#fff; color:#0A0E3C; box-shadow:0 10px 22px -12px rgba(255,255,255,.7);}
+:is(#homeView,#journalView) :is(.hm-btn:not(.primary),.hbtn,.chip){border-radius:999px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.42); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.28);}
+:is(#homeView,#journalView) :is(.hm-btn:not(.primary),.hbtn,.chip):hover{border-color:#fff; background:rgba(255,255,255,.13);}
+:is(#homeView,#journalView) .hm-btn.primary{border-radius:999px; background:#fff; border-color:#fff; color:#0A0E3C; box-shadow:inset 0 -2px 6px rgba(10,14,60,.1), 0 12px 26px -12px rgba(255,255,255,.6);}
+:is(#homeView,#journalView) .hm-btn.primary:hover{background:#DDE5FF; border-color:#DDE5FF;}
+:is(#homeView,#journalView) :is(.hm-btn,.hm-link,.hm-periods button,.jr-row):focus-visible{outline:2px solid #fff; outline-offset:2px;}
+
+/* nested glass tiles */
+#homeView .hm-stats{background:none; border:0; border-radius:0; box-shadow:none; gap:10px; overflow:visible; -webkit-backdrop-filter:none; backdrop-filter:none;}
+#homeView .hm-stats .stat{background:var(--lq-tile); border:1px solid var(--lq-edge2); border-radius:20px; box-shadow:inset 0 1px 0 rgba(255,255,255,.22);}
+#homeView .rp-focus{background:var(--lq-tile); border:1px solid var(--lq-edge2); border-radius:20px; box-shadow:inset 0 1px 0 rgba(255,255,255,.22);}
+#homeView .rp-focus span{color:#fff;}
+#homeView .rp-ai{background:rgba(255,255,255,.18); color:#fff;}
+#homeView .q-ic{background:var(--lq-tile); border-color:var(--lq-edge2); border-radius:14px; color:#fff;}
+#homeView .hm-tip{background:rgba(8,11,56,.92); border-color:var(--lq-edge2); border-radius:12px;}
+#homeView .hm-cursor{border-color:#0A0E3C;}
+
+/* bars, rings and rules */
+#homeView .levelbar .lvl{color:#fff;}
+:is(#homeView,#journalView) :is(.levelbar .track,.q-bar,.ins-bar,.jr-kpi-prog,.jr-prog,.jr-g-track,.jr-spoke i){background:rgba(255,255,255,.15);}
+:is(#homeView,#journalView) :is(.levelbar .fill,.q-bar i,.jr-kpi-prog i,.jr-prog i,.jr-spoke em){background:var(--lq-bar);}
+#homeView .q-row.done .q-bar i{background:var(--green);}
+#journalView .jr-spoke.weak em{background:var(--red);} #journalView .jr-spoke.weak span{color:#FFC2CA;}
+#goalGradHome stop{stop-color:#fff;} #goalGradHome stop + stop{stop-color:#8FA6FF;}
+#journalView .jr-dial circle{stroke:rgba(255,255,255,.16);} #journalView .jr-dial circle + circle{stroke:#fff;}
+#homeView .q-top em{color:#DCE4FF;} #homeView .q-row.done .q-top em{color:var(--green);}
+:is(#homeView,#journalView) :is(.ins-r,.q-row,.jr-thead){border-color:rgba(255,255,255,.14);}
+#journalView .jr-bar-col::before{background:rgba(255,255,255,.24);}
+
+/* journal: calendar, rows, tags */
+#journalView .jr-cd{background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.17); border-radius:14px;}
+#journalView .jr-cd.out{background:none; border-color:transparent; box-shadow:none;}
+#journalView .jr-cd.wk{background:rgba(255,255,255,.11); border-color:rgba(255,255,255,.26);}
+#journalView .jr-cd.up{background:rgba(61,255,160,.13); border-color:rgba(61,255,160,.42);}
+#journalView .jr-cd.dn{background:rgba(255,92,108,.15); border-color:rgba(255,128,144,.46);}
+#journalView .jr-cd.today{border-color:#fff; box-shadow:0 0 0 1px #fff;}
+#journalView .jr-cd-bar{background:rgba(255,255,255,.1);}
+#journalView .jr-row:hover{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.3);}
+#journalView .jr-mini{background:rgba(4,6,40,.38); border-radius:10px;}
+#journalView .jr-tag{color:#fff; background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.36); box-shadow:inset 0 1px 0 rgba(255,255,255,.25);}
+#journalView .jr-tag.more{color:var(--tx2); background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.2);}
+#journalView .jr-add{color:#DCE4FF; border-color:rgba(255,255,255,.46);}
+#journalView .jr-todo{border-color:rgba(255,255,255,.5) !important;}
+
+@media(max-width:640px){
+  #homeView :is(.hm-panel,.goal-card,.hm-best,.hm-claim){border-radius:24px;}
+  #homeView :is(.levelbar,.lvl-detail,.hm-sync){border-radius:22px;}
+  #journalView .hm-panel{border-radius:22px;} #journalView .jr-kpi{border-radius:18px;}
+  :is(#homeView,#journalView) .hm-periods{gap:5px;} :is(#homeView,#journalView) .hm-periods button{min-width:0; min-height:32px; padding:0 11px;}
+  #homeView .hm-pnl-head .hm-label{white-space:nowrap;}
+  /* calendar on a phone: the day's figure uses the whole cell (the bar sits above it), so it is no longer cut to "+$1…" */
+  #journalView .hm-panel.jr-cal{padding:14px 11px;} #journalView .jr-cal-h{padding:0 5px;} #journalView .jr-cal-g{gap:3px;}
+  #journalView .jr-cd{padding:4px 2px 4px 3px; border-radius:12px;} #journalView .jr-cd b{padding-right:0; font-size:8.4px; letter-spacing:-.05em; font-weight:700; text-overflow:clip;}
+}
+/* no blur, or less transparency asked: solid navy surfaces, flat backdrop */
+@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){
+  :is(#homeView,#journalView){--lq-fill:linear-gradient(155deg, #1C2478, #10155A); --lq-tile:#232C86;}
+}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
+  :is(#homeView,#journalView){--lq-fill:#121860; --lq-tile:#1D2578; --lq-edge:rgba(255,255,255,.55); --lq-edge2:rgba(255,255,255,.4); --tx2:#D5DCFF;}
+  .lq-bg::before{background-image:none; background-color:#060828; animation:none;} .lq-bg::after{display:none;}
+  #app[data-theme="blue"] header{background:#080B3A;}
+}
+@media(prefers-reduced-motion:reduce){ .lq-bg,.lq-bg::before{animation:none; transition:none;} :is(#homeView,#journalView) .hm-periods button{transition:none;} }
+/* figures: tabular everywhere on these two pages (the font shorthand resets it, so it is set on every element) */
+:is(#homeView,#journalView) *{font-variant-numeric:tabular-nums;}
+#homeView .hm-streak-main b{letter-spacing:0;}
+#homeView .hm-dots i.l{background:var(--red); opacity:.85;}
+#journalView .jr-g{grid-template-columns:minmax(0,1.5fr) minmax(26px,.55fr) 74px 46px;} #journalView .jr-g b{min-width:0;}

@@ -1915,6 +1915,7 @@ function goToView(v){
   const chip = document.getElementById('profileChip'); chip.classList.toggle('active', v==='account'); v==='account' ? chip.setAttribute('aria-current','page') : chip.removeAttribute('aria-current');
   document.title = (VIEW_TITLES[v] ? VIEW_TITLES[v] + ' · ' : '') + 'DEGENCARDS';
   navKeepInView();
+  document.getElementById('app').dataset.theme = (v==='home' || v==='journal') ? 'blue' : '';   // liquid blue: Home and Journal only
   ['home','collection','history','journal','achievements','stats','ranks','account'].forEach(k=>{
     document.getElementById(k+'View').style.display = (k===v)?'block':'none';
   });
