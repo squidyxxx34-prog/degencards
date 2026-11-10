@@ -390,3 +390,9 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - Au passage : calendrier du Journal sur téléphone, le montant du jour n'est plus coupé (« +$1… ») ; colonnes des listes latérales alignées.
 - Correctif motion.js : avec « réduire les animations », la lentille des onglets relançait son propre observateur en boucle jusqu'à figer l'onglet (l'observateur ignore maintenant les changements de classe de la lentille).
 - Banc de test visuel (hors repo) : Playwright + faux `vendor/supabase.js` (session + 64 trades factices), captures Home / Journal en 1440 et 390 px, avec et sans reduced motion.
+
+## Fond mouvant + panneau Design (2026-11-10)
+- Fond de Home / Journal : plus d'image. 7 pétales CSS (`.lq-bg i`) qui dérivent, tournent et respirent chacun à leur rythme (15 à 31 s) + une lumière qui traverse la page. `/lp/liquid-blue.webp` supprimé.
+- Toute la palette du thème dérive de deux variables sur `#app` : `--lq-h` (teinte 0-360) et `--lq-s` (saturation 0-1). Plus aucune couleur bleue en dur dans le bloc.
+- Bouton « Design » en haut de Home et du Journal → panneau `theme.js` (chargé après motion.js) : 8 couleurs (Ocean, Violet, Rose, Ember, Amber, Emerald, Cyan, Graphite) + curseur de teinte libre ; fond Flow / Calm (3× plus lent) / Still ; verre Clear / Frosted / Deep ; Reset. Aperçu en direct, mémorisé sur l'appareil (`localStorage dc_design`), `window.dcDesign.get() / set()` pour les tests.
+- Reduced motion : pétales fixes quel que soit le réglage.

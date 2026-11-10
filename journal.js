@@ -172,7 +172,7 @@ function render(){
     <section class="jr-top">
       <div><div class="hm-kicker">JOURNAL</div><h1 class="jr-title">Trading journal</h1>
         <p class="jr-lead">${all.length ? `<b>${done}</b> / ${list.length} journaled · ${pLabel === 'Today' ? 'today' : pLabel === 'All' ? 'all time' : 'last ' + pLabel.replace('D', ' days')}` : 'Your closed trades show up here.'}</p></div>
-      <div class="hm-periods jr-periods" role="tablist" aria-label="Period">${PERIODS.map(([k, lb]) => `<button type="button" role="tab" data-jp="${k}" aria-selected="${k === period}" class="${k === period ? 'on' : ''}">${lb}</button>`).join('')}</div>
+      <div class="jr-top-r"><div class="hm-periods jr-periods" role="tablist" aria-label="Period">${PERIODS.map(([k, lb]) => `<button type="button" role="tab" data-jp="${k}" aria-selected="${k === period}" class="${k === period ? 'on' : ''}">${lb}</button>`).join('')}</div><button type="button" class="hm-btn lq-open" data-lq-open aria-haspopup="dialog"><i aria-hidden="true"></i>Design</button></div>
     </section>
     <div class="jr-kpis">
       ${kpi('Net P&amp;L', list.length ? money(net) : '$0.00', net >= 0 ? 'pos' : 'neg', `${w.length} W · ${l.length} L`)}

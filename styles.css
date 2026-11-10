@@ -1888,28 +1888,46 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
    Everything is scoped to #homeView / #journalView (+ the backdrop layer shown while one of them is open):
    the other pages, the trade cards, the sheets and the landing keep their own look. (JS: goToView sets #app[data-theme])
    ============================================================================ */
-.lq-bg{position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; background:#05061C; opacity:0; visibility:hidden; transition:opacity .6s ease, visibility 0s .6s;}
+#app{--lq-h:232; --lq-s:1; --lq-speed:1; --lq-ga:.24; --lq-gb:.20; --lq-gc:.34;}
+.lq-bg{position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; opacity:0; visibility:hidden; transition:opacity .6s ease, visibility 0s .6s;
+  background:radial-gradient(60vmax 44vmax at 22% 6%, hsl(var(--lq-h) calc(92% * var(--lq-s)) 56% / .42), transparent 70%), linear-gradient(135deg, hsl(var(--lq-h) calc(70% * var(--lq-s)) 13%), hsl(var(--lq-h) calc(66% * var(--lq-s)) 8%) 55%, hsl(var(--lq-h) calc(64% * var(--lq-s)) 5%));}
 #app[data-theme="blue"] .lq-bg{opacity:1; visibility:visible; transition:opacity .6s ease;}
-.lq-bg::before{content:""; position:absolute; inset:-9%; background:#070928 url(/lp/liquid-blue.webp) 50% 50% / cover no-repeat; will-change:transform; animation:lqDrift 64s ease-in-out infinite alternate;}
-.lq-bg::after{content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(4,5,26,.5) 0%, rgba(4,5,26,.26) 34%, rgba(4,5,26,.5) 100%);}
-@keyframes lqDrift{
-  0%{transform:translate3d(0,0,0) scale(1) rotate(0deg);}
-  50%{transform:translate3d(-2.5%,2%,0) scale(1.05) rotate(1.6deg);}
-  100%{transform:translate3d(2.5%,-2%,0) scale(1.08) rotate(-1.4deg);}}
-#app[data-theme="blue"] header{background:linear-gradient(180deg, rgba(9,12,58,.56), rgba(7,9,44,.34)); box-shadow:inset 0 -1px 0 rgba(255,255,255,.12), 0 10px 30px -20px rgba(2,3,30,.9);}
-#app[data-theme="blue"] footer{color:#B7C1EC;}
+/* petals: each one drifts, turns and breathes on its own clock (design panel: Flow / Calm / Still) */
+.lq-bg i{position:absolute; left:var(--x); top:var(--y); width:var(--w); height:var(--hh); margin:calc(var(--hh) / -2) 0 0 calc(var(--w) / -2); border-radius:50%;
+  background:linear-gradient(135deg, hsl(var(--lq-h) calc(92% * var(--lq-s)) calc(var(--l1) * 1%)), hsl(var(--lq-h) calc(74% * var(--lq-s)) calc(var(--l2) * 1%)) 40%, hsl(var(--lq-h) calc(68% * var(--lq-s)) calc(var(--l3) * 1%)));
+  box-shadow:1.6vmax 2.2vmax 5vmax .4vmax hsl(var(--lq-h) calc(80% * var(--lq-s)) 3% / .6), inset .25vmax .25vmax .5vmax -.1vmax hsl(var(--lq-h) calc(100% * var(--lq-s)) 90% / .42);
+  rotate:var(--r); will-change:translate, rotate, scale; animation:lqPetal calc(var(--d) * var(--lq-speed)) ease-in-out var(--dl,0s) infinite alternate;}
+@keyframes lqPetal{ 50%{translate:calc(var(--dx) * .35) calc(var(--dy) * -.6); scale:calc(1 + (var(--ds) - 1) * 1.4);} 100%{translate:var(--dx) var(--dy); rotate:calc(var(--r) + var(--dr)); scale:var(--ds);} }
+.lq-bg i:nth-child(1){--x:78%; --y:2%;   --w:76vmax; --hh:52vmax; --r:-24deg; --l1:35; --l2:23; --l3:11; --d:23s; --dx:-7vmax; --dy:5vmax;  --dr:14deg;  --ds:1.1;}
+.lq-bg i:nth-child(2){--x:16%; --y:98%;  --w:82vmax; --hh:56vmax; --r:18deg;  --l1:34; --l2:21; --l3:10; --d:29s; --dx:8vmax;  --dy:-6vmax; --dr:-12deg; --ds:1.08; --dl:-9s;}
+.lq-bg i:nth-child(3){--x:69%; --y:95%;  --w:70vmax; --hh:60vmax; --r:-38deg; --l1:55; --l2:35; --l3:14; --d:19s; --dx:-9vmax; --dy:-7vmax; --dr:20deg;  --ds:1.14; --dl:-4s;}
+.lq-bg i:nth-child(4){--x:98%; --y:58%;  --w:56vmax; --hh:64vmax; --r:12deg;  --l1:60; --l2:41; --l3:16; --d:26s; --dx:-6vmax; --dy:8vmax;  --dr:-16deg; --ds:1.1;  --dl:-13s;}
+.lq-bg i:nth-child(5){--x:49%; --y:114%; --w:62vmax; --hh:46vmax; --r:8deg;   --l1:68; --l2:50; --l3:19; --d:17s; --dx:10vmax; --dy:-8vmax; --dr:18deg;  --ds:1.16; --dl:-6s;}
+.lq-bg i:nth-child(6){--x:-3%; --y:21%;  --w:52vmax; --hh:62vmax; --r:-16deg; --l1:53; --l2:30; --l3:12; --d:31s; --dx:7vmax;  --dy:9vmax;  --dr:12deg;  --ds:1.09; --dl:-17s;}
+.lq-bg i:nth-child(7){--x:86%; --y:104%; --w:43vmax; --hh:38vmax; --r:-20deg; --l1:75; --l2:59; --l3:29; --d:15s; --dx:-11vmax;--dy:-6vmax; --dr:-22deg; --ds:1.2;  --dl:-2s;}
+/* a soft light that crosses the page, then the legibility veil */
+.lq-bg::before{content:""; position:absolute; z-index:1; left:-20%; top:-10%; width:70vmax; height:50vmax; border-radius:50%; background:radial-gradient(closest-side, hsl(var(--lq-h) calc(100% * var(--lq-s)) 70% / .30), transparent); will-change:translate; animation:lqGlow calc(34s * var(--lq-speed)) ease-in-out infinite alternate;}
+@keyframes lqGlow{ 0%{translate:0 0;} 50%{translate:60vw 34vh;} 100%{translate:95vw -6vh;} }
+.lq-bg::after{content:""; position:absolute; z-index:2; inset:0; background:linear-gradient(180deg, hsl(var(--lq-h) calc(70% * var(--lq-s)) 5% / .5) 0%, hsl(var(--lq-h) calc(70% * var(--lq-s)) 5% / .24) 34%, hsl(var(--lq-h) calc(70% * var(--lq-s)) 5% / .5) 100%);}
+#app[data-lq-motion="calm"]{--lq-speed:3;}
+#app[data-lq-motion="still"] .lq-bg i,#app[data-lq-motion="still"] .lq-bg::before{animation:none;}
+#app[data-theme="blue"] header{background:linear-gradient(180deg, hsl(var(--lq-h) calc(72% * var(--lq-s)) 13% / .56), hsl(var(--lq-h) calc(70% * var(--lq-s)) 10% / .34)); box-shadow:inset 0 -1px 0 rgba(255,255,255,.12), 0 10px 30px -20px hsl(var(--lq-h) calc(80% * var(--lq-s)) 6% / .9);}
+#app[data-theme="blue"] footer{color:hsl(var(--lq-h) calc(60% * var(--lq-s)) 83%);}
 
 :is(#homeView,#journalView){
-  --tx2:#BCC6F0; --purple:#AFC2FF; --red:#FF8090; --border:rgba(255,255,255,.26);
-  --surf:rgba(150,170,255,.10); --surf2:rgba(190,204,255,.17); --mono:var(--font);
-  --lq-fill:linear-gradient(155deg, rgba(150,170,255,.24) 0%, rgba(58,74,200,.20) 44%, rgba(16,22,104,.34) 100%);
+  --tx2:hsl(var(--lq-h) calc(60% * var(--lq-s)) 84%); --purple:hsl(var(--lq-h) calc(100% * var(--lq-s)) 84%); --red:#FF8090; --border:rgba(255,255,255,.26);
+  --surf:hsl(var(--lq-h) calc(100% * var(--lq-s)) 83% / .10); --surf2:hsl(var(--lq-h) calc(100% * var(--lq-s)) 87% / .17); --mono:var(--font);
+  --lq-hi:hsl(var(--lq-h) calc(100% * var(--lq-s)) 92%); --lq-acc:hsl(var(--lq-h) calc(100% * var(--lq-s)) 78%); --lq-ink:hsl(var(--lq-h) calc(72% * var(--lq-s)) 14%);
+  --lq-fill:linear-gradient(155deg, hsl(var(--lq-h) calc(100% * var(--lq-s)) 83% / var(--lq-ga)) 0%, hsl(var(--lq-h) calc(58% * var(--lq-s)) 50% / var(--lq-gb)) 44%, hsl(var(--lq-h) calc(74% * var(--lq-s)) 24% / var(--lq-gc)) 100%);
   --lq-tile:rgba(255,255,255,.075); --lq-edge:rgba(255,255,255,.34); --lq-edge2:rgba(255,255,255,.2);
-  --lq-rim:inset 0 1px 0 rgba(255,255,255,.4), inset 0 26px 36px -30px rgba(255,255,255,.2), inset 0 -30px 40px -34px rgba(2,3,40,.6);
-  --lq-drop:0 30px 64px -38px rgba(2,3,30,.95);
+  --lq-rim:inset 0 1px 0 rgba(255,255,255,.4), inset 0 26px 36px -30px rgba(255,255,255,.2), inset 0 -30px 40px -34px hsl(var(--lq-h) calc(90% * var(--lq-s)) 8% / .6);
+  --lq-drop:0 30px 64px -38px hsl(var(--lq-h) calc(88% * var(--lq-s)) 6% / .95);
   --lq-blur:blur(28px) saturate(165%);
-  --lq-bar:linear-gradient(90deg, #FFFFFF, #9DB4FF);
+  --lq-bar:linear-gradient(90deg, #FFFFFF, hsl(var(--lq-h) calc(100% * var(--lq-s)) 81%));
   font-feature-settings:"tnum";
 }
+#app[data-lq-glass="clear"]{--lq-ga:.13; --lq-gb:.07; --lq-gc:.12;} #app[data-lq-glass="clear"] :is(#homeView,#journalView){--lq-blur:blur(16px) saturate(150%);}
+#app[data-lq-glass="deep"]{--lq-ga:.15; --lq-gb:.38; --lq-gc:.66;} #app[data-lq-glass="deep"] :is(#homeView,#journalView){--lq-blur:blur(36px) saturate(150%);}
 /* the trade cards stay the same object as in the Collection */
 #homeView .card{--tx2:#ADADB8; --purple:#C09EFF; --border:rgba(255,255,255,.16); --surf:rgba(255,255,255,.065); --surf2:rgba(255,255,255,.12); --mono:'JetBrains Mono', monospace; font-feature-settings:normal;}
 
@@ -1921,28 +1939,28 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 #homeView :is(.levelbar,.lvl-detail,.hm-sync){border-radius:26px;}
 #journalView .jr-kpi{border-radius:22px;}
 #journalView .hm-panel{border-radius:26px;}
-#homeView .goal-card::before{background:radial-gradient(circle, rgba(175,194,255,.3), transparent 70%);}
+#homeView .goal-card::before{background:radial-gradient(circle, hsl(var(--lq-h) calc(100% * var(--lq-s)) 84% / .3), transparent 70%);}
 
 /* type: one sans, lighter figures */
 :is(#homeView,#journalView) :is(.hm-title,.jr-title){font-weight:700; letter-spacing:-.04em;}
-#homeView .hm-dot{color:#8FA6FF;}
+#homeView .hm-dot{color:var(--lq-acc);}
 :is(#homeView,#journalView) .hm-kicker{font-weight:600; letter-spacing:.16em; color:var(--tx2);}
-:is(#homeView,#journalView) :is(.hm-label,.goal-label,.jr-kpi-l,.jr-thead,.ins-h,.jr-cal-dn){font-weight:600; letter-spacing:.13em; color:#D6DEFF;}
+:is(#homeView,#journalView) :is(.hm-label,.goal-label,.jr-kpi-l,.jr-thead,.ins-h,.jr-cal-dn){font-weight:600; letter-spacing:.13em; color:var(--lq-hi);}
 #homeView .hm-label.gold{color:#fff;}
 :is(#homeView,#journalView) :is(.hm-pnl-big,.hm-best-pnl,.ins-rv-pnl,.goal-amounts,.jr-kpi-v,.jr-after-v b,.jr-cal-sum b,.hm-streak-main b,.hm-stats .v,.jr-dial b,.q-head b){font-weight:600; letter-spacing:-.03em;}
 #homeView .hm-pnl-big{letter-spacing:-.045em;}
 #homeView .sectionhead h2{font-weight:600; letter-spacing:.02em;}
-#homeView .hm-link{color:#CBD6FF;}
+#homeView .hm-link{color:var(--lq-hi);}
 
 /* pills: outlined, the current one solid white */
 :is(#homeView,#journalView) .hm-periods{background:none; border:0; box-shadow:none; padding:0; gap:6px;}
-:is(#homeView,#journalView) .hm-periods button{min-height:34px; padding:0 14px; border-radius:999px; border:1px solid rgba(255,255,255,.42); background:rgba(255,255,255,.05); color:#E8EDFF; font-weight:600; box-shadow:none; transition:background .2s, color .2s, border-color .2s, transform .2s var(--spring);}
+:is(#homeView,#journalView) .hm-periods button{min-height:34px; padding:0 14px; border-radius:999px; border:1px solid rgba(255,255,255,.42); background:rgba(255,255,255,.05); color:var(--lq-hi); font-weight:600; box-shadow:none; transition:background .2s, color .2s, border-color .2s, transform .2s var(--spring);}
 :is(#homeView,#journalView) .hm-periods button:hover{border-color:#fff;}
-:is(#homeView,#journalView) .hm-periods button.on{background:#fff; border-color:#fff; color:#0A0E3C; box-shadow:0 10px 22px -12px rgba(255,255,255,.7);}
+:is(#homeView,#journalView) .hm-periods button.on{background:#fff; border-color:#fff; color:var(--lq-ink); box-shadow:0 10px 22px -12px rgba(255,255,255,.7);}
 :is(#homeView,#journalView) :is(.hm-btn:not(.primary),.hbtn,.chip){border-radius:999px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.42); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.28);}
 :is(#homeView,#journalView) :is(.hm-btn:not(.primary),.hbtn,.chip):hover{border-color:#fff; background:rgba(255,255,255,.13);}
-:is(#homeView,#journalView) .hm-btn.primary{border-radius:999px; background:#fff; border-color:#fff; color:#0A0E3C; box-shadow:inset 0 -2px 6px rgba(10,14,60,.1), 0 12px 26px -12px rgba(255,255,255,.6);}
-:is(#homeView,#journalView) .hm-btn.primary:hover{background:#DDE5FF; border-color:#DDE5FF;}
+:is(#homeView,#journalView) .hm-btn.primary{border-radius:999px; background:#fff; border-color:#fff; color:var(--lq-ink); box-shadow:inset 0 -2px 6px hsl(var(--lq-h) calc(72% * var(--lq-s)) 14% / .1), 0 12px 26px -12px rgba(255,255,255,.6);}
+:is(#homeView,#journalView) .hm-btn.primary:hover{background:var(--lq-hi); border-color:var(--lq-hi);}
 :is(#homeView,#journalView) :is(.hm-btn,.hm-link,.hm-periods button,.jr-row):focus-visible{outline:2px solid #fff; outline-offset:2px;}
 
 /* nested glass tiles */
@@ -1952,8 +1970,8 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 #homeView .rp-focus span{color:#fff;}
 #homeView .rp-ai{background:rgba(255,255,255,.18); color:#fff;}
 #homeView .q-ic{background:var(--lq-tile); border-color:var(--lq-edge2); border-radius:14px; color:#fff;}
-#homeView .hm-tip{background:rgba(8,11,56,.92); border-color:var(--lq-edge2); border-radius:12px;}
-#homeView .hm-cursor{border-color:#0A0E3C;}
+#homeView .hm-tip{background:hsl(var(--lq-h) calc(74% * var(--lq-s)) 12% / .92); border-color:var(--lq-edge2); border-radius:12px;}
+#homeView .hm-cursor{border-color:var(--lq-ink);}
 
 /* bars, rings and rules */
 #homeView .levelbar .lvl{color:#fff;}
@@ -1961,9 +1979,9 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 :is(#homeView,#journalView) :is(.levelbar .fill,.q-bar i,.jr-kpi-prog i,.jr-prog i,.jr-spoke em){background:var(--lq-bar);}
 #homeView .q-row.done .q-bar i{background:var(--green);}
 #journalView .jr-spoke.weak em{background:var(--red);} #journalView .jr-spoke.weak span{color:#FFC2CA;}
-#goalGradHome stop{stop-color:#fff;} #goalGradHome stop + stop{stop-color:#8FA6FF;}
+#goalGradHome stop{stop-color:#fff;} #goalGradHome stop + stop{stop-color:var(--lq-acc);}
 #journalView .jr-dial circle{stroke:rgba(255,255,255,.16);} #journalView .jr-dial circle + circle{stroke:#fff;}
-#homeView .q-top em{color:#DCE4FF;} #homeView .q-row.done .q-top em{color:var(--green);}
+#homeView .q-top em{color:var(--lq-hi);} #homeView .q-row.done .q-top em{color:var(--green);}
 :is(#homeView,#journalView) :is(.ins-r,.q-row,.jr-thead){border-color:rgba(255,255,255,.14);}
 #journalView .jr-bar-col::before{background:rgba(255,255,255,.24);}
 
@@ -1976,10 +1994,10 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 #journalView .jr-cd.today{border-color:#fff; box-shadow:0 0 0 1px #fff;}
 #journalView .jr-cd-bar{background:rgba(255,255,255,.1);}
 #journalView .jr-row:hover{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.3);}
-#journalView .jr-mini{background:rgba(4,6,40,.38); border-radius:10px;}
+#journalView .jr-mini{background:hsl(var(--lq-h) calc(80% * var(--lq-s)) 8% / .38); border-radius:10px;}
 #journalView .jr-tag{color:#fff; background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.36); box-shadow:inset 0 1px 0 rgba(255,255,255,.25);}
 #journalView .jr-tag.more{color:var(--tx2); background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.2);}
-#journalView .jr-add{color:#DCE4FF; border-color:rgba(255,255,255,.46);}
+#journalView .jr-add{color:var(--lq-hi); border-color:rgba(255,255,255,.46);}
 #journalView .jr-todo{border-color:rgba(255,255,255,.5) !important;}
 
 @media(max-width:640px){
@@ -1994,16 +2012,52 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 }
 /* no blur, or less transparency asked: solid navy surfaces, flat backdrop */
 @supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){
-  :is(#homeView,#journalView){--lq-fill:linear-gradient(155deg, #1C2478, #10155A); --lq-tile:#232C86;}
+  :is(#homeView,#journalView){--lq-fill:linear-gradient(155deg, hsl(var(--lq-h) calc(62% * var(--lq-s)) 29%), hsl(var(--lq-h) calc(70% * var(--lq-s)) 21%)); --lq-tile:hsl(var(--lq-h) calc(58% * var(--lq-s)) 33%);}
 }
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){
-  :is(#homeView,#journalView){--lq-fill:#121860; --lq-tile:#1D2578; --lq-edge:rgba(255,255,255,.55); --lq-edge2:rgba(255,255,255,.4); --tx2:#D5DCFF;}
-  .lq-bg::before{background-image:none; background-color:#060828; animation:none;} .lq-bg::after{display:none;}
-  #app[data-theme="blue"] header{background:#080B3A;}
+  :is(#homeView,#journalView){--lq-fill:hsl(var(--lq-h) calc(68% * var(--lq-s)) 22%); --lq-tile:hsl(var(--lq-h) calc(60% * var(--lq-s)) 29%); --lq-edge:rgba(255,255,255,.55); --lq-edge2:rgba(255,255,255,.4); --tx2:hsl(var(--lq-h) calc(100% * var(--lq-s)) 92%);}
+  .lq-bg{background:hsl(var(--lq-h) calc(66% * var(--lq-s)) 9%);} .lq-bg i,.lq-bg::before,.lq-bg::after{display:none;}
+  #app[data-theme="blue"] header{background:hsl(var(--lq-h) calc(72% * var(--lq-s)) 13%);}
 }
-@media(prefers-reduced-motion:reduce){ .lq-bg,.lq-bg::before{animation:none; transition:none;} :is(#homeView,#journalView) .hm-periods button{transition:none;} }
+@media(prefers-reduced-motion:reduce){ .lq-bg{transition:none;} .lq-bg i,.lq-bg::before{animation:none;} :is(#homeView,#journalView) .hm-periods button{transition:none;} }
 /* figures: tabular everywhere on these two pages (the font shorthand resets it, so it is set on every element) */
 :is(#homeView,#journalView) *{font-variant-numeric:tabular-nums;}
 #homeView .hm-streak-main b{letter-spacing:0;}
 #homeView .hm-dots i.l{background:var(--red); opacity:.85;}
 #journalView .jr-g{grid-template-columns:minmax(0,1.5fr) minmax(26px,.55fr) 74px 46px;} #journalView .jr-g b{min-width:0;}
+
+/* ---------- design panel (theme.js): colour, moving backdrop, glass. Saved on the device. ---------- */
+.hm-head-r{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
+.jr-top-r{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.lq-open{display:inline-flex; align-items:center; gap:8px;}
+.lq-open i{width:14px; height:14px; border-radius:50%; background:conic-gradient(from 210deg, hsl(var(--lq-h) calc(95% * var(--lq-s)) 62%), hsl(var(--lq-h) calc(100% * var(--lq-s)) 84%), #fff, hsl(var(--lq-h) calc(95% * var(--lq-s)) 62%)); box-shadow:0 0 0 1px rgba(255,255,255,.5);}
+.lq-panel{position:fixed; z-index:60; right:max(20px, calc((100vw - 1180px) / 2 + 20px)); top:84px; width:340px; max-height:calc(100dvh - 110px); overflow:auto; padding:18px 18px 16px; border-radius:28px; color:#fff;
+  background:linear-gradient(160deg, hsl(var(--lq-h) calc(70% * var(--lq-s)) 30% / .72), hsl(var(--lq-h) calc(74% * var(--lq-s)) 13% / .8)); border:1px solid rgba(255,255,255,.34);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 40px 80px -30px rgba(0,0,10,.9); -webkit-backdrop-filter:blur(34px) saturate(170%); backdrop-filter:blur(34px) saturate(170%);
+  opacity:0; visibility:hidden; transform:translateY(-8px) scale(.97); transform-origin:100% 0; transition:opacity .2s, transform .35s var(--spring), visibility 0s .35s;}
+.lq-panel.show{opacity:1; visibility:visible; transform:none; transition:opacity .2s, transform .35s var(--spring);}
+.lq-panel-h{display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;}
+.lq-panel-h b{font-size:17px; font-weight:700; letter-spacing:-.01em;}
+.lq-x{width:34px; height:34px; border-radius:50%; font-size:18px; line-height:1; color:#fff; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.3);}
+.lq-sec{margin-top:14px;}
+.lq-sec > span{display:block; font-size:11px; font-weight:600; letter-spacing:.13em; text-transform:uppercase; color:hsl(var(--lq-h) calc(100% * var(--lq-s)) 90%); margin-bottom:9px;}
+.lq-sw{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px;}
+.lq-sw button{display:flex; flex-direction:column; align-items:center; gap:6px; padding:9px 4px 7px; border-radius:16px; font-size:11px; font-weight:600; color:#fff; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.18);}
+.lq-sw button i{width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg, hsl(var(--sh) calc(95% * var(--ss)) 68%), hsl(var(--sh) calc(80% * var(--ss)) 42%) 55%, hsl(var(--sh) calc(70% * var(--ss)) 16%)); box-shadow:inset 0 1px 0 rgba(255,255,255,.5);}
+.lq-sw button[aria-checked="true"]{background:rgba(255,255,255,.16); border-color:#fff;}
+.lq-hue{display:block; width:100%; height:28px; margin-top:12px; border-radius:999px; -webkit-appearance:none; appearance:none; cursor:pointer; border:1px solid rgba(255,255,255,.34);
+  background:linear-gradient(90deg, hsl(0 85% 55%), hsl(45 85% 55%), hsl(90 85% 50%), hsl(150 85% 50%), hsl(200 85% 55%), hsl(240 85% 60%), hsl(285 85% 60%), hsl(330 85% 58%), hsl(360 85% 55%));}
+.lq-hue::-webkit-slider-thumb{-webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:#fff; border:0; box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.lq-hue::-moz-range-thumb{width:24px; height:24px; border-radius:50%; background:#fff; border:0; box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.lq-seg{display:flex; gap:6px;}
+.lq-seg button{flex:1; min-height:38px; border-radius:999px; font-size:13px; font-weight:600; color:#fff; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.4);}
+.lq-seg button[aria-checked="true"]{background:#fff; border-color:#fff; color:hsl(var(--lq-h) calc(72% * var(--lq-s)) 14%);}
+.lq-reset{margin-top:16px; width:100%; min-height:38px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.03em; color:#fff; border:1px dashed rgba(255,255,255,.4);}
+.lq-note{margin-top:10px; font-size:11px; color:hsl(var(--lq-h) calc(60% * var(--lq-s)) 84%); text-align:center;}
+.lq-panel button:focus-visible,.lq-hue:focus-visible{outline:2px solid #fff; outline-offset:2px;}
+@media(max-width:640px){
+  .hm-head-r{width:100%; justify-content:flex-start;} .hm-head-r .hm-sync{width:auto; flex:1 1 220px;}
+  .lq-panel{left:10px; right:10px; top:auto; bottom:calc(10px + env(safe-area-inset-bottom,0px)); width:auto; max-height:76dvh; transform:translateY(24px); transform-origin:50% 100%;}
+}
+@media(prefers-reduced-motion:reduce){ .lq-panel{transition:none;} }
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more){ .lq-panel{background:hsl(var(--lq-h) calc(70% * var(--lq-s)) 16%);} }
