@@ -839,7 +839,9 @@ document.getElementById('hmCurve').addEventListener('pointermove', e=>{
   tip.hidden = cur.hidden = false;
   cur.style.left = (p.x*100)+'%'; cur.style.top = (p.y*100)+'%';
   tip.innerHTML = `<b class="${p.v>=0?'pos':'neg'}">${usdBig(p.v)}</b><span>${esc(tk(p.t.ticker))} ${p.t.pnl>=0?'+':''}${fmt.pct(p.t.roi).replace(/^\+/,'')} · ${fmt.date(p.t.timestamp)}</span>`;
-  tip.style.left = Math.min(Math.max(p.x*100, 14), 86)+'%';
+  const bw = r.width, tw = tip.offsetWidth, cx = p.x * bw;                         // keep the whole bubble inside the panel (it ran off the right edge on phones)
+  tip.style.left = Math.min(Math.max(cx, tw/2 + 4), bw - tw/2 - 4) + 'px';
+  clearTimeout(box._tipT); if(e.pointerType === 'touch') box._tipT = setTimeout(()=>{ tip.hidden = cur.hidden = true; }, 2200);   // a tap never sends pointerleave
 });
 document.getElementById('hmCurve').addEventListener('pointerleave', e=>{ e.currentTarget.querySelectorAll('.hm-tip,.hm-cursor').forEach(x=>x.hidden = true); });
 document.getElementById('hmPeriods').addEventListener('click', e=>{
