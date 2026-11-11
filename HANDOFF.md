@@ -402,3 +402,8 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - En standalone : `overscroll-behavior-y:none` (plus de rebond natif au-dessus de l'en-tête).
 - Bas de l'écran (web app iPhone) : `:root` avait un `padding-bottom: env(safe-area-inset-bottom)` qui coupait la page 34 px au-dessus du bord ; retiré (le footer et le bouton + NEW TRADE gèrent déjà la barre d'accueil). Le toast caché dépassait en bas de l'écran : il est maintenant invisible quand il n'est pas affiché.
 - Bulle de la courbe PnL : bornée en pixels dans le panneau (elle sortait à droite sur téléphone) et se cache 2,2 s après un tap.
+
+## Pull to refresh simplifié (2026-11-11, soir)
+- `ptr.js` réécrit : spinner d'activité iOS standard (8 branches qui apparaissent une à une en tirant, puis tournent), plus de cadran en verre, plus de reflet, plus de pastille « +$x ».
+- Bug corrigé : la pastille lisait le solde pendant qu'il roulait (tous les chiffres des colonnes) et affichait un nombre géant par-dessus les pastilles de période. Pastille supprimée ; un roulement en cours est toujours terminé avant d'en lancer un autre (`settle`).
+- Plus rapide : lecture de la base d'abord (`reload()`), affichage immédiat (0,3 s minimum au lieu de 0,9 s), roulement du solde en ~0,8 s ; la synchro wallet (`syncNow`) part ensuite en arrière-plan et le solde roule à nouveau si elle ramène des trades.
