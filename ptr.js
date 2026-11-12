@@ -27,18 +27,15 @@ app.appendChild(live);
 function homeOpen(){ return home.style.display !== 'none' && app.dataset.theme === 'blue' && !app.hidden; }
 function atTop(){ return (document.body.scrollTop || 0) <= 0 && (document.documentElement.scrollTop || 0) <= 0 && (window.scrollY || 0) <= 0; }
 function headerBottom(){ const h = document.querySelector('#app > header'); return h ? Math.max(0, h.getBoundingClientRect().bottom) : 0; }
-function place(px){                                                       // page follows the finger, spinner centred in the gap
-  home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : '';
-  dial.style.transform = `translate3d(0,${Math.max(4, px / 2 - 14).toFixed(1)}px,0)`;
-}
+function place(px){ home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : ''; }   // only the page moves: the spinner stays put under the header
 function setPull(px){                                                     // one continuous move: fades, grows and turns with the finger
   place(px);
   const k = Math.min(1, px / PULL);
-  dial.style.opacity = k.toFixed(3); dial.style.scale = (.55 + .45 * k).toFixed(3); dial.style.rotate = (px * 2.4).toFixed(1) + 'deg';
+  dial.style.opacity = k.toFixed(3); dial.style.rotate = (px * 2.4).toFixed(1) + 'deg';      // fades in and turns on itself, nothing else
 }
 let hideT = 0;
 function hide(){
-  place(0); dial.classList.remove('on', 'drag'); dial.style.opacity = ''; dial.style.scale = '';
+  place(0); dial.classList.remove('on', 'drag'); dial.style.opacity = '';
   clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin'); dial.style.rotate = ''; } }, 480);   // keeps turning while it fades
 }
 
@@ -82,8 +79,8 @@ async function run(fromPull){
   const before = big ? big.textContent : '';
   stop(big);                                                             // a count still running: put its final value back first (the app only rewrites the figure when it changes)
   // released: the page glides straight back to its place (no stop on the way); the spinner settles under the header until the data is in
-  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.scale = ''; dial.style.rotate = '';
-  home.style.transform = ''; dial.style.transform = 'translate3d(0,3px,0)';
+  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.rotate = '';
+  home.style.transform = '';
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for

@@ -416,3 +416,4 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - Tirage : plus de plafond dur (c'était 120 px) ni de saut après la zone morte ; courbe élastique continue `240 * (1 - exp(-d / 430))`.
 - Relâchement : la page revient directement à sa place en 0,7 s (courbe douce), sans s'arrêter à mi-chemin pendant le chargement ; le spinner se pose sous l'en-tête et s'efface quand les données sont là. Plus de délai minimum.
 - Correctif : la fin de la synchro en arrière-plan pouvait relancer le décompte du solde vers une valeur intermédiaire ; elle ne le relance plus que si l'app a écrit un nouveau solde.
+- 2026-11-12 : le spinner ne bouge plus du tout (position fixe 12 px sous l'en-tête, plus de translation ni de changement de taille) ; il apparaît en fondu et tourne sur lui-même, seule la page se déplace.
