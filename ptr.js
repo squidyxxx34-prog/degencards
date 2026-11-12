@@ -107,8 +107,8 @@ document.addEventListener('touchmove', e => {
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
-  const raw = xStart + Math.max(0, t.clientY - y0) * .9;                  // follows the finger almost 1:1
-  const px = raw <= STOP ? raw : STOP + 320 * (1 - Math.exp(-(raw - STOP) / 420));   // past the line it keeps following, gently softening: never a wall
+  const raw = xStart + Math.max(0, t.clientY - y0) * .75;                 // follows the finger with a little weight
+  const px = raw <= STOP ? raw : STOP + 230 * (1 - Math.exp(-(raw - STOP) / 330));   // past the line it keeps following, softening: never a wall
   const now = performance.now(); if(lastT) v = (px - lastX) / Math.max(.008, (now - lastT) / 1000); lastX = px; lastT = now;
   if(busy){ x = px; draw(); return; }                                     // refreshing: the page still follows the finger
   setBend(px);
