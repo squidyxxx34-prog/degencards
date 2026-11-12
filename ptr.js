@@ -2,7 +2,8 @@
    DEGENCARDS — pull to refresh on Home (installed web app only), after takuoka/PullToBounce (MIT)
    https://github.com/takuoka/PullToBounce — same phases and values, ported from Swift to the web:
    1. Pull: Home slides down (it stays visible: the balance is always readable); a thin light bar rides on top of it.
-   2. Past the pull distance (96 px) the bar bends down like a membrane, up to 40 px. Bar and ball always follow the content.
+   2. Past the pull distance (96 px) the bar bends (upwards, away from the info) like a membrane, up to 40 px. Bar and ball
+      always follow the content and the bar never touches it (16 px gap).
    3. At pull + bend (136 px) the refresh starts (the page keeps following the finger, softer, never locked): the edge is let go and wobbles back (damped keyframes 1, -.7, .4, -.3, .15, 0
       over 0.8 s, ease-in); 0.2 s later a ball rises out of the surface (0.25 s, overshoot curve .49,.13,.29,1.61)
       and a ring draws itself around it while turning (1 s per turn, stroke drawn then erased, 0.8 s each, ease-out).
@@ -37,13 +38,17 @@ function headerBottom(){ const h = document.querySelector('#app > header'); retu
 
 /* ---------- drawing: page offset x, edge bend b ---------- */
 const LIP = 60;                                  // the sheet box starts above its edge so the edge can bulge up while it wobbles
-let x = 0, bend = 0, hb = 0, wobble = null;
+let x = 0, bend = 0, hb = 0, co = 0, wobble = null;
+const GAP = 16;                                  // bar-to-info distance
+function measure(){ hb = headerBottom(); const k = home.querySelector('.hm-kicker, .hm-head, h1') || home.firstElementChild; co = k ? Math.max(0, k.getBoundingClientRect().top - home.getBoundingClientRect().top) : 0; }
 function draw(){
   home.style.transform = x > .05 ? `translate3d(0,${x.toFixed(2)}px,0)` : '';
   const on = x > .05 || busy;
   app.classList.toggle('ptb-on', on);
   if(!on){ sheet.style.display = 'none'; return; }
-  const w = innerWidth, edge = hb + x, b = wobble ? wobble.b : bend;       // the bar sits on the top of the content and moves with it
+  const w = innerWidth, edge = hb + x + co - GAP;                        // the bar rides with the content, always GAP px above the first line of info
+  const raw = wobble ? wobble.b : -bend, b = Math.max(-BEND, Math.min(GAP - 6, raw));   // it bends up, away from the info; any dip stays inside the gap
+  sheet.style.opacity = Math.max(0, Math.min(1, (x + co - GAP - 4) / 24)).toFixed(3);   // only once there is room for it under the header
   sheet.style.display = 'block'; sheet.setAttribute('viewBox', `0 0 ${w} ${LIP * 3}`); sheet.style.width = w + 'px'; sheet.style.height = (LIP * 3) + 'px';
   sheet.style.transform = `translate3d(0,${(edge - LIP).toFixed(2)}px,0)`;
   edgePath.setAttribute('d', `M0 ${LIP} Q${w / 2} ${(LIP + b * 2).toFixed(2)} ${w} ${LIP}`);   // quad control at 2b: the edge dips by b
@@ -98,7 +103,7 @@ document.addEventListener('touchmove', e => {
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ y0 = t.clientY; xStart = x; dragging = true; cancelAnimationFrame(raf); raf = 0; if(!busy) hb = headerBottom(); lastT = 0; }
+    if(lock === 'y'){ y0 = t.clientY; xStart = x; dragging = true; cancelAnimationFrame(raf); raf = 0; if(!busy) measure(); lastT = 0; }
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
@@ -119,12 +124,12 @@ async function run(fromPull){
   busy = true;
   const big = $('hmPnlBig'), before = big ? big.textContent : '';
   stop(big);
-  hb = headerBottom();
+  measure();
   if(!fromPull){ x = STOP; bend = BEND; } draw();
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
   const t0 = performance.now();
-  wobbleFrom(BEND);                                                       // the edge is let go
+  wobbleFrom(-BEND);                                                      // the bar is let go (it was bent up) and wobbles back
   setTimeout(() => { if(busy) ball.classList.add('up'); }, 200);          // 0.2 s later the ball rises out of the surface
   setTimeout(() => { if(busy) ball.classList.add('spin'); }, 200 + UP_MS); // then the ring
   try{ await reload(); }
