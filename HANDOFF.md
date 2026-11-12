@@ -424,3 +424,4 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - En tirant : les branches apparaissent une à une depuis le haut (une par 1/8 du seuil de 64 px). Au seuil : pop élastique de 200 ms et le rafraîchissement démarre tout de suite, doigt encore posé (comme iOS). Fin : le spinner rétrécit et s'efface en 300 ms ; il reste au moins 0,6 s pour ne jamais clignoter.
 - Le spinner ne bouge jamais (fixe sous l'en-tête) ; la page suit le doigt (élastique, sans butée) et revient en douceur au relâchement ; le spinner s'efface pendant ce retour pour ne pas se poser sur le contenu.
 - Pas de retour haptique : iOS ne l'autorise pas depuis une web app.
+- 2026-11-12 (suite) : comme iOS, au relâchement pendant le chargement la page se pose dans un petit espace (56 px) où le spinner continue de tourner, au moins 1,3 s au total, puis revient lentement (0,95 s, `#homeView.ptr-back`) pendant que le spinner rétrécit et s'efface (0,45 s).

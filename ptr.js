@@ -1,7 +1,8 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only)
    Pull Home down from the top: the iOS activity indicator builds up spoke by spoke under the header; past the
-   line it pops and the data refreshes in place (no page reload), the page gliding back as soon as you let go. The trades are read from the database first
+   line it pops and the data refreshes in place (no page reload). On release the page eases to a small gap where the
+   spinner keeps turning (1.3 s at least), then glides back slowly. The trades are read from the database first
    and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
    (one continuous count, no steps) while the page eases back.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
@@ -12,7 +13,7 @@ const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)'
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 const home = $('homeView'), app = $('app'); if(!home || !app) return;
-const PULL = 64;                                   // release line (px)
+const PULL = 64, REST = 56, MIN_SPIN = 1300;       // release line, gap the page rests at while it spins (px), shortest spin (ms)
 let busy = false;
 
 /* ---------- the spinner: iOS activity indicator (UIRefreshControl) ----------
@@ -42,13 +43,13 @@ function setPull(px){
   spokes.forEach((s, i) => s.classList.toggle('in', i < n));
 }
 let hideT = 0;
-function hide(){                                                          // shrink + fade, 300 ms
+function hide(){                                                          // shrink + fade, 450 ms
   dial.classList.add('out');
-  clearTimeout(hideT); hideT = setTimeout(() => { dial.classList.remove('on', 'out', 'spin', 'pop'); spokes.forEach(s => s.classList.remove('in')); }, 300);
+  clearTimeout(hideT); hideT = setTimeout(() => { dial.classList.remove('on', 'out', 'spin', 'pop'); spokes.forEach(s => s.classList.remove('in')); }, 450);
 }
 
 /* ---------- gesture ---------- */
-let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false;
+let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false, dragging = false, doneAt = 0;
 function ok(e){
   if(!standalone || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
   const t = e.target;
@@ -64,7 +65,7 @@ document.addEventListener('touchmove', e => {
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ y0 = t.clientY; home.classList.add('ptr-drag'); if(!busy) show(); }
+    if(lock === 'y'){ y0 = t.clientY; dragging = true; home.classList.remove('ptr-back'); home.classList.add('ptr-drag'); if(!busy) show(); }
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
@@ -74,9 +75,17 @@ document.addEventListener('touchmove', e => {
 }, { passive: false });
 document.addEventListener('touchend', () => { if(track){ track = false; release(); } }, { passive: true });
 document.addEventListener('touchcancel', () => { if(track){ track = false; release(); } }, { passive: true });
-function release(){                                                       // the page always glides straight back
-  home.classList.remove('ptr-drag'); place(0); dy = 0;
-  if(dial.classList.contains('on')) hide();                                // spinner shrinks away as the page closes the gap (never sits on the content); the balance glide shows the data landing
+function release(){
+  const was = dragging; dragging = false; dy = 0;
+  home.classList.remove('ptr-drag');
+  if(!was) return;
+  if(busy){ place(REST); return; }                                        // still refreshing: the page eases to a small gap and the spinner keeps turning in it (iOS)
+  back();
+}
+function back(){                                                          // slow, soft return; the spinner shrinks away as the gap closes
+  home.classList.add('ptr-back'); place(0);
+  if(dial.classList.contains('on')) hide();
+  setTimeout(() => home.classList.remove('ptr-back'), 950);
 }
 
 /* ---------- refresh: data only, never the page ---------- */
@@ -87,6 +96,7 @@ async function run(){
   const before = big ? big.textContent : '';
   stop(big);                                                             // a count still running: put its final value back first
   if(!dial.classList.contains('on')) show();
+  if(!dragging){ home.classList.remove('ptr-back'); place(REST); }
   spokes.forEach(s => s.classList.add('in'));
   dial.classList.add('pop', 'spin');                                     // 200 ms elastic pop, then the pulse
   live.textContent = 'Refreshing';
@@ -94,11 +104,12 @@ async function run(){
   const t0 = performance.now();
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
-  setTimeout(() => { if(dial.classList.contains('on') && !dial.classList.contains('out')) hide(); }, Math.max(0, 600 - (performance.now() - t0)));       // the data shows at once; the spinner turns at least 0.6 s so it never just flashes
+  await new Promise(r => setTimeout(r, Math.max(0, MIN_SPIN - (performance.now() - t0))));   // the data is already on screen; the spinner gets its full turn at the top
+  busy = false;
+  if(!dragging) back();                                                  // finger still down: the return happens on release
   const ms = roll($('hmPnlBig'), before);
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 500);
   live.textContent = 'Updated';
-  busy = false;
   // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance glides again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
     const el = $('hmPnlBig'), shown = el ? (el._to || el.textContent) : '';
