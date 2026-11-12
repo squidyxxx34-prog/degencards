@@ -107,8 +107,8 @@ document.addEventListener('touchmove', e => {
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
-  const raw = xStart + Math.max(0, t.clientY - y0) * .55;                 // heavy: the page moves about half as far as the finger
-  const px = raw <= STOP ? raw : STOP + 140 * (1 - Math.exp(-(raw - STOP) / 220));   // past the line it still follows, much stiffer, but never a hard wall
+  const raw = xStart + Math.max(0, t.clientY - y0) * .62;                 // weighted: the page moves a bit more than half as far as the finger
+  const px = raw <= STOP ? raw : STOP + 170 * (1 - Math.exp(-(raw - STOP) / 250));   // past the line it still follows, stiffer, but never a hard wall
   const now = performance.now(); if(lastT) v = (px - lastX) / Math.max(.008, (now - lastT) / 1000); lastX = px; lastT = now;
   if(busy){ x = px; draw(); return; }                                     // refreshing: the page still follows the finger
   setBend(px);
