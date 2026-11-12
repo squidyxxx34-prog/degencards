@@ -34,10 +34,37 @@ app.appendChild(live);
 function homeOpen(){ return home.style.display !== 'none' && app.dataset.theme === 'blue' && !app.hidden; }
 function atTop(){ return (document.body.scrollTop || 0) <= 0 && (document.documentElement.scrollTop || 0) <= 0 && (window.scrollY || 0) <= 0; }
 function headerBottom(){ const h = document.querySelector('#app > header'); return h ? Math.max(0, h.getBoundingClientRect().bottom) : 0; }
-function place(px){ home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : ''; }
+function place(px){ home.style.transform = px > .05 ? `translate3d(0,${px.toFixed(2)}px,0)` : ''; }
+
+/* ---------- motion: one spring, no breaks ----------
+   After the finger lifts, the page is driven by a critically damped spring that starts with the finger's own speed.
+   Its target is the resting gap while loading, then 0: changing the target never restarts the motion, the page just
+   bends towards the new goal, so release -> rest -> return reads as one continuous gesture. The spinner fades and
+   shrinks with the gap itself, so it is gone exactly when the page has closed over it. */
+let x = 0, v = 0, goal = 0, w = 12, raf = 0, last = 0;
+function springTo(g, omega){ goal = g; w = omega; if(!raf){ last = performance.now(); raf = requestAnimationFrame(tick); } }
+function stopSpring(){ if(raf) cancelAnimationFrame(raf); raf = 0; }
+function tick(now){
+  const dt = Math.min(.034, (now - last) / 1000); last = now;
+  for(let i = 0; i < 4; i++){ const h = dt / 4, a = -w * w * (x - goal) - 2 * w * v; v += a * h; x += v * h; }   // sub-steps: stable at any frame rate
+  if(Math.abs(x - goal) < .15 && Math.abs(v) < 4){ x = goal; v = 0; raf = 0; }
+  render();
+  if(raf) raf = requestAnimationFrame(tick);
+  else if(goal === 0) settle();
+}
+function render(){
+  place(x);
+  if(!dragging && dial.classList.contains('on')){                         // spinner follows the gap: full while open, fading as it closes
+    const k = Math.max(0, Math.min(1, x / (REST * .85)));
+    dial.style.opacity = k.toFixed(3); dial.style.scale = (.6 + .4 * k).toFixed(3);
+  }
+}
+function settle(){ if(busy) return; dial.classList.remove('on', 'out', 'spin', 'pop'); dial.style.opacity = ''; dial.style.scale = ''; spokes.forEach(s => s.classList.remove('in')); }
 function show(){ clearTimeout(hideT); dial.style.top = headerBottom() + 'px'; dial.classList.remove('out', 'spin', 'pop'); dial.classList.add('on'); }
+let lastY = 0, lastYt = 0;
 function setPull(px){
-  place(px);
+  const now = performance.now(); if(lastYt) v = v * .4 + .6 * (px - lastY) / Math.max(.008, (now - lastYt) / 1000); lastY = px; lastYt = now;   // finger speed, smoothed
+  x = px; place(px);
   if(dial.classList.contains('spin')) return;                            // already refreshing: spokes keep pulsing
   const n = Math.min(N, Math.floor(px / PULL * N + 1e-6));
   spokes.forEach((s, i) => s.classList.toggle('in', i < n));
@@ -49,7 +76,7 @@ function hide(){                                                          // shr
 }
 
 /* ---------- gesture ---------- */
-let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false, dragging = false;
+let y0 = 0, x0 = 0, x0f = 0, dy = 0, track = false, lock = '', fired = false, dragging = false;
 function ok(e){
   if(!standalone || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
   const t = e.target;
@@ -65,11 +92,11 @@ document.addEventListener('touchmove', e => {
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ y0 = t.clientY; dragging = true; home.classList.remove('ptr-back'); home.classList.add('ptr-drag'); if(!busy) show(); }
+    if(lock === 'y'){ y0 = t.clientY; x0f = x; dragging = true; stopSpring(); lastYt = 0; v = 0; dial.style.opacity = ''; dial.style.scale = ''; if(!busy) show(); }
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
-  dy = 240 * (1 - Math.exp(-Math.max(0, t.clientY - y0) / 430));         // elastic, no hard stop
+  dy = x0f + 240 * (1 - Math.exp(-Math.max(0, t.clientY - y0) / 430));   // elastic, no hard stop (starts from where the page already is)
   setPull(dy);
   if(!fired && dy >= PULL){ fired = true; run(); }                        // iOS starts refreshing at the line, not on release
 }, { passive: false });
@@ -77,16 +104,11 @@ document.addEventListener('touchend', () => { if(track){ track = false; release(
 document.addEventListener('touchcancel', () => { if(track){ track = false; release(); } }, { passive: true });
 function release(){
   const was = dragging; dragging = false; dy = 0;
-  home.classList.remove('ptr-drag');
   if(!was) return;
-  if(busy){ place(REST); return; }                                        // still refreshing: the page eases to a small gap and the spinner keeps turning in it (iOS)
-  back();
+  if(v < 0) v *= .5;                                                      // a flick upwards keeps some of its speed, never a jolt
+  springTo(busy ? REST : 0, busy ? 13 : 10);                              // loading: settles into the gap; otherwise straight home
 }
-function back(){                                                          // slow, soft return; the spinner shrinks away as the gap closes
-  home.classList.add('ptr-back'); place(0);
-  if(dial.classList.contains('on')) hide();
-  setTimeout(() => home.classList.remove('ptr-back'), 650);
-}
+function back(){ springTo(0, 10); }                                       // the return: slower spring, soft landing
 
 /* ---------- refresh: data only, never the page ---------- */
 async function run(){
@@ -96,9 +118,9 @@ async function run(){
   const before = big ? big.textContent : '';
   stop(big);                                                             // a count still running: put its final value back first
   if(!dial.classList.contains('on')) show();
-  if(!dragging){ home.classList.remove('ptr-back'); place(REST); }
+  if(!dragging) springTo(REST, 13);
   spokes.forEach(s => s.classList.add('in'));
-  dial.classList.add('pop', 'spin');                                     // 200 ms elastic pop, then the pulse
+  dial.classList.add('spin');                                            // the pulse starts, no jolt
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
   const t0 = performance.now();

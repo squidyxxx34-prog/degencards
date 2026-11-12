@@ -2064,11 +2064,9 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 
 /* ---------- pull to refresh on Home (ptr.js, home-screen app only): smooth spinner + gliding balance ---------- */
 html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
-#homeView{transition:transform .5s cubic-bezier(.16,1,.3,1);}   /* exponential ease-out (easeOutExpo) */
-#homeView.ptr-drag{transition:none;}
-#homeView.ptr-back{transition:transform .6s cubic-bezier(.16,1,.3,1);}   /* the return after the spin, same curve: one continuous feel */
+/* the page motion is a JS spring (ptr.js): no CSS transition on #homeView */
 .ptr{position:fixed; left:50%; top:0; z-index:19; width:26px; height:26px; margin:28px 0 0 -13px; pointer-events:none; opacity:0; mix-blend-mode:plus-lighter;}   /* fixed spot */
-.ptr.on{opacity:1;}
+.ptr.on{opacity:1;} .ptr{will-change:opacity, scale;}
 .ptr i{position:absolute; left:50%; top:50%; width:3px; height:7px; margin:-3.5px 0 0 -1.5px; border-radius:1.5px; background:#fff; opacity:0;
   transform:rotate(calc(var(--i) * 45deg)) translateY(-8px);}
 .ptr i.in{opacity:.9;}
@@ -2079,4 +2077,4 @@ html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
 .ptr.out{opacity:0; scale:.5; transition:opacity .35s cubic-bezier(.16,1,.3,1), scale .35s cubic-bezier(.16,1,.3,1);}
 .hm-pnl-big.ptr-soft{animation:ptrSoft .8s cubic-bezier(.22,1,.36,1);}
 @keyframes ptrSoft{0%{opacity:.35; filter:blur(3px); transform:translateY(5px);} 100%{opacity:1; filter:blur(0); transform:none;}}
-@media(prefers-reduced-motion:reduce){ #homeView,.ptr{transition:none;} .ptr.pop,.hm-pnl-big.ptr-soft{animation:none;} }
+@media(prefers-reduced-motion:reduce){ .ptr{transition:none;} .hm-pnl-big.ptr-soft{animation:none;} }
