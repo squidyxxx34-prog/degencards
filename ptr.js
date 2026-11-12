@@ -1,8 +1,8 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only)
    Pull Home down from the top: the iOS activity indicator builds up spoke by spoke under the header; past the
-   line it pops and the data refreshes in place (no page reload). On release the page eases to a small gap where the
-   spinner keeps turning (0.65 s at least), then glides back. The trades are read from the database first
+   line the data refreshes in place (no page reload). On release one spring carries the page into a small gap where
+   the spinner keeps turning (0.65 s at least), then home, without a break. The trades are read from the database first
    and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
    (one continuous count, no steps) while the page eases back.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
@@ -18,9 +18,9 @@ let busy = false;
 
 /* ---------- the spinner: iOS activity indicator (UIRefreshControl) ----------
    8 spokes. Pulling: they appear one by one, clockwise from the top, one per 1/8 of the pull.
-   At the line: a short elastic pop and the refresh starts right away, finger still down (like iOS).
+   At the line: the refresh starts right away, finger still down (like iOS).
    Refreshing: each spoke pulses 0.9 -> 0.25 opacity over 1 s, linear, 125 ms apart clockwise (Apple's WebKit values).
-   Done: it shrinks and fades out in 300 ms. It never moves: only the page does. */
+   Done: it shrinks and fades with the closing gap. It never moves: only the page does. */
 const N = 8;
 const dial = document.createElement('div');
 dial.className = 'ptr'; dial.setAttribute('aria-hidden', 'true');
