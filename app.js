@@ -1572,6 +1572,7 @@ function renderHomeHead(all){
   const d = new Date(), day = d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
   const lvl = levelFromXP(computeXP().total).lvl;
   document.getElementById('hmKicker').textContent = `${day}${profile ? ' · @'+profile.username : ''} · LVL ${lvl} ${levelTitle(lvl)}`;
+  setGreeting(profile ? profile.username : '');
   document.getElementById('hmClaim').hidden = !!profile || !profileLoaded;
   const wk = all.filter(t=>t.timestamp >= Date.now()-7*864e5), pnl = wk.reduce((s,t)=>s+t.pnl,0);
   const last = all[0];
@@ -2984,3 +2985,27 @@ sb.auth.onAuthStateChange((event, sess)=>{
   setTimeout(()=>onSession(sess), 0);   // never call supabase inside this callback (known deadlock)
 });
 sb.auth.getSession().then(({data})=>onSession(data.session));
+
+
+/* Home greeting by local time of day, a few variants per slot (same one all day, changes the next day) */
+function greetingFor(name, d = new Date()){
+  const h = d.getHours(), wd = d.getDay(), day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+  const n = name ? `, ${name}` : '';
+  const slots = h < 5  ? [`Up late${n}`, `Night owl mode${n}`, `Still up${n}?`, `Burning the midnight oil${n}`]
+              : h < 7  ? [`Early bird${n}`, `Up before the sun${n}`, `Rise and grind${n}`]
+              : h < 12 ? [`Good morning${n}`, `Morning${n}`, wd === 1 ? `Happy Monday${n}` : wd === 5 ? `Happy Friday${n}` : `Good morning${n}`]
+              : h < 14 ? [`Good afternoon${n}`, `Lunch break${n}?`, `Good afternoon${n}`]
+              : h < 18 ? [`Good afternoon${n}`, wd === 0 || wd === 6 ? `Happy weekend${n}` : `Good afternoon${n}`]
+              : h < 22 ? [`Good evening${n}`, `Evening${n}`, wd === 5 ? `Happy Friday night${n}` : `Good evening${n}`]
+              :          [`Good night${n}`, `Late session${n}?`, `Good night${n}`];
+  return slots[day % slots.length];
+}
+function setGreeting(name){
+  const el = document.getElementById('hmTitle'); if(!el) return;
+  const g = greetingFor(name), end = /\?$/.test(g) ? '' : '.';
+  el.textContent = g.replace(/\?$/, '');
+  const dot = document.createElement('span'); dot.className = 'hm-dot'; dot.textContent = end || '?';
+  el.appendChild(dot);
+  el.classList.toggle('hm-title-long', g.length > 18);
+}
+setInterval(() => { const el = document.getElementById('hmTitle'); if(el && el.isConnected && typeof profile !== 'undefined') setGreeting(profile ? profile.username : ''); }, 10 * 60 * 1000);   // follows the clock while the app stays open

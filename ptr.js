@@ -1,9 +1,9 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only), after takuoka/PullToBounce (MIT)
    https://github.com/takuoka/PullToBounce — same phases and values, ported from Swift to the web:
-   1. Pull: Home slides down (it stays visible: the balance is always readable); a glass sheet follows it, its top edge flat.
+   1. Pull: Home slides down (it stays visible: the balance is always readable); a thin light edge follows it, flat.
    2. Past the pull distance (96 px) the edge bends down like a membrane, up to 40 px.
-   3. At pull + bend (136 px) it locks: the edge is let go and wobbles back (damped keyframes 1, -.7, .4, -.3, .15, 0
+   3. At pull + bend (136 px) the refresh starts (the page keeps following the finger, softer, never locked): the edge is let go and wobbles back (damped keyframes 1, -.7, .4, -.3, .15, 0
       over 0.8 s, ease-in); 0.2 s later a ball rises out of the surface (0.25 s, overshoot curve .49,.13,.29,1.61)
       and a ring draws itself around it while turning (1 s per turn, stroke drawn then erased, 0.8 s each, ease-out).
    4. Data in: the balance rolls to its new value digit by digit right away; then the ring goes, the ball sinks back
@@ -21,7 +21,8 @@ const BOUNCE_MS = 800, UP_MS = 250, MIN_MS = 1400;
 let busy = false;
 
 /* ---------- elements: the sheet (bendable top edge), the ball and its ring ---------- */
-const sheet = document.createElement('div'); sheet.className = 'ptb-sheet'; sheet.setAttribute('aria-hidden', 'true');
+const sheet = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); sheet.setAttribute('class', 'ptb-sheet'); sheet.setAttribute('aria-hidden', 'true');
+const edgePath = document.createElementNS('http://www.w3.org/2000/svg', 'path'); sheet.appendChild(edgePath);   // only the edge is drawn: nothing tints the page behind
 const ball = document.createElement('div'); ball.className = 'ptb-ball'; ball.setAttribute('aria-hidden', 'true');
 const R = BALL / 2 * 1.2, C = R + 3, a0 = -Math.PI / 2, a1 = Math.PI * 1.5 + Math.PI / 8;    // ring: radius ball/2 x 1.2, one turn + 1/16
 const pt = a => `${(C + R * Math.cos(a)).toFixed(2)} ${(C + R * Math.sin(a)).toFixed(2)}`;
@@ -42,13 +43,13 @@ function draw(){
   const on = x > .05 || busy;
   app.classList.toggle('ptb-on', on);
   if(!on){ sheet.style.display = 'none'; return; }
-  const w = innerWidth, edge = hb + Math.min(x, PULL), b = wobble ? wobble.b : bend, H = innerHeight + LIP;
-  sheet.style.display = 'block';
+  const w = innerWidth, edge = hb + Math.min(x, PULL), b = wobble ? wobble.b : bend;
+  sheet.style.display = 'block'; sheet.setAttribute('viewBox', `0 0 ${w} ${LIP * 3}`); sheet.style.width = w + 'px'; sheet.style.height = (LIP * 3) + 'px';
   sheet.style.transform = `translate3d(0,${(edge - LIP).toFixed(2)}px,0)`;
-  sheet.style.clipPath = `path('M0 ${H} L0 ${LIP} Q${w / 2} ${(LIP + b * 2).toFixed(2)} ${w} ${LIP} L${w} ${H} Z')`;   // quad control at 2b: the edge dips by b
+  edgePath.setAttribute('d', `M0 ${LIP} Q${w / 2} ${(LIP + b * 2).toFixed(2)} ${w} ${LIP}`);   // quad control at 2b: the edge dips by b
   ball.style.top = (hb + PULL) + 'px';
 }
-function setBend(px){ x = px; bend = Math.max(0, Math.min(BEND, px - PULL)); draw(); }
+function setBend(px){ x = px; bend = busy ? 0 : Math.max(0, Math.min(BEND, px - PULL)); draw(); }
 
 /* the release wobble: CAKeyframeAnimation on the path, values b x [1, -.7, .4, -.3, .15, 0], 0.8 s, ease-in, linear between keys */
 const KEYS = [1, -.7, .4, -.3, .15, 0];
@@ -66,21 +67,22 @@ function wobbleFrom(b){
 /* page spring for the way back (and a release before the lock) */
 let v = 0, raf = 0, last = 0;
 let flat = false;
-function springHome(omega, keepFlat){
-  flat = !!keepFlat;
+function springHome(omega, keepFlat){ springTo(0, omega, keepFlat); }
+function springTo(goal, omega, keepFlat){
+  flat = !!keepFlat || busy;
   cancelAnimationFrame(raf); last = performance.now();
   raf = requestAnimationFrame(function tick(now){
     const dt = Math.min(.034, (now - last) / 1000); last = now;
-    for(let i = 0; i < 4; i++){ const h = dt / 4, a = -omega * omega * x - 2 * omega * v; v += a * h; x += v * h; }
-    if(Math.abs(x) < .15 && Math.abs(v) < 4){ x = 0; v = 0; raf = 0; }
-    bend = flat ? 0 : Math.max(0, Math.min(BEND, x - PULL)); draw();       // after a refresh the edge stays flat on the way back (no second dip)
-    if(raf) raf = requestAnimationFrame(tick); else done();
+    for(let i = 0; i < 4; i++){ const h = dt / 4, a = -omega * omega * (x - goal) - 2 * omega * v; v += a * h; x += v * h; }
+    if(Math.abs(x - goal) < .15 && Math.abs(v) < 4){ x = goal; v = 0; raf = 0; }
+    bend = flat ? 0 : Math.max(0, Math.min(BEND, x - PULL)); draw();       // while / after a refresh the edge stays flat (only the wobble moves it)
+    if(raf) raf = requestAnimationFrame(tick); else if(goal === 0) done();
   });
 }
 function done(){ if(busy) return; app.classList.remove('ptb-on'); sheet.style.display = 'none'; home.style.transform = ''; }
 
 /* ---------- gesture ---------- */
-let y0 = 0, x0 = 0, track = false, lock = '', dragging = false, lastX = 0, lastT = 0;
+let y0 = 0, x0 = 0, xStart = 0, track = false, lock = '', dragging = false, lastX = 0, lastT = 0;
 function ok(e){
   if(!standalone || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
   const t = e.target;
@@ -93,22 +95,23 @@ document.addEventListener('touchstart', e => {
 document.addEventListener('touchmove', e => {
   if(!track) return;
   const t = e.touches[0], ry = t.clientY - y0, rx = t.clientX - x0;
-  if(busy){ e.preventDefault(); return; }                                  // locked while it loads (scroll disabled, like the original)
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ y0 = t.clientY; dragging = true; cancelAnimationFrame(raf); raf = 0; hb = headerBottom(); lastT = 0; }
+    if(lock === 'y'){ y0 = t.clientY; xStart = x; dragging = true; cancelAnimationFrame(raf); raf = 0; if(!busy) hb = headerBottom(); lastT = 0; }
   }
   if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
-  const px = Math.max(0, t.clientY - y0) * .62;                           // scroll-view-like resistance
+  const raw = xStart + Math.max(0, t.clientY - y0) * .62;                 // scroll-view-like resistance
+  const px = raw <= STOP ? raw : STOP + 150 * (1 - Math.exp(-(raw - STOP) / 260));   // past the line it keeps following, softer and softer: never a wall
   const now = performance.now(); if(lastT) v = (px - lastX) / Math.max(.008, (now - lastT) / 1000); lastX = px; lastT = now;
-  if(px >= STOP){ setBend(STOP); dragging = false; run(true); return; }   // reached pull + bend: lock and refresh
+  if(busy){ x = px; draw(); return; }                                     // refreshing: the page still follows the finger
   setBend(px);
+  if(px >= STOP) run(true);                                               // reached pull + bend: refresh, finger still free
 }, { passive: false });
 document.addEventListener('touchend', () => { if(track){ track = false; release(); } }, { passive: true });
 document.addEventListener('touchcancel', () => { if(track){ track = false; release(); } }, { passive: true });
-function release(){ if(!dragging) return; dragging = false; if(!busy){ if(v < 0) v *= .5; springHome(12); } }
+function release(){ if(!dragging) return; dragging = false; if(v < 0) v *= .5; if(busy) springTo(STOP, 13); else springHome(12); }
 
 /* ---------- refresh: data only, never the page ---------- */
 async function run(fromPull){
@@ -117,8 +120,7 @@ async function run(fromPull){
   const big = $('hmPnlBig'), before = big ? big.textContent : '';
   stop(big);
   hb = headerBottom();
-  if(!fromPull){ x = STOP; bend = BEND; }
-  x = STOP; draw();
+  if(!fromPull){ x = STOP; bend = BEND; } draw();
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
   const t0 = performance.now();
@@ -134,7 +136,7 @@ async function run(fromPull){
   await new Promise(r => setTimeout(r, UP_MS));
   busy = false; live.textContent = 'Updated';
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, Math.max(0, ms - (performance.now() - t0)) + 600);
-  v = 0; springHome(11, true);
+  if(!dragging){ v = 0; springHome(11, true); }                            // finger still down: the page goes home on release
   // then the wallet check in the background; if it brings new trades the balance glides again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
     Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2._to == null) { const was = e2._shown; if(was && e2.textContent !== was) roll(e2, was); } }).catch(() => {});
