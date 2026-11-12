@@ -2,7 +2,7 @@
    DEGENCARDS — pull to refresh on Home (installed web app only)
    Pull Home down from the top: the iOS activity indicator builds up spoke by spoke under the header; past the
    line it pops and the data refreshes in place (no page reload). On release the page eases to a small gap where the
-   spinner keeps turning (1.3 s at least), then glides back slowly. The trades are read from the database first
+   spinner keeps turning (0.65 s at least), then glides back. The trades are read from the database first
    and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
    (one continuous count, no steps) while the page eases back.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
@@ -13,7 +13,7 @@ const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)'
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 const home = $('homeView'), app = $('app'); if(!home || !app) return;
-const PULL = 76, REST = 76, MIN_SPIN = 1300;       // release line, gap the page rests at while it spins (px), shortest spin (ms)
+const PULL = 76, REST = 76, MIN_SPIN = 650;        // release line, gap the page rests at while it spins (px), shortest spin (ms)
 let busy = false;
 
 /* ---------- the spinner: iOS activity indicator (UIRefreshControl) ----------
@@ -43,9 +43,9 @@ function setPull(px){
   spokes.forEach((s, i) => s.classList.toggle('in', i < n));
 }
 let hideT = 0;
-function hide(){                                                          // shrink + fade, 450 ms
+function hide(){                                                          // shrink + fade, 350 ms
   dial.classList.add('out');
-  clearTimeout(hideT); hideT = setTimeout(() => { dial.classList.remove('on', 'out', 'spin', 'pop'); spokes.forEach(s => s.classList.remove('in')); }, 450);
+  clearTimeout(hideT); hideT = setTimeout(() => { dial.classList.remove('on', 'out', 'spin', 'pop'); spokes.forEach(s => s.classList.remove('in')); }, 350);
 }
 
 /* ---------- gesture ---------- */
@@ -85,7 +85,7 @@ function release(){
 function back(){                                                          // slow, soft return; the spinner shrinks away as the gap closes
   home.classList.add('ptr-back'); place(0);
   if(dial.classList.contains('on')) hide();
-  setTimeout(() => home.classList.remove('ptr-back'), 950);
+  setTimeout(() => home.classList.remove('ptr-back'), 650);
 }
 
 /* ---------- refresh: data only, never the page ---------- */
