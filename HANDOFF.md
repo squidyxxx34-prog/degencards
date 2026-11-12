@@ -407,3 +407,7 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - `ptr.js` réécrit : spinner d'activité iOS standard (8 branches qui apparaissent une à une en tirant, puis tournent), plus de cadran en verre, plus de reflet, plus de pastille « +$x ».
 - Bug corrigé : la pastille lisait le solde pendant qu'il roulait (tous les chiffres des colonnes) et affichait un nombre géant par-dessus les pastilles de période. Pastille supprimée ; un roulement en cours est toujours terminé avant d'en lancer un autre (`settle`).
 - Plus rapide : lecture de la base d'abord (`reload()`), affichage immédiat (0,3 s minimum au lieu de 0,9 s), roulement du solde en ~0,8 s ; la synchro wallet (`syncNow`) part ensuite en arrière-plan et le solde roule à nouveau si elle ramène des trades.
+
+## Pull to refresh plus fluide (2026-11-12)
+- Plus d'étapes : le spinner apparaît en continu avec le doigt (opacité, taille et rotation liées au tirage) puis tourne sans à-coups ; la page revient en 0,55 s avec une courbe douce pendant que le solde glisse vers sa valeur (un seul décompte continu de 0,75 s, tous les chiffres ensemble, léger flou au départ). Le roulement chiffre par chiffre façon machine à sous est supprimé.
+- Un décompte en cours est annulé proprement (`stop`) et la valeur finale remise avant un nouveau refresh : l'app ne réécrit le solde que s'il change.

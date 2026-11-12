@@ -1,8 +1,9 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only)
-   Pull Home down from the top: the standard iOS activity spinner appears in the gap, spoke by spoke; release
+   Pull Home down from the top: an iOS-style activity spinner fades and turns in with the pull; release
    past the line and the data refreshes in place (no page reload). The trades are read from the database first
-   and shown at once; the wallet sync runs after, in the background. The balance then rolls to its value.
+   and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
+   (one continuous count, no steps) while the page eases back.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
    window.dcPtr.run() starts a refresh by hand (tests).
    ============================================================================ */
@@ -19,7 +20,6 @@ const dial = document.createElement('div');
 dial.className = 'ptr'; dial.setAttribute('aria-hidden', 'true');
 dial.innerHTML = Array.from({ length: N }, (_, i) => `<i style="--i:${i}"></i>`).join('');
 app.appendChild(dial);
-const spokes = [...dial.children];
 const live = document.createElement('div');
 live.className = 'sr-only'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
 app.appendChild(live);
@@ -31,12 +31,16 @@ function place(px){                                                       // pag
   home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : '';
   dial.style.transform = `translate3d(0,${Math.max(4, px / 2 - 14).toFixed(1)}px,0)`;
 }
-function setPull(px){
+function setPull(px){                                                     // one continuous move: fades, grows and turns with the finger
   place(px);
-  const k = Math.min(1, px / PULL) * N;
-  spokes.forEach((s, i) => { s.style.opacity = k > i + .5 ? String(1 - i * .09) : '0'; });   // spokes come in one by one, like iOS
+  const k = Math.min(1, px / PULL);
+  dial.style.opacity = k.toFixed(3); dial.style.scale = (.55 + .45 * k).toFixed(3); dial.style.rotate = (px * 2.4).toFixed(1) + 'deg';
 }
-function hide(){ place(0); dial.classList.remove('on', 'spin', 'drag'); spokes.forEach(s => { s.style.opacity = ''; }); }
+let hideT = 0;
+function hide(){
+  place(0); dial.classList.remove('on', 'drag'); dial.style.opacity = ''; dial.style.scale = '';
+  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin'); dial.style.rotate = ''; } }, 320);   // keeps turning while it fades
+}
 
 /* ---------- gesture ---------- */
 let y0 = 0, x0 = 0, dy = 0, track = false, lock = '';
@@ -73,9 +77,10 @@ function end(go){
 async function run(){
   if(busy || typeof reload !== 'function') return;
   busy = true;
-  const big = $('hmPnlBig'); settle(big);
+  const big = $('hmPnlBig');
   const before = big ? big.textContent : '';
-  dial.style.top = headerBottom() + 'px'; dial.classList.add('on', 'spin'); spokes.forEach(s => { s.style.opacity = ''; });
+  stop(big);                                                             // a count still running: put its final value back first (the app only rewrites the figure when it changes)
+  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.scale = ''; dial.style.rotate = '';
   place(REST);
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
@@ -90,36 +95,34 @@ async function run(){
   busy = false;
   // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance rolls again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
-    const el = $('hmPnlBig'), shown = el ? (el.getAttribute('aria-label') || el.textContent) : '';
-    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && !e2.classList.contains('od-on') && e2.textContent !== shown) roll(e2, shown); }).catch(() => {});
+    const el = $('hmPnlBig'), shown = el ? (el._to || el.textContent) : '';
+    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2.textContent !== shown && e2.textContent !== e2._to) roll(e2, shown); }).catch(() => {});
   }
 }
 
-/* ---------- the balance rolls to its value, digit by digit ---------- */
-function settle(el){                                                     // end a roll in progress: the element holds plain text again
-  if(!el || !el.classList.contains('od-on')) return;
-  const to = el.getAttribute('aria-label') || '';
-  el.classList.remove('od-on', 'od-go'); el.removeAttribute('aria-label'); el.textContent = to;
-}
+/* ---------- the balance glides to its value: one eased count, every digit moving together ---------- */
+function parseUsd(t){ const v = parseFloat(String(t || '').replace(/[^0-9.]/g, '')); return Number.isFinite(v) ? (/^\s*[-−]/.test(t) ? -v : v) : NaN; }
+function stop(el){ if(el && el._to != null){ if(el.textContent === el._last) el.textContent = el._to; el._to = null; el._tw = 0; } }
 function roll(el, from){
   if(!el || el.hidden) return 0;
-  settle(el);
-  const to = el.textContent; if(!to) return 0;
-  if(reduce()){ el.classList.add('ptr-fade'); setTimeout(() => el.classList.remove('ptr-fade'), 400); return 400; }
-  const fromD = String(from || '').replace(/\D/g, ''), toD = to.replace(/\D/g, ''), total = toD.length;
-  let k = 0;
-  el.innerHTML = [...to].map(ch => {
-    if(!/\d/.test(ch)) return `<span class="od-c">${ch.replace(/[&<>]/g, '')}</span>`;
-    const d = +ch, back = total - k, start = fromD.length >= back ? +fromD[fromD.length - back] : 0;   // old digits aligned from the right
-    const end = 10 + d, dur = 420 + k * 45; k++;
-    let col = ''; for(let i = start; i <= end; i++) col += `<i>${i % 10}</i>`;
-    return `<span class="od"><span class="od-r" style="--steps:${end - start};--dur:${dur}ms">${col}</span></span>`;
-  }).join('');
-  el.classList.add('od-on'); el.setAttribute('aria-label', to);
-  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('od-go')));
-  const longest = 420 + total * 45 + 80;
-  setTimeout(() => { if(el.getAttribute('aria-label') === to) settle(el); else el.removeAttribute('aria-label'); }, longest);
-  return longest;
+  const to = el.textContent, a = parseUsd(from), b = parseUsd(to), DUR = 750;
+  if(!to) return 0;
+  el.classList.remove('ptr-soft'); void el.offsetWidth; el.classList.add('ptr-soft');          // soft breath on the figure, even when the value is the same
+  setTimeout(() => el.classList.remove('ptr-soft'), DUR + 50);
+  if(reduce() || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) < .005) return DUR;
+  const minus = (to.match(/[-−]/) || String(from).match(/[-−]/) || ['-'])[0], plus = /\+/.test(to + from) ? '+' : '';
+  const fmt = v => (v < 0 ? minus : plus) + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  stop(el);
+  const t0 = performance.now(), id = (roll.n = (roll.n || 0) + 1);
+  el._tw = id; el._to = to; el._last = el.textContent = fmt(a);
+  (function step(now){
+    if(el._tw !== id) return;                                             // stopped or replaced
+    if(el.textContent !== el._last){ el._to = null; return; }             // the app wrote a newer value meanwhile: leave it
+    const p = Math.min(1, (now - t0) / DUR), e = 1 - Math.pow(1 - p, 4);  // ease-out: fast start, long soft landing
+    el._last = el.textContent = p < 1 ? fmt(a + (b - a) * e) : to;
+    if(p < 1) requestAnimationFrame(step); else el._to = null;
+  })(t0);
+  return DUR;
 }
 
 if(standalone) document.documentElement.classList.add('dc-standalone');
