@@ -4,7 +4,8 @@
   --green:#3DFFA0; --red:#FF5C6C;
   --purple:#C09EFF; --gold:#FFD35C; --blue:#6EC0FF;
   --font: 'Outfit', system-ui, sans-serif; --mono: 'JetBrains Mono', monospace;
-  padding-top: env(safe-area-inset-top,0px);   /* no bottom padding: it cut the page 34px above the bottom edge in the home-screen app (footer and FAB clear the home bar themselves) */
+  /* no padding on the page itself: in the home-screen app the status bar is translucent (black-translucent), the backdrop
+     runs under the notch and the header pads itself by the safe area, so the header colour fills the notch area */
 }
 *{box-sizing:border-box; margin:0; padding:0;}
 html,body{background:var(--bg); color:var(--tx); font-family:var(--font); height:100%; overflow-x:hidden;}
@@ -1019,7 +1020,7 @@ button.acc-av:hover::after,button.acc-av:focus-visible::after{opacity:1;}
 /* ---------- landing (root, logged out) ---------- */
 html.dc-authed #landing{display:none;}
 #landing{overflow-x:clip;}
-#landing .lp-top{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; max-width:1120px; margin:0 auto;}
+#landing .lp-top{display:flex; align-items:center; justify-content:space-between; padding:calc(18px + env(safe-area-inset-top,0px)) 20px 18px; max-width:1120px; margin:0 auto;}
 #landing .lp-logo{font-weight:800; letter-spacing:.02em; text-decoration:none; font-size:18px; display:flex; align-items:center; gap:7px; color:var(--tx);}
 #landing .lp-logo span{color:var(--purple);}
 #landing .lp-btn{display:inline-flex; align-items:center; justify-content:center; padding:15px 26px; border-radius:14px; background:var(--green); color:#05070a; font-weight:800; text-decoration:none; letter-spacing:.03em; font-size:15px;}
