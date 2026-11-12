@@ -411,3 +411,8 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 ## Pull to refresh plus fluide (2026-11-12)
 - Plus d'étapes : le spinner apparaît en continu avec le doigt (opacité, taille et rotation liées au tirage) puis tourne sans à-coups ; la page revient en 0,55 s avec une courbe douce pendant que le solde glisse vers sa valeur (un seul décompte continu de 0,75 s, tous les chiffres ensemble, léger flou au départ). Le roulement chiffre par chiffre façon machine à sous est supprimé.
 - Un décompte en cours est annulé proprement (`stop`) et la valeur finale remise avant un nouveau refresh : l'app ne réécrit le solde que s'il change.
+
+## Pull to refresh sans blocage (2026-11-12)
+- Tirage : plus de plafond dur (c'était 120 px) ni de saut après la zone morte ; courbe élastique continue `240 * (1 - exp(-d / 430))`.
+- Relâchement : la page revient directement à sa place en 0,7 s (courbe douce), sans s'arrêter à mi-chemin pendant le chargement ; le spinner se pose sous l'en-tête et s'efface quand les données sont là. Plus de délai minimum.
+- Correctif : la fin de la synchro en arrière-plan pouvait relancer le décompte du solde vers une valeur intermédiaire ; elle ne le relance plus que si l'app a écrit un nouveau solde.

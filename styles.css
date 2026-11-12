@@ -2064,10 +2064,10 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 
 /* ---------- pull to refresh on Home (ptr.js, home-screen app only): smooth spinner + gliding balance ---------- */
 html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
-#homeView{transition:transform .55s cubic-bezier(.22,1,.36,1);}
+#homeView{transition:transform .7s cubic-bezier(.22,1,.36,1);}
 #homeView.ptr-drag{transition:none;}
 .ptr{position:fixed; left:50%; top:0; z-index:19; width:28px; height:28px; margin-left:-14px; pointer-events:none; opacity:0; scale:.55;
-  transition:transform .55s cubic-bezier(.22,1,.36,1), opacity .3s ease, scale .3s ease;}
+  transition:transform .7s cubic-bezier(.22,1,.36,1), opacity .45s ease, scale .45s ease;}
 .ptr.on{opacity:1; scale:1;} .ptr.drag{transition:none;}
 .ptr i{position:absolute; left:50%; top:50%; width:2.8px; height:7.5px; margin:-3.75px 0 0 -1.4px; border-radius:2px; background:#fff; opacity:calc(1 - var(--i) * .11); transform:rotate(calc(var(--i) * -45deg)) translateY(-8.5px);}
 .ptr.spin{animation:ptrTurn .85s linear infinite;}

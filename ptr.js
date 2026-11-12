@@ -12,7 +12,7 @@ const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)'
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 const home = $('homeView'), app = $('app'); if(!home || !app) return;
-const PULL = 64, MAX = 120, REST = 52, N = 8;      // release line, furthest pull, resting gap while loading (px), spokes
+const PULL = 64, N = 8;                            // release line (px), spokes
 let busy = false;
 
 /* ---------- the spinner ---------- */
@@ -39,7 +39,7 @@ function setPull(px){                                                     // one
 let hideT = 0;
 function hide(){
   place(0); dial.classList.remove('on', 'drag'); dial.style.opacity = ''; dial.style.scale = '';
-  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin'); dial.style.rotate = ''; } }, 320);   // keeps turning while it fades
+  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin'); dial.style.rotate = ''; } }, 480);   // keeps turning while it fades
 }
 
 /* ---------- gesture ---------- */
@@ -59,35 +59,35 @@ document.addEventListener('touchmove', e => {
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ dial.style.top = headerBottom() + 'px'; dial.classList.add('on', 'drag'); home.classList.add('ptr-drag'); }
+    if(lock === 'y'){ y0 = t.clientY; dial.style.top = headerBottom() + 'px'; dial.classList.add('on', 'drag'); home.classList.add('ptr-drag'); }
   }
-  if(lock !== 'y' || ry <= 0 || !atTop()){ track = false; end(false); return; }
+  if(lock !== 'y' || !atTop()){ track = false; end(false); return; }
   e.preventDefault();
-  dy = Math.min(MAX, ry * .5);
+  const d = Math.max(0, t.clientY - y0);
+  dy = 240 * (1 - Math.exp(-d / 430));                                  // elastic: follows the finger and softens progressively, never a hard stop
   setPull(dy);
 }, { passive: false });
 document.addEventListener('touchend', () => { if(track){ track = false; end(dy >= PULL); } }, { passive: true });
 document.addEventListener('touchcancel', () => { if(track){ track = false; end(false); } }, { passive: true });
 function end(go){
   home.classList.remove('ptr-drag'); dial.classList.remove('drag'); dy = 0;
-  if(go) run(); else hide();
+  if(go) run(true); else hide();
 }
 
 /* ---------- refresh: data only, never the page ---------- */
-async function run(){
+async function run(fromPull){
   if(busy || typeof reload !== 'function') return;
   busy = true;
   const big = $('hmPnlBig');
   const before = big ? big.textContent : '';
   stop(big);                                                             // a count still running: put its final value back first (the app only rewrites the figure when it changes)
-  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.scale = ''; dial.style.rotate = '';
-  place(REST);
+  // released: the page glides straight back to its place (no stop on the way); the spinner settles under the header until the data is in
+  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.scale = ''; dial.style.rotate = '';
+  home.style.transform = ''; dial.style.transform = 'translate3d(0,3px,0)';
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
-  const t0 = performance.now();
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
-  const wait = 300 - (performance.now() - t0); if(wait > 0) await new Promise(r => setTimeout(r, wait));
   hide();
   const ms = roll($('hmPnlBig'), before);
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 500);
@@ -96,7 +96,7 @@ async function run(){
   // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance rolls again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
     const el = $('hmPnlBig'), shown = el ? (el._to || el.textContent) : '';
-    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2.textContent !== shown && e2.textContent !== e2._to) roll(e2, shown); }).catch(() => {});
+    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2._to == null && e2.textContent !== shown) roll(e2, shown); }).catch(() => {});   // only when the app itself wrote a new figure
   }
 }
 
@@ -126,5 +126,5 @@ function roll(el, from){
 }
 
 if(standalone) document.documentElement.classList.add('dc-standalone');
-window.dcPtr = { run, standalone };
+window.dcPtr = { run: () => run(false), standalone };
 })();
