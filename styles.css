@@ -2067,8 +2067,6 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 /* ---------- pull to refresh on Home (ptr.js, home-screen app only): PullToBounce (takuoka) ---------- */
 html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
 #app.ptb-on #homeView{position:relative; z-index:2; will-change:transform, opacity;}
-.ptb-sheet{display:none; position:fixed; left:0; top:0; z-index:1; pointer-events:none; overflow:visible; will-change:transform;}   /* just the bending edge: no fill, nothing behind the page */
-.ptb-sheet path{fill:none; stroke:hsl(var(--lq-h) calc(100% * var(--lq-s)) 86% / .75); stroke-width:2; stroke-linecap:round; filter:drop-shadow(0 0 6px hsl(var(--lq-h) 100% 70% / .6));}
 .ptb-ball{position:fixed; left:50%; top:0; z-index:1; width:36px; height:36px; margin:0 0 0 -18px; pointer-events:none; display:none;
   transform:translate3d(0,0,0); transition:transform .25s cubic-bezier(.49,.13,.29,1.61);}     /* PullToBounce ballMoveTimingFunc */
 #app.ptb-on .ptb-ball{display:block;}
