@@ -2080,5 +2080,13 @@ html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
 @keyframes ptbTurn{to{rotate:360deg;}}
 @keyframes ptbStroke{0%{stroke-dasharray:0 2; stroke-dashoffset:0; animation-timing-function:ease-out;} 50%{stroke-dasharray:1 2; stroke-dashoffset:0; animation-timing-function:ease-out;} 100%{stroke-dasharray:0 2; stroke-dashoffset:-1;}}
 .hm-pnl-big.ptr-soft{animation:ptrSoft .8s cubic-bezier(.22,1,.36,1);}
+/* rolling digits (ptr.js roll) */
+.hm-pnl-big.od-on{white-space:nowrap; overflow-wrap:normal;}
+.od{display:inline-block; height:1.05em; overflow:hidden; vertical-align:top;
+  -webkit-mask-image:linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent); mask-image:linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);}
+.od-r{display:block; will-change:transform;}
+.od-r i{display:block; height:1.05em; line-height:1.05em; font-style:normal;}
+.od-go .od-r{transform:translateY(calc(var(--steps) * -1.05em)); transition:transform var(--dur) cubic-bezier(.16,1,.3,1);}
+.od-c{display:inline-block; vertical-align:top; height:1.05em; line-height:1.05em;}
 @keyframes ptrSoft{0%{opacity:.35; filter:blur(3px); transform:translateY(5px);} 100%{opacity:1; filter:blur(0); transform:none;}}
 @media(prefers-reduced-motion:reduce){ .ptb-ball{transition:none;} .hm-pnl-big.ptr-soft{animation:none;} }

@@ -1,12 +1,13 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only), after takuoka/PullToBounce (MIT)
    https://github.com/takuoka/PullToBounce — same phases and values, ported from Swift to the web:
-   1. Pull: Home slides down and fades out; a glass sheet follows it, its top edge flat.
+   1. Pull: Home slides down (it stays visible: the balance is always readable); a glass sheet follows it, its top edge flat.
    2. Past the pull distance (96 px) the edge bends down like a membrane, up to 40 px.
    3. At pull + bend (136 px) it locks: the edge is let go and wobbles back (damped keyframes 1, -.7, .4, -.3, .15, 0
       over 0.8 s, ease-in); 0.2 s later a ball rises out of the surface (0.25 s, overshoot curve .49,.13,.29,1.61)
       and a ring draws itself around it while turning (1 s per turn, stroke drawn then erased, 0.8 s each, ease-out).
-   4. Data in: the ring goes, the ball sinks back (0.25 s), the page comes back up and fades in, the balance glides.
+   4. Data in: the balance rolls to its new value digit by digit right away; then the ring goes, the ball sinks back
+      (0.25 s) and the page comes back up.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
    window.dcPtr.run() starts a refresh by hand (tests).
    ============================================================================ */
@@ -38,7 +39,6 @@ const LIP = 60;                                  // the sheet box starts above i
 let x = 0, bend = 0, hb = 0, wobble = null;
 function draw(){
   home.style.transform = x > .05 ? `translate3d(0,${x.toFixed(2)}px,0)` : '';
-  home.style.opacity = x > .05 ? Math.max(0, (PULL - x) / PULL).toFixed(3) : '';                    // Home fades out over the pull distance
   const on = x > .05 || busy;
   app.classList.toggle('ptb-on', on);
   if(!on){ sheet.style.display = 'none'; return; }
@@ -77,7 +77,7 @@ function springHome(omega, keepFlat){
     if(raf) raf = requestAnimationFrame(tick); else done();
   });
 }
-function done(){ if(busy) return; app.classList.remove('ptb-on'); sheet.style.display = 'none'; home.style.opacity = ''; home.style.transform = ''; if(pendingRoll) { pendingRoll(); pendingRoll = null; } }
+function done(){ if(busy) return; app.classList.remove('ptb-on'); sheet.style.display = 'none'; home.style.transform = ''; }
 
 /* ---------- gesture ---------- */
 let y0 = 0, x0 = 0, track = false, lock = '', dragging = false, lastX = 0, lastT = 0;
@@ -111,7 +111,6 @@ document.addEventListener('touchcancel', () => { if(track){ track = false; relea
 function release(){ if(!dragging) return; dragging = false; if(!busy){ if(v < 0) v *= .5; springHome(12); } }
 
 /* ---------- refresh: data only, never the page ---------- */
-let pendingRoll = null;
 async function run(fromPull){
   if(busy || typeof reload !== 'function') return;
   busy = true;
@@ -128,43 +127,45 @@ async function run(fromPull){
   setTimeout(() => { if(busy) ball.classList.add('spin'); }, 200 + UP_MS); // then the ring
   try{ await reload(); }
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
+  const ms = roll($('hmPnlBig'), before);                                 // visible the whole time: the balance rolls as soon as the data is in
   await new Promise(r => setTimeout(r, Math.max(0, MIN_MS - (performance.now() - t0))));
   // ending: ring off, ball sinks back, then the page comes up and fades in
   ball.classList.remove('spin'); ball.classList.remove('up');
   await new Promise(r => setTimeout(r, UP_MS));
   busy = false; live.textContent = 'Updated';
-  pendingRoll = () => { const ms = roll($('hmPnlBig'), before); if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 400); };
+  if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, Math.max(0, ms - (performance.now() - t0)) + 600);
   v = 0; springHome(11, true);
   // then the wallet check in the background; if it brings new trades the balance glides again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
-    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2._to == null && !pendingRoll) { const was = e2._shown; if(was && e2.textContent !== was) roll(e2, was); } }).catch(() => {});
+    Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2._to == null) { const was = e2._shown; if(was && e2.textContent !== was) roll(e2, was); } }).catch(() => {});
   }
 }
 
-/* ---------- the balance glides to its value: one eased count, every digit moving together ---------- */
-function parseUsd(t){ const v = parseFloat(String(t || '').replace(/[^0-9.]/g, '')); return Number.isFinite(v) ? (/^\s*[-−]/.test(t) ? -v : v) : NaN; }
-function stop(el){ if(el && el._to != null){ if(el.textContent === el._last) el.textContent = el._to; el._to = null; el._tw = 0; } }
+/* ---------- the balance rolls to its value digit by digit (each column spins, all together, exponential ease-out) ---------- */
+function stop(el){                                                       // finish a roll in progress: plain text again
+  if(!el || el._to == null) return;
+  el.classList.remove('od-on', 'od-go'); el.textContent = el._to; el.removeAttribute('aria-label'); el._to = null; clearTimeout(el._odT);
+}
 function roll(el, from){
   if(!el || el.hidden) return 0;
-  const to = el.textContent, a = parseUsd(from), b = parseUsd(to), DUR = 750;
-  el._shown = to;
-  if(!to) return 0;
-  el.classList.remove('ptr-soft'); void el.offsetWidth; el.classList.add('ptr-soft');
-  setTimeout(() => el.classList.remove('ptr-soft'), DUR + 50);
-  if(reduce() || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) < .005) return DUR;
-  const minus = (to.match(/[-−]/) || String(from).match(/[-−]/) || ['-'])[0], plus = /\+/.test(to + from) ? '+' : '';
-  const fmt = v => (v < 0 ? minus : plus) + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   stop(el);
-  const t0 = performance.now(), id = (roll.n = (roll.n || 0) + 1);
-  el._tw = id; el._to = to; el._last = el.textContent = fmt(a);
-  (function step(now){
-    if(el._tw !== id) return;
-    if(el.textContent !== el._last){ el._to = null; return; }
-    const p = Math.min(1, (now - t0) / DUR), e = p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);  // exponential ease-out
-    el._last = el.textContent = p < 1 ? fmt(a + (b - a) * e) : to;
-    if(p < 1) requestAnimationFrame(step); else el._to = null;
-  })(t0);
-  return DUR;
+  const to = el.textContent; el._shown = to;
+  if(!to) return 0;
+  if(reduce()){ el.classList.remove('ptr-soft'); void el.offsetWidth; el.classList.add('ptr-soft'); return 400; }
+  const fromD = String(from || '').replace(/\D/g, ''), toD = to.replace(/\D/g, ''), total = toD.length;
+  let k = 0;
+  el.innerHTML = [...to].map(ch => {
+    if(!/\d/.test(ch)) return `<span class="od-c">${ch.replace(/[&<>]/g, '')}</span>`;
+    const d = +ch, back = total - k, start = fromD.length >= back ? +fromD[fromD.length - back] : 0;   // old digits aligned from the right
+    const end = 10 + d, dur = 900 + (total - 1 - k) * 70; k++;                                          // the cents spin a little longer than the dollars
+    let col = ''; for(let i = start; i <= end; i++) col += `<i>${i % 10}</i>`;
+    return `<span class="od"><span class="od-r" style="--steps:${end - start};--dur:${dur}ms">${col}</span></span>`;
+  }).join('');
+  el._to = to; el.setAttribute('aria-label', to); el.classList.add('od-on');
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('od-go')));
+  const longest = 900 + Math.max(0, total - 1) * 70 + 60;
+  el._odT = setTimeout(() => stop(el), longest);
+  return longest;
 }
 
 if(standalone) document.documentElement.classList.add('dc-standalone');
