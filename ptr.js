@@ -49,7 +49,7 @@ function hide(){                                                          // shr
 }
 
 /* ---------- gesture ---------- */
-let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false, dragging = false, doneAt = 0;
+let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false, dragging = false;
 function ok(e){
   if(!standalone || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
   const t = e.target;
@@ -104,10 +104,10 @@ async function run(){
   const t0 = performance.now();
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
-  await new Promise(r => setTimeout(r, Math.max(0, MIN_SPIN - (performance.now() - t0))));   // the data is already on screen; the spinner gets its full turn at the top
+  const ms = roll($('hmPnlBig'), before);                                 // the balance glides as soon as the data is in, while the spinner still turns
+  await new Promise(r => setTimeout(r, Math.max(0, MIN_SPIN - (performance.now() - t0))));   // the spinner gets its full turn at the top
   busy = false;
   if(!dragging) back();                                                  // finger still down: the return happens on release
-  const ms = roll($('hmPnlBig'), before);
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 500);
   live.textContent = 'Updated';
   // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance glides again
