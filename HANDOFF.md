@@ -425,3 +425,4 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - Le spinner ne bouge jamais (fixe sous l'en-tête) ; la page suit le doigt (élastique, sans butée) et revient en douceur au relâchement ; le spinner s'efface pendant ce retour pour ne pas se poser sur le contenu.
 - Pas de retour haptique : iOS ne l'autorise pas depuis une web app.
 - 2026-11-12 (suite) : comme iOS, au relâchement pendant le chargement la page se pose dans un petit espace (56 px) où le spinner continue de tourner, au moins 1,3 s au total, puis revient lentement (0,95 s, `#homeView.ptr-back`) pendant que le spinner rétrécit et s'efface (0,45 s).
+- 2026-11-12 : spinner placé 28 px sous l'en-tête (au lieu de 16) ; seuil et espace de repos passés à 76 px pour garder la même marge sous le spinner.

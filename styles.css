@@ -2067,7 +2067,7 @@ html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
 #homeView{transition:transform .7s cubic-bezier(.22,1,.36,1);}
 #homeView.ptr-drag{transition:none;}
 #homeView.ptr-back{transition:transform .95s cubic-bezier(.25,.8,.25,1);}   /* the slow return after the spin */
-.ptr{position:fixed; left:50%; top:0; z-index:19; width:26px; height:26px; margin:16px 0 0 -13px; pointer-events:none; opacity:0; mix-blend-mode:plus-lighter;}   /* fixed spot */
+.ptr{position:fixed; left:50%; top:0; z-index:19; width:26px; height:26px; margin:28px 0 0 -13px; pointer-events:none; opacity:0; mix-blend-mode:plus-lighter;}   /* fixed spot */
 .ptr.on{opacity:1;}
 .ptr i{position:absolute; left:50%; top:50%; width:3px; height:7px; margin:-3.5px 0 0 -1.5px; border-radius:1.5px; background:#fff; opacity:0;
   transform:rotate(calc(var(--i) * 45deg)) translateY(-8px);}

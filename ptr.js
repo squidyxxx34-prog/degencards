@@ -13,7 +13,7 @@ const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)'
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 const home = $('homeView'), app = $('app'); if(!home || !app) return;
-const PULL = 64, REST = 56, MIN_SPIN = 1300;       // release line, gap the page rests at while it spins (px), shortest spin (ms)
+const PULL = 76, REST = 76, MIN_SPIN = 1300;       // release line, gap the page rests at while it spins (px), shortest spin (ms)
 let busy = false;
 
 /* ---------- the spinner: iOS activity indicator (UIRefreshControl) ----------
