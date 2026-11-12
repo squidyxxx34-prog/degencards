@@ -1,6 +1,6 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only)
-   Pull Home down from the top: an iOS-style activity spinner fades and turns in with the pull; release
+   Pull Home down from the top: a glass dial (ring + arrow) fades in under the header and turns on itself with the pull; release
    past the line and the data refreshes in place (no page reload). The trades are read from the database first
    and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
    (one continuous count, no steps) while the page eases back.
@@ -12,13 +12,14 @@ const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)'
 const reduce = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 const home = $('homeView'), app = $('app'); if(!home || !app) return;
-const PULL = 64, N = 8;                            // release line (px), spokes
+const PULL = 64;                                   // release line (px)
 let busy = false;
 
 /* ---------- the spinner ---------- */
 const dial = document.createElement('div');
 dial.className = 'ptr'; dial.setAttribute('aria-hidden', 'true');
-dial.innerHTML = Array.from({ length: N }, (_, i) => `<i style="--i:${i}"></i>`).join('');
+dial.innerHTML = '<svg viewBox="0 0 40 40"><circle class="ptr-track" cx="20" cy="20" r="15"/><circle class="ptr-fill" cx="20" cy="20" r="15" pathLength="100"/></svg><i class="ptr-arrow"></i>';   // glass dial: ring that fills + arrow
+const ring = dial.querySelector('svg');
 app.appendChild(dial);
 const live = document.createElement('div');
 live.className = 'sr-only'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
@@ -31,12 +32,14 @@ function place(px){ home.style.transform = px ? `translate3d(0,${px.toFixed(1)}p
 function setPull(px){                                                     // one continuous move: fades, grows and turns with the finger
   place(px);
   const k = Math.min(1, px / PULL);
-  dial.style.opacity = k.toFixed(3); dial.style.rotate = (px * 2.4).toFixed(1) + 'deg';      // fades in and turns on itself, nothing else
+  dial.style.opacity = k.toFixed(3); dial.style.setProperty('--k', k.toFixed(3));            // fades in, the ring fills
+  ring.style.rotate = (px * 2.4).toFixed(1) + 'deg';                                       // and turns on itself, nothing moves
+  dial.classList.toggle('ready', k >= 1);
 }
 let hideT = 0;
 function hide(){
-  place(0); dial.classList.remove('on', 'drag'); dial.style.opacity = '';
-  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin'); dial.style.rotate = ''; } }, 480);   // keeps turning while it fades
+  place(0); dial.classList.remove('on', 'drag', 'ready'); dial.style.opacity = '';
+  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin', 'done'); ring.style.rotate = ''; dial.style.removeProperty('--k'); } }, 480);   // keeps turning while it fades
 }
 
 /* ---------- gesture ---------- */
@@ -79,13 +82,14 @@ async function run(fromPull){
   const before = big ? big.textContent : '';
   stop(big);                                                             // a count still running: put its final value back first (the app only rewrites the figure when it changes)
   // released: the page glides straight back to its place (no stop on the way); the spinner settles under the header until the data is in
-  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.rotate = '';
+  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.remove('ready', 'done'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.setProperty('--k', '1'); ring.style.rotate = '';
   home.style.transform = '';
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
-  hide();
+  dial.classList.remove('spin'); dial.classList.add('done');                // ring closes in green, then fades
+  setTimeout(hide, 220);
   const ms = roll($('hmPnlBig'), before);
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 500);
   live.textContent = 'Updated';

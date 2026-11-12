@@ -2066,11 +2066,21 @@ nav.has-pill button{position:relative; z-index:1; background:none !important; bo
 html.dc-standalone, html.dc-standalone body{overscroll-behavior-y:none;}
 #homeView{transition:transform .7s cubic-bezier(.22,1,.36,1);}
 #homeView.ptr-drag{transition:none;}
-.ptr{position:fixed; left:50%; top:0; z-index:19; width:28px; height:28px; margin:12px 0 0 -14px; pointer-events:none; opacity:0; transition:opacity .45s ease;}   /* fixed spot: only rotates */
+.ptr{position:fixed; left:50%; top:0; z-index:19; width:46px; height:46px; margin:8px 0 0 -23px; border-radius:50%; pointer-events:none; opacity:0; transition:opacity .45s ease;   /* fixed spot: only the ring turns */
+  background:linear-gradient(155deg, hsl(var(--lq-h) calc(90% * var(--lq-s)) 80% / .32), hsl(var(--lq-h) calc(70% * var(--lq-s)) 22% / .5)); border:1px solid rgba(255,255,255,.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 14px 30px -14px rgba(0,0,10,.9); -webkit-backdrop-filter:blur(18px) saturate(170%); backdrop-filter:blur(18px) saturate(170%);}
 .ptr.on{opacity:1;} .ptr.drag{transition:none;}
-.ptr i{position:absolute; left:50%; top:50%; width:2.8px; height:7.5px; margin:-3.75px 0 0 -1.4px; border-radius:2px; background:#fff; opacity:calc(1 - var(--i) * .11); transform:rotate(calc(var(--i) * -45deg)) translateY(-8.5px);}
-.ptr.spin{animation:ptrTurn .85s linear infinite;}
-@keyframes ptrTurn{to{rotate:360deg;}}
+.ptr svg{position:absolute; inset:5px; width:34px; height:34px; transform:rotate(-90deg);}
+.ptr circle{fill:none; stroke-width:3; stroke-linecap:round;}
+.ptr-track{stroke:rgba(255,255,255,.18);}
+.ptr-fill{stroke:#fff; stroke-dasharray:calc(var(--k,0) * 100) 100; transition:stroke .2s, stroke-dasharray .25s ease;}
+.ptr.drag .ptr-fill{transition:none;}
+.ptr-arrow{position:absolute; left:50%; top:50%; width:9px; height:9px; margin:-6px 0 0 -4.5px; border:solid #fff; border-width:0 2.2px 2.2px 0; rotate:45deg; transition:rotate .25s cubic-bezier(.3,1.6,.5,1), translate .25s, opacity .2s;}
+.ptr.ready .ptr-arrow{rotate:225deg; translate:0 3px;}
+.ptr.ready{box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 0 0 4px rgba(255,255,255,.12), 0 14px 30px -14px rgba(0,0,10,.9);}
+.ptr.spin svg{animation:ptrSpin .8s linear infinite;} .ptr.spin .ptr-fill{stroke-dasharray:28 100;} .ptr.spin .ptr-arrow,.ptr.done .ptr-arrow{opacity:0;}
+.ptr.done .ptr-fill{stroke:var(--green); stroke-dasharray:100 100;}
+@keyframes ptrSpin{from{rotate:0deg;} to{rotate:360deg;}}
 .hm-pnl-big.ptr-soft{animation:ptrSoft .8s cubic-bezier(.22,1,.36,1);}
 @keyframes ptrSoft{0%{opacity:.35; filter:blur(3px); transform:translateY(5px);} 100%{opacity:1; filter:blur(0); transform:none;}}
-@media(prefers-reduced-motion:reduce){ #homeView,.ptr{transition:none;} .ptr.spin,.hm-pnl-big.ptr-soft{animation:none;} }
+@media(prefers-reduced-motion:reduce){ #homeView,.ptr,.ptr-arrow{transition:none;} .ptr.spin svg,.hm-pnl-big.ptr-soft{animation:none;} }
