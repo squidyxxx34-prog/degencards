@@ -1,7 +1,7 @@
 /* ============================================================================
    DEGENCARDS — pull to refresh on Home (installed web app only)
-   Pull Home down from the top: a glass dial (ring + arrow) fades in under the header and turns on itself with the pull; release
-   past the line and the data refreshes in place (no page reload). The trades are read from the database first
+   Pull Home down from the top: the iOS activity indicator builds up spoke by spoke under the header; past the
+   line it pops and the data refreshes in place (no page reload), the page gliding back as soon as you let go. The trades are read from the database first
    and shown at once; the wallet sync runs after, in the background. The balance glides to its new value
    (one continuous count, no steps) while the page eases back.
    Only in the home-screen web app (display-mode: standalone): a browser tab keeps its own pull / reload.
@@ -15,12 +15,17 @@ const home = $('homeView'), app = $('app'); if(!home || !app) return;
 const PULL = 64;                                   // release line (px)
 let busy = false;
 
-/* ---------- the spinner ---------- */
+/* ---------- the spinner: iOS activity indicator (UIRefreshControl) ----------
+   8 spokes. Pulling: they appear one by one, clockwise from the top, one per 1/8 of the pull.
+   At the line: a short elastic pop and the refresh starts right away, finger still down (like iOS).
+   Refreshing: each spoke pulses 0.9 -> 0.25 opacity over 1 s, linear, 125 ms apart clockwise (Apple's WebKit values).
+   Done: it shrinks and fades out in 300 ms. It never moves: only the page does. */
+const N = 8;
 const dial = document.createElement('div');
 dial.className = 'ptr'; dial.setAttribute('aria-hidden', 'true');
-dial.innerHTML = '<svg viewBox="0 0 40 40"><circle class="ptr-track" cx="20" cy="20" r="15"/><circle class="ptr-fill" cx="20" cy="20" r="15" pathLength="100"/></svg><i class="ptr-arrow"></i>';   // glass dial: ring that fills + arrow
-const ring = dial.querySelector('svg');
+dial.innerHTML = Array.from({ length: N }, (_, i) => `<i style="--i:${i}"></i>`).join('');
 app.appendChild(dial);
+const spokes = [...dial.children];
 const live = document.createElement('div');
 live.className = 'sr-only'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
 app.appendChild(live);
@@ -28,30 +33,30 @@ app.appendChild(live);
 function homeOpen(){ return home.style.display !== 'none' && app.dataset.theme === 'blue' && !app.hidden; }
 function atTop(){ return (document.body.scrollTop || 0) <= 0 && (document.documentElement.scrollTop || 0) <= 0 && (window.scrollY || 0) <= 0; }
 function headerBottom(){ const h = document.querySelector('#app > header'); return h ? Math.max(0, h.getBoundingClientRect().bottom) : 0; }
-function place(px){ home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : ''; }   // only the page moves: the spinner stays put under the header
-function setPull(px){                                                     // one continuous move: fades, grows and turns with the finger
+function place(px){ home.style.transform = px ? `translate3d(0,${px.toFixed(1)}px,0)` : ''; }
+function show(){ clearTimeout(hideT); dial.style.top = headerBottom() + 'px'; dial.classList.remove('out', 'spin', 'pop'); dial.classList.add('on'); }
+function setPull(px){
   place(px);
-  const k = Math.min(1, px / PULL);
-  dial.style.opacity = k.toFixed(3); dial.style.setProperty('--k', k.toFixed(3));            // fades in, the ring fills
-  ring.style.rotate = (px * 2.4).toFixed(1) + 'deg';                                       // and turns on itself, nothing moves
-  dial.classList.toggle('ready', k >= 1);
+  if(dial.classList.contains('spin')) return;                            // already refreshing: spokes keep pulsing
+  const n = Math.min(N, Math.floor(px / PULL * N + 1e-6));
+  spokes.forEach((s, i) => s.classList.toggle('in', i < n));
 }
 let hideT = 0;
-function hide(){
-  place(0); dial.classList.remove('on', 'drag', 'ready'); dial.style.opacity = '';
-  clearTimeout(hideT); hideT = setTimeout(() => { if(!dial.classList.contains('on')){ dial.classList.remove('spin', 'done'); ring.style.rotate = ''; dial.style.removeProperty('--k'); } }, 480);   // keeps turning while it fades
+function hide(){                                                          // shrink + fade, 300 ms
+  dial.classList.add('out');
+  clearTimeout(hideT); hideT = setTimeout(() => { dial.classList.remove('on', 'out', 'spin', 'pop'); spokes.forEach(s => s.classList.remove('in')); }, 300);
 }
 
 /* ---------- gesture ---------- */
-let y0 = 0, x0 = 0, dy = 0, track = false, lock = '';
+let y0 = 0, x0 = 0, dy = 0, track = false, lock = '', fired = false;
 function ok(e){
-  if(!standalone || busy || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
+  if(!standalone || !homeOpen() || !atTop() || e.touches.length !== 1) return false;
   const t = e.target;
   return !(t.closest && t.closest('.lq-panel, .overlay, [role="dialog"], #guide, input, textarea, select, .hm-periods, #nav'));
 }
 document.addEventListener('touchstart', e => {
   track = ok(e); if(!track) return;
-  y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; lock = '';
+  y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; lock = ''; fired = busy;
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if(!track) return;
@@ -59,42 +64,42 @@ document.addEventListener('touchmove', e => {
   if(!lock){
     if(Math.abs(ry) < 6 && Math.abs(rx) < 6) return;
     lock = Math.abs(ry) > Math.abs(rx) && ry > 0 ? 'y' : 'x';
-    if(lock === 'y'){ y0 = t.clientY; dial.style.top = headerBottom() + 'px'; dial.classList.add('on', 'drag'); home.classList.add('ptr-drag'); }
+    if(lock === 'y'){ y0 = t.clientY; home.classList.add('ptr-drag'); if(!busy) show(); }
   }
-  if(lock !== 'y' || !atTop()){ track = false; end(false); return; }
+  if(lock !== 'y' || !atTop()){ track = false; release(); return; }
   e.preventDefault();
-  const d = Math.max(0, t.clientY - y0);
-  dy = 240 * (1 - Math.exp(-d / 430));                                  // elastic: follows the finger and softens progressively, never a hard stop
+  dy = 240 * (1 - Math.exp(-Math.max(0, t.clientY - y0) / 430));         // elastic, no hard stop
   setPull(dy);
+  if(!fired && dy >= PULL){ fired = true; run(); }                        // iOS starts refreshing at the line, not on release
 }, { passive: false });
-document.addEventListener('touchend', () => { if(track){ track = false; end(dy >= PULL); } }, { passive: true });
-document.addEventListener('touchcancel', () => { if(track){ track = false; end(false); } }, { passive: true });
-function end(go){
-  home.classList.remove('ptr-drag'); dial.classList.remove('drag'); dy = 0;
-  if(go) run(true); else hide();
+document.addEventListener('touchend', () => { if(track){ track = false; release(); } }, { passive: true });
+document.addEventListener('touchcancel', () => { if(track){ track = false; release(); } }, { passive: true });
+function release(){                                                       // the page always glides straight back
+  home.classList.remove('ptr-drag'); place(0); dy = 0;
+  if(dial.classList.contains('on')) hide();                                // spinner shrinks away as the page closes the gap (never sits on the content); the balance glide shows the data landing
 }
 
 /* ---------- refresh: data only, never the page ---------- */
-async function run(fromPull){
+async function run(){
   if(busy || typeof reload !== 'function') return;
   busy = true;
   const big = $('hmPnlBig');
   const before = big ? big.textContent : '';
-  stop(big);                                                             // a count still running: put its final value back first (the app only rewrites the figure when it changes)
-  // released: the page glides straight back to its place (no stop on the way); the spinner settles under the header until the data is in
-  dial.style.top = headerBottom() + 'px'; clearTimeout(hideT); dial.classList.remove('drag'); dial.classList.remove('ready', 'done'); dial.classList.add('on', 'spin'); dial.style.opacity = ''; dial.style.setProperty('--k', '1'); ring.style.rotate = '';
-  home.style.transform = '';
+  stop(big);                                                             // a count still running: put its final value back first
+  if(!dial.classList.contains('on')) show();
+  spokes.forEach(s => s.classList.add('in'));
+  dial.classList.add('pop', 'spin');                                     // 200 ms elastic pop, then the pulse
   live.textContent = 'Refreshing';
   const hold = typeof celeb !== 'undefined' && !celeb.busy; if(hold) celeb.busy = true;     // a card drop waits until the balance has landed
+  const t0 = performance.now();
   try{ await reload(); }                                                 // database read first: this is what the user is waiting for
   catch(e){ if(typeof showToast === 'function') showToast("Couldn't refresh — check your connection"); }
-  dial.classList.remove('spin'); dial.classList.add('done');                // ring closes in green, then fades
-  setTimeout(hide, 220);
+  setTimeout(() => { if(dial.classList.contains('on') && !dial.classList.contains('out')) hide(); }, Math.max(0, 600 - (performance.now() - t0)));       // the data shows at once; the spinner turns at least 0.6 s so it never just flashes
   const ms = roll($('hmPnlBig'), before);
   if(hold) setTimeout(() => { celeb.busy = false; celeb.next(); }, ms + 500);
   live.textContent = 'Updated';
   busy = false;
-  // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance rolls again
+  // then ask the server to check the wallets; if it finds new trades the app reloads them itself and the balance glides again
   if(typeof syncNow === 'function' && typeof connectedAccounts !== 'undefined' && connectedAccounts.length){
     const el = $('hmPnlBig'), shown = el ? (el._to || el.textContent) : '';
     Promise.resolve(syncNow(false)).then(() => { const e2 = $('hmPnlBig'); if(e2 && e2._to == null && e2.textContent !== shown) roll(e2, shown); }).catch(() => {});   // only when the app itself wrote a new figure
@@ -127,5 +132,5 @@ function roll(el, from){
 }
 
 if(standalone) document.documentElement.classList.add('dc-standalone');
-window.dcPtr = { run: () => run(false), standalone };
+window.dcPtr = { run, standalone };
 })();

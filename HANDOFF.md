@@ -418,3 +418,9 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - Correctif : la fin de la synchro en arrière-plan pouvait relancer le décompte du solde vers une valeur intermédiaire ; elle ne le relance plus que si l'app a écrit un nouveau solde.
 - 2026-11-12 : le spinner ne bouge plus du tout (position fixe 12 px sous l'en-tête, plus de translation ni de changement de taille) ; il apparaît en fondu et tourne sur lui-même, seule la page se déplace.
 - 2026-11-12 : retour au cadran en verre du début (anneau qui se remplit, flèche qui se retourne au seuil, anneau qui tourne pendant le chargement puis se ferme en vert) en gardant le mouvement actuel : position fixe sous l'en-tête, seul l'anneau tourne avec le doigt, page élastique et retour doux.
+
+## Pull to refresh = spinner iOS natif (2026-11-12)
+- Specs reprises du code WebKit d'Apple (`activity-indicator.css`) et des recréations de UIRefreshControl iOS 17 : 8 branches, chacune pulse en opacité 0,9 → 0,25 sur 1 s linéaire, décalées de 125 ms dans le sens horaire (`animation-delay: (i - 8) * 125ms`), `mix-blend-mode: plus-lighter`.
+- En tirant : les branches apparaissent une à une depuis le haut (une par 1/8 du seuil de 64 px). Au seuil : pop élastique de 200 ms et le rafraîchissement démarre tout de suite, doigt encore posé (comme iOS). Fin : le spinner rétrécit et s'efface en 300 ms ; il reste au moins 0,6 s pour ne jamais clignoter.
+- Le spinner ne bouge jamais (fixe sous l'en-tête) ; la page suit le doigt (élastique, sans butée) et revient en douceur au relâchement ; le spinner s'efface pendant ce retour pour ne pas se poser sur le contenu.
+- Pas de retour haptique : iOS ne l'autorise pas depuis une web app.
