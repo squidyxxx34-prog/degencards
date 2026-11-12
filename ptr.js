@@ -135,7 +135,7 @@ function roll(el, from){
   (function step(now){
     if(el._tw !== id) return;                                             // stopped or replaced
     if(el.textContent !== el._last){ el._to = null; return; }             // the app wrote a newer value meanwhile: leave it
-    const p = Math.min(1, (now - t0) / DUR), e = 1 - Math.pow(1 - p, 4);  // ease-out: fast start, long soft landing
+    const p = Math.min(1, (now - t0) / DUR), e = p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);  // exponential ease-out, same curve as the page
     el._last = el.textContent = p < 1 ? fmt(a + (b - a) * e) : to;
     if(p < 1) requestAnimationFrame(step); else el._to = null;
   })(t0);

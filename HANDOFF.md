@@ -427,3 +427,4 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - 2026-11-12 (suite) : comme iOS, au relâchement pendant le chargement la page se pose dans un petit espace (56 px) où le spinner continue de tourner, au moins 1,3 s au total, puis revient lentement (0,95 s, `#homeView.ptr-back`) pendant que le spinner rétrécit et s'efface (0,45 s).
 - 2026-11-12 : spinner placé 28 px sous l'en-tête (au lieu de 16) ; seuil et espace de repos passés à 76 px pour garder la même marge sous le spinner.
 - 2026-11-12 : moins de temps en haut (spin minimum 0,65 s au lieu de 1,3 s) ; une seule courbe façon Apple (cubic-bezier(.32,.72,0,1)) pour la pose (0,5 s), le retour (0,6 s) et l'effacement du spinner (0,35 s).
+- 2026-11-12 : toutes les animations du pull to refresh (pose, retour, effacement du spinner, glissement du solde) en ralentissement exponentiel (easeOutExpo, cubic-bezier(.16,1,.3,1) / 1 - 2^(-10t)).
