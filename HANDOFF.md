@@ -439,4 +439,4 @@ Conservé de la période annulée : retrait des œuvres avec nudité dans le sty
 - 2026-11-12 (suite) : le fond ne change plus du tout pendant le refresh : trait de bord, feuille et ondulation supprimés ; seule la page descend et la balle + l'anneau apparaissent dans l'espace, sur le fond normal.
 - 2026-11-12 (suite) : trait lumineux remis, mais il est maintenant posé sur le haut du contenu et le suit en permanence (bord = header + décalage de la page), et la balle suit le trait (elle sort 66 px au-dessus). Toujours rien derrière la page.
 - 2026-11-12 (suite) : la barre ne touche jamais les infos : elle suit le contenu 16 px au-dessus de la première ligne (kicker), se courbe vers le haut (pas vers les infos), et toute ondulation vers le bas est bornée dans cet espace ; elle n'apparaît qu'une fois la place suffisante sous l'en-tête.
-- 2026-11-12 (suite) : contenu plus « draggable » : suivi du doigt à 0,75 (0,62 à l'origine, 0,9 trop mou) jusqu'au seuil, puis amorti jusqu'à +230 px.
+- 2026-11-12 (suite) : contenu plus « draggable » : suivi du doigt à 0,55 (voulu « plus dur » après 0,9 puis 0,75) jusqu'au seuil, puis amorti fort jusqu'à +140 px.
